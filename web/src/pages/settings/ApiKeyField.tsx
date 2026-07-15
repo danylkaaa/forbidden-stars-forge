@@ -1,9 +1,11 @@
+import { useId } from 'react'
 import { Button } from '../../components/Button'
 import { inputClass } from '../../components/Field'
 import { useSettingsStore } from './store'
 import type { Settings } from './api'
 
 export function ApiKeyField({ settings }: { settings: Settings }) {
+  const id = useId()
   const editingKey = useSettingsStore((s) => s.editingKey)
   const keyInput = useSettingsStore((s) => s.draft?.openai_api_key_input ?? '')
   const startEditKey = useSettingsStore((s) => s.startEditKey)
@@ -11,9 +13,12 @@ export function ApiKeyField({ settings }: { settings: Settings }) {
 
   return (
     <div>
-      <span className="block text-xs mb-1 text-ink/70">API key</span>
+      <label htmlFor={id} className="block text-xs mb-1 text-ink/70">
+        API key
+      </label>
       {editingKey ? (
         <input
+          id={id}
           type="text"
           value={keyInput}
           placeholder="sk-…"
