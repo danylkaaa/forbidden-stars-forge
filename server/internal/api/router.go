@@ -30,6 +30,10 @@ func NewRouter(db *sql.DB, staticFS fs.FS) http.Handler {
 		}
 	})
 
+	if staticFS != nil {
+		r.NotFound(spaHandler(staticFS))
+	}
+
 	return r
 }
 
