@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"cardforge/internal/store"
 )
 
 func NewRouter(db *sql.DB, staticFS fs.FS) http.Handler {
@@ -19,6 +21,13 @@ func NewRouter(db *sql.DB, staticFS fs.FS) http.Handler {
 		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		})
+		if db != nil {
+			settings := &SettingsHandler{Store: store.NewSettingsStore(db)}
+			r.Get("/settings", settings.Get)
+			r.Put("/settings", settings.Put)
+			r.Post("/settings/test-openai", settings.TestOpenAI)
+			r.Post("/settings/test-claude", settings.TestClaude)
+		}
 	})
 
 	return r
