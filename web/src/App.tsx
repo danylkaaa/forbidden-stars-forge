@@ -1,9 +1,17 @@
-function App() {
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-semibold text-ink">Card Forge</h1>
-    </main>
-  )
-}
+import { Navigate, type RouteObject } from 'react-router'
+import { AppLayout } from './components/AppLayout'
+import { PlaceholderPage } from './components/PlaceholderPage'
 
-export default App
+export const routes: RouteObject[] = [
+  {
+    element: <AppLayout />,
+    children: [
+      { path: '/', element: <Navigate to="/factions" replace /> },
+      { path: '/factions', element: <PlaceholderPage title="Factions" milestone={2} /> },
+      { path: '/card-types', element: <PlaceholderPage title="Card Types" milestone={3} /> },
+      { path: '/test-generation', element: <PlaceholderPage title="Test Generation" milestone={4} /> },
+      { path: '/batches', element: <PlaceholderPage title="Batch Processing" milestone={5} /> },
+      { path: '/settings', element: <PlaceholderPage title="Settings" milestone={1} /> },
+    ],
+  },
+]
