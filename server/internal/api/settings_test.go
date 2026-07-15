@@ -31,6 +31,26 @@ func doJSON(t *testing.T, h http.Handler, method, path, body string) (*httptest.
 	return rec, out
 }
 
+func TestMaskKey(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+		want string
+	}{
+		{"empty", "", ""},
+		{"short_abcd", "abcd", "sk-…****"},
+		{"short_sk", "sk", "sk-…****"},
+		{"normal", "sk-proj-9f0a12de34bc", "sk-…34bc"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := maskKey(c.key); got != c.want {
+				t.Fatalf("maskKey(%q) = %q, want %q", c.key, got, c.want)
+			}
+		})
+	}
+}
+
 func TestGetSettingsDefaults(t *testing.T) {
 	rec, out := doJSON(t, newTestRouter(t), http.MethodGet, "/api/settings", "")
 	if rec.Code != 200 {

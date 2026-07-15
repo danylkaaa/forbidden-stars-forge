@@ -39,11 +39,10 @@ func maskKey(key string) string {
 	if key == "" {
 		return ""
 	}
-	last4 := key
-	if len(key) > 4 {
-		last4 = key[len(key)-4:]
+	if len(key) <= 4 {
+		return "sk-…****"
 	}
-	return "sk-…" + last4
+	return "sk-…" + key[len(key)-4:]
 }
 
 func oneOf(v string, allowed ...string) bool {
