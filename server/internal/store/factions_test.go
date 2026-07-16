@@ -67,6 +67,20 @@ func TestUpdateWritesRevisionOnlyWhenChanged(t *testing.T) {
 	}
 }
 
+// TestListOrdersByUpdatedDesc asserts that List() orders rows by
+// updated_at DESC, id DESC. "A" then "B" are created back-to-back, which
+// may land in the same second since updated_at/created_at come from
+// datetime('now') (1-second resolution). The id DESC tie-break makes the
+// resulting order deterministic regardless: B always sorts before A.
+//
+// We deliberately do NOT extend this test with an update-then-reorder
+// assertion (create A, create B, update A, expect A first): updating A
+// could land in the same second as B's creation, in which case
+// updated_at ties and the id tie-break puts B (higher id) first even
+// though A was just touched - the exact opposite of "moved to the
+// front". That would make the assertion flaky/wrong rather than
+// deterministic, so per the reviewed defect writeup we keep only the
+// id-tie-break assertions below, which hold unconditionally.
 func TestListOrdersByUpdatedDesc(t *testing.T) {
 	s := openFactions(t)
 	s.Create("A", "", "Galaxy in Flames", "manual")
@@ -77,6 +91,9 @@ func TestListOrdersByUpdatedDesc(t *testing.T) {
 	}
 	if len(all) != 2 {
 		t.Fatalf("len = %d", len(all))
+	}
+	if all[0].Name != "B" || all[1].Name != "A" {
+		t.Fatalf("order = [%s, %s], want [B, A] (id DESC tie-break)", all[0].Name, all[1].Name)
 	}
 }
 

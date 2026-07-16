@@ -3,13 +3,29 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"strings"
+
+	sqlitedriver "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 var (
 	ErrNotFound      = errors.New("not found")
 	ErrDuplicateName = errors.New("name already exists")
 )
+
+// isUniqueViolation reports whether err is a SQLITE_CONSTRAINT_UNIQUE
+// error from modernc.org/sqlite. modernc.org/sqlite enables extended
+// result codes on every connection it opens (see conn.go: c.open calls
+// c.extendedResultCodes(true)), so *sqlite.Error.Code() returns the
+// extended code (2067) rather than the bare SQLITE_CONSTRAINT (19) -
+// verified empirically against the vendored v1.53.0 driver.
+func isUniqueViolation(err error) bool {
+	var sqliteErr *sqlitedriver.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+	}
+	return false
+}
 
 type Faction struct {
 	ID          int64  `json:"id"`
@@ -86,7 +102,7 @@ func (s *FactionsStore) Create(name, description, dlc, source string) (Faction, 
 
 	res, err := tx.Exec(`INSERT INTO factions (name, description, dlc) VALUES (?, ?, ?)`, name, description, dlc)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueViolation(err) {
 			return Faction{}, ErrDuplicateName
 		}
 		return Faction{}, err
@@ -126,7 +142,7 @@ func (s *FactionsStore) Update(id int64, name, description, dlc, source string) 
 		`UPDATE factions SET name = ?, description = ?, dlc = ?, updated_at = datetime('now') WHERE id = ?`,
 		name, description, dlc, id)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueViolation(err) {
 			return Faction{}, false, ErrDuplicateName
 		}
 		return Faction{}, false, err
