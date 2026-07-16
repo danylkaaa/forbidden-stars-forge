@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
+	"time"
 )
 
 type Runner struct {
@@ -27,6 +29,22 @@ func (r *Runner) Run(ctx context.Context, prompt string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
+	// Run the child in its own process group so that on cancellation we can
+	// kill any grandchildren it spawns (e.g. a subprocess that inherits the
+	// stdout/stderr pipes), not just the direct child. Without this, a
+	// lingering grandchild holding the pipes open can block cmd.Run() past
+	// the context deadline, breaking the timeout/cancellation guarantee.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
+	}
+	// Backstop: ensure Wait() always returns even if the pipes are somehow
+	// still held open after the process group is killed.
+	cmd.WaitDelay = 5 * time.Second
 
 	err := cmd.Run()
 	if err != nil {

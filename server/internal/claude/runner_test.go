@@ -65,3 +65,27 @@ func TestRunTimeout(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestRunTimeoutWithGrandchild guards against exec.CommandContext's default
+// cancellation behavior, which only SIGKILLs the direct child. If that child
+// spawns a background grandchild that inherits the stdout/stderr pipes, the
+// grandchild can keep those pipes open indefinitely, and cmd.Run() would
+// block past the context deadline waiting for them to close. Run must kill
+// the whole process group (and fall back to cmd.WaitDelay) so it always
+// returns promptly with a timeout error.
+func TestRunTimeoutWithGrandchild(t *testing.T) {
+	r := &Runner{Binary: fakeBinary(t, "sleep 30 &\nwait")}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := r.Run(ctx, "prompt")
+	elapsed := time.Since(start)
+
+	if err == nil || !strings.Contains(err.Error(), "timed out or was cancelled") {
+		t.Fatalf("err = %v, want timeout error", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("Run took %v, want < 5s (grandchild likely kept pipes open past deadline)", elapsed)
+	}
+}
