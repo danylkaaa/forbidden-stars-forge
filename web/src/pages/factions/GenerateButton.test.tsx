@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, delay } from 'msw'
 import { server } from '../../test/msw'
 import { useFactionDraft, useFactionsUi } from './store'
 import { GenerateButton } from './GenerateButton'
@@ -59,6 +59,24 @@ test('failed generation shows error', async () => {
   renderBtn()
   await userEvent.click(screen.getByRole('button', { name: /Generate with Claude/ }))
   expect(await screen.findByRole('alert')).toHaveTextContent('claude CLI failed: quota')
+})
+
+test('rapid double-click only fires one generate request', async () => {
+  let calls = 0
+  server.use(
+    http.post('/api/factions/generate-description', async () => {
+      calls++
+      await delay(50)
+      return HttpResponse.json({ job_id: 'job-4', status: 'pending' }, { status: 202 })
+    }),
+    http.get('/api/jobs/job-4', () => HttpResponse.json({ id: 'job-4', status: 'pending', duration_ms: 0 })),
+  )
+  renderBtn()
+  const btn = screen.getByRole('button', { name: /Generate with Claude/ })
+  const user = userEvent.setup()
+  await Promise.all([user.click(btn), user.click(btn)])
+  await waitFor(() => expect(useFactionsUi.getState().activeJobId).toBe('job-4'))
+  expect(calls).toBe(1)
 })
 
 test('cancel button posts cancel', async () => {

@@ -9,6 +9,8 @@ export function GenerateButton({ intervalMs = 2000 }: { intervalMs?: number }) {
   const activeJobId = useFactionsUi((s) => s.activeJobId)
   const [jobError, setJobError] = useState<string | null>(null)
 
+  const [starting, setStarting] = useState(false)
+
   const job = useJob(activeJobId, intervalMs)
   const pending = activeJobId !== null && (job.data === undefined || job.data.status === 'pending')
 
@@ -27,12 +29,16 @@ export function GenerateButton({ intervalMs = 2000 }: { intervalMs?: number }) {
   }, [job.data])
 
   async function onGenerate() {
+    if (starting) return
+    setStarting(true)
     setJobError(null)
     try {
       const res = await startGenerateDescription(name.trim(), dlc as DLC)
       useFactionsUi.getState().set({ activeJobId: res.job_id })
     } catch (e) {
       setJobError(e instanceof Error ? e.message : 'failed to start generation')
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -49,9 +55,9 @@ export function GenerateButton({ intervalMs = 2000 }: { intervalMs?: number }) {
           Cancel generation
         </button>
       )}
-      <button type="button" onClick={onGenerate} disabled={!name.trim() || pending}
+      <button type="button" onClick={onGenerate} disabled={!name.trim() || pending || starting}
         className="inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent disabled:cursor-not-allowed disabled:opacity-45">
-        {pending ? 'Generating…' : 'Generate with Claude'}
+        {pending || starting ? 'Generating…' : 'Generate with Claude'}
       </button>
     </span>
   )
