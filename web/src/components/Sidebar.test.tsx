@@ -45,6 +45,8 @@ test('active route link is marked current', () => {
 })
 
 test('root redirects to factions', () => {
+  // /factions now renders FactionsPage (Task 11), which fetches factions via react-query.
+  server.use(http.get('/api/factions', () => HttpResponse.json([])))
   renderAt('/')
   expect(screen.getByRole('link', { name: 'Factions' })).toHaveAttribute('aria-current', 'page')
 })
