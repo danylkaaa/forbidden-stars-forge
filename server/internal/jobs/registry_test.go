@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,6 +77,20 @@ func TestCancel(t *testing.T) {
 	}
 	if r.Cancel("job-999") {
 		t.Fatal("cancel of unknown id returned true")
+	}
+}
+
+func TestJobPanicIsRecovered(t *testing.T) {
+	r := New(time.Second)
+	id := r.Start(func(ctx context.Context) (string, error) {
+		panic("boom")
+	})
+	j := waitTerminal(t, r, id)
+	if j.Status != Failed {
+		t.Fatalf("job = %+v", j)
+	}
+	if !strings.Contains(j.Error, "boom") {
+		t.Fatalf("error = %q, want it to contain %q", j.Error, "boom")
 	}
 }
 

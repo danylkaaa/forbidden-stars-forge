@@ -52,7 +52,16 @@ func (r *Registry) Start(fn func(ctx context.Context) (string, error)) string {
 
 	go func() {
 		start := time.Now()
-		result, err := fn(ctx)
+		var result string
+		var err error
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("job panicked: %v", p)
+				}
+			}()
+			result, err = fn(ctx)
+		}()
 		cancel()
 		r.mu.Lock()
 		defer r.mu.Unlock()
