@@ -5,6 +5,7 @@ import { deleteFaction, useFactions } from './api'
 import { FactionDialog } from './FactionDialog'
 import { FactionsTable } from './FactionsTable'
 import { GenerateButton } from './GenerateButton'
+import { HistoryDialog } from './HistoryDialog'
 import { useFactionsUi } from './store'
 
 export default function FactionsPage() {
@@ -41,6 +42,8 @@ export default function FactionsPage() {
       )}
 
       <FactionDialog generateSlot={<GenerateButton />} />
+
+      <HistoryDialog factions={data ?? []} />
 
       {confirmTarget && (
         <ConfirmDialog title="Delete faction?"
