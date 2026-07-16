@@ -4,6 +4,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { deleteFaction, useFactions } from './api'
 import { FactionDialog } from './FactionDialog'
 import { FactionsTable } from './FactionsTable'
+import { GenerateButton } from './GenerateButton'
 import { useFactionsUi } from './store'
 
 export default function FactionsPage() {
@@ -39,7 +40,7 @@ export default function FactionsPage() {
           onDelete={(f) => ui.set({ deleteConfirmId: f.id })} />
       )}
 
-      <FactionDialog />
+      <FactionDialog generateSlot={<GenerateButton />} />
 
       {confirmTarget && (
         <ConfirmDialog title="Delete faction?"
