@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
+	"cardforge/internal/claude"
 	"cardforge/internal/store"
 )
 
@@ -135,9 +138,20 @@ func (h *SettingsHandler) TestOpenAI(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (h *SettingsHandler) TestClaude(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"message": "stub: real CLI test arrives with the Factions milestone",
-	})
+func (h *SettingsHandler) TestClaude(w http.ResponseWriter, r *http.Request) {
+	all, err := h.Store.GetAll()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	bin := all["claude_binary"]
+	runner := &claude.Runner{Binary: bin}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	out, err := runner.Run(ctx, "Reply with OK")
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": out})
 }
