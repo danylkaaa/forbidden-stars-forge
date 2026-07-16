@@ -30,3 +30,8 @@ test('non-2xx throws ApiError with server message', async () => {
   expect(err.status).toBe(400)
   expect(err.message).toBe('draft_quality must be low or medium')
 })
+
+test('204 response resolves undefined instead of throwing', async () => {
+  server.use(http.delete('/api/factions/1', () => new HttpResponse(null, { status: 204 })))
+  await expect(apiSend('DELETE', '/api/factions/1', undefined)).resolves.toBeUndefined()
+})
