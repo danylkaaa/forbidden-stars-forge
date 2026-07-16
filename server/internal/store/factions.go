@@ -172,6 +172,45 @@ func (s *FactionsStore) Delete(id int64) error {
 	return nil
 }
 
+// Restore applies a past revision's state and appends a new revision with
+// source='rollback'. History is append-only — nothing is rewritten.
+func (s *FactionsStore) Restore(factionID, revisionID int64) (Faction, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Faction{}, err
+	}
+	defer tx.Rollback()
+
+	var name, description, dlc string
+	err = tx.QueryRow(
+		`SELECT name, description, dlc FROM faction_revisions WHERE id = ? AND faction_id = ?`,
+		revisionID, factionID).Scan(&name, &description, &dlc)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Faction{}, ErrNotFound
+	}
+	if err != nil {
+		return Faction{}, err
+	}
+
+	res, err := tx.Exec(
+		`UPDATE factions SET name = ?, description = ?, dlc = ?, updated_at = datetime('now') WHERE id = ?`,
+		name, description, dlc, factionID)
+	if err != nil {
+		return Faction{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Faction{}, ErrNotFound
+	}
+	if err := insertRevision(tx, factionID, name, description, dlc, "rollback"); err != nil {
+		return Faction{}, err
+	}
+	f, err := scanFaction(tx.QueryRow("SELECT "+factionCols+" FROM factions WHERE id = ?", factionID))
+	if err != nil {
+		return Faction{}, err
+	}
+	return f, tx.Commit()
+}
+
 func (s *FactionsStore) Revisions(factionID int64) ([]FactionRevision, error) {
 	rows, err := s.db.Query(
 		`SELECT id, faction_id, name, description, dlc, source, created_at

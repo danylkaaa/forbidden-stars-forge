@@ -114,3 +114,53 @@ func TestDeleteCascadesRevisions(t *testing.T) {
 		t.Fatalf("double delete: %v", err)
 	}
 }
+
+func TestRestoreAppliesRevisionAndAppendsRollback(t *testing.T) {
+	s := openFactions(t)
+	f, _ := s.Create("Eldar", "v1", "Darkest Dawn", "manual")
+	s.Update(f.ID, "Eldar", "v2", "Darkest Dawn", "manual")
+	revs, _ := s.Revisions(f.ID) // [v2, v1]
+	oldest := revs[len(revs)-1]
+
+	restored, err := s.Restore(f.ID, oldest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Description != "v1" {
+		t.Fatalf("description = %q, want v1", restored.Description)
+	}
+	revs, _ = s.Revisions(f.ID)
+	if len(revs) != 3 || revs[0].Source != "rollback" || revs[0].Description != "v1" {
+		t.Fatalf("bad history after restore: %+v", revs)
+	}
+}
+
+func TestRestoreOfRollbackWorks(t *testing.T) {
+	s := openFactions(t)
+	f, _ := s.Create("Orks", "v1", "Symphony of War", "manual")
+	s.Update(f.ID, "Orks", "v2", "Symphony of War", "manual")
+	revs, _ := s.Revisions(f.ID)
+	s.Restore(f.ID, revs[len(revs)-1].ID) // back to v1 (rollback rev)
+	revs, _ = s.Revisions(f.ID)           // [rollback(v1), v2, v1]
+	if _, err := s.Restore(f.ID, revs[1].ID); err != nil {
+		t.Fatal(err) // rollback of a rollback
+	}
+	cur, _ := s.Get(f.ID)
+	if cur.Description != "v2" {
+		t.Fatalf("description = %q, want v2", cur.Description)
+	}
+	revs, _ = s.Revisions(f.ID)
+	if len(revs) != 4 {
+		t.Fatalf("history length = %d, want 4 (never rewritten)", len(revs))
+	}
+}
+
+func TestRestoreWrongFaction(t *testing.T) {
+	s := openFactions(t)
+	a, _ := s.Create("A2", "", "Galaxy in Flames", "manual")
+	b, _ := s.Create("B2", "", "Galaxy in Flames", "manual")
+	bRevs, _ := s.Revisions(b.ID)
+	if _, err := s.Restore(a.ID, bRevs[0].ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-faction restore: %v", err)
+	}
+}
