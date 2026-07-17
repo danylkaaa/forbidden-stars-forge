@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
@@ -16,11 +17,17 @@ function RevisionRow({ rev, faction, isCurrent }: { rev: FactionRevision; factio
   const ui = useFactionsUi()
   const queryClient = useQueryClient()
   const expanded = ui.expandedRevId === rev.id
+  const [restoreError, setRestoreError] = useState<string | null>(null)
 
   async function onRestore() {
-    await restoreRevision(faction.id, rev.id)
-    queryClient.invalidateQueries({ queryKey: ['factions'] })
-    ui.set({ expandedRevId: null })
+    try {
+      await restoreRevision(faction.id, rev.id)
+      queryClient.invalidateQueries({ queryKey: ['factions'] })
+      setRestoreError(null)
+      ui.set({ expandedRevId: null })
+    } catch (e) {
+      setRestoreError(e instanceof Error ? e.message : 'failed to restore revision')
+    }
   }
 
   const simpleRows = []
@@ -43,6 +50,7 @@ function RevisionRow({ rev, faction, isCurrent }: { rev: FactionRevision; factio
           <DiffPanel simpleRows={simpleRows}
             textDiffs={[{ field: 'description (this revision → current)', before: rev.description, after: faction.description }]} />
           <Button className="self-start" disabled={isCurrent} onClick={onRestore}>Restore this version</Button>
+          {restoreError && <p role="alert" className="m-0 text-sm text-danger">{restoreError}</p>}
         </div>
       )}
     </div>

@@ -54,6 +54,20 @@ test('expanding an old revision shows diff and restore posts', async () => {
   expect(restored).toBe(true)
 })
 
+test('restore failure shows alert in the expanded row and keeps it expanded', async () => {
+  server.use(
+    http.post('/api/factions/1/revisions/11/restore', () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+  )
+  renderDlg()
+  const dialog = await screen.findByRole('dialog', { name: /History/ })
+  await userEvent.click(await within(dialog).findByText(/v1 text/))
+  const restoreBtn = within(dialog).getByRole('button', { name: 'Restore this version' })
+  await userEvent.click(restoreBtn)
+  const alert = await within(dialog).findByRole('alert')
+  expect(alert).toHaveTextContent('nope')
+  expect(within(dialog).getByRole('button', { name: 'Restore this version' })).toBeInTheDocument()
+})
+
 test('newest revision restore disabled', async () => {
   renderDlg()
   const dialog = await screen.findByRole('dialog', { name: /History/ })
