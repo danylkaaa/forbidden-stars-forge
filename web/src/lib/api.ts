@@ -36,3 +36,8 @@ export function apiSend<T>(method: string, path: string, body: unknown): Promise
     body: JSON.stringify(body),
   }).then((res) => parse<T>(res))
 }
+
+export function apiSendForm<T>(method: string, path: string, form: FormData): Promise<T> {
+  // No Content-Type header — the browser sets the multipart boundary.
+  return fetch(path, { method, body: form }).then((res) => parse<T>(res))
+}
