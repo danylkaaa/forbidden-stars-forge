@@ -92,3 +92,17 @@ test('delete asks confirmation and calls DELETE', async () => {
   await screen.findByText('Tau Empire')
   expect(deleted).toBe(true)
 })
+
+test('delete failure shows alert, keeps dialog open, cancel still dismisses', async () => {
+  server.use(http.delete('/api/factions/2', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+  renderPage()
+  await screen.findByText('Eldar')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1])
+  expect(screen.getByText('Delete faction?')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Delete faction' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('boom')
+  expect(screen.getByText('Delete faction?')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByText('Delete faction?')).not.toBeInTheDocument()
+})

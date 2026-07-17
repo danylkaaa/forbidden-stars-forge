@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -12,14 +13,24 @@ export default function FactionsPage() {
   const { data, isLoading, error } = useFactions()
   const ui = useFactionsUi()
   const queryClient = useQueryClient()
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const confirmTarget = data?.find((f) => f.id === ui.deleteConfirmId)
 
   async function confirmDelete() {
     if (!confirmTarget) return
-    await deleteFaction(confirmTarget.id)
+    try {
+      await deleteFaction(confirmTarget.id)
+      ui.set({ deleteConfirmId: null })
+      queryClient.invalidateQueries({ queryKey: ['factions'] })
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'failed to delete faction')
+    }
+  }
+
+  function cancelDelete() {
     ui.set({ deleteConfirmId: null })
-    queryClient.invalidateQueries({ queryKey: ['factions'] })
+    setDeleteError(null)
   }
 
   return (
@@ -49,8 +60,9 @@ export default function FactionsPage() {
         <ConfirmDialog title="Delete faction?"
           body={`Removing ${confirmTarget.name} can't be undone.`}
           confirmLabel="Delete faction"
+          error={deleteError}
           onConfirm={confirmDelete}
-          onCancel={() => ui.set({ deleteConfirmId: null })} />
+          onCancel={cancelDelete} />
       )}
     </div>
   )

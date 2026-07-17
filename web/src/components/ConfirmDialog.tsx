@@ -6,6 +6,7 @@ export function ConfirmDialog({
   body,
   confirmLabel,
   cancelLabel = 'Cancel',
+  error,
   onConfirm,
   onCancel,
 }: {
@@ -13,12 +14,14 @@ export function ConfirmDialog({
   body: string
   confirmLabel: string
   cancelLabel?: string
+  error?: string | null
   onConfirm: () => void
   onCancel: () => void
 }) {
   return (
     <Dialog title={title} width="min(400px,100%)">
       <p className="m-0 text-sm opacity-85">{body}</p>
+      {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
       <div className="mt-1.5 flex justify-end gap-2">
         <Button type="button" onClick={onCancel}>
           {cancelLabel}
