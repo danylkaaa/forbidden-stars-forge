@@ -24,25 +24,40 @@ type CardTypesUiState = {
   set: (partial: Partial<Omit<CardTypesUiState, 'openCreate' | 'openEdit' | 'closeDialog' | 'set'>>) => void
 }
 
-export const useCardTypesUi = create<CardTypesUiState>()((set) => ({
-  dialogMode: null,
-  editingId: null,
-  stagedFile: null,
-  stagedMeta: null,
-  showDiff: false,
-  discardConfirmOpen: false,
-  deleteConfirmId: null,
-  openCreate: () => {
-    useCardTypeDraft.getState().open('new', { name: '', description: '', constraints: '' })
-    set({ dialogMode: 'create', editingId: null, stagedFile: null, stagedMeta: null, showDiff: false })
-  },
-  openEdit: (ct) => {
-    useCardTypeDraft.getState().open(String(ct.id), { name: ct.name, description: ct.description, constraints: ct.constraints })
-    set({ dialogMode: 'edit', editingId: ct.id, stagedFile: null, stagedMeta: null, showDiff: false })
-  },
-  closeDialog: () => {
-    useCardTypeDraft.getState().close()
-    set({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false })
-  },
-  set: (partial) => set(partial),
-}))
+export const useCardTypesUi = create<CardTypesUiState>()((set, get) => {
+  // Blob URLs must be revoked before the stagedMeta holding them is dropped,
+  // or every staged-then-replaced/discarded template leaks memory.
+  const revokeStaged = () => {
+    const url = get().stagedMeta?.url
+    if (url) URL.revokeObjectURL(url)
+  }
+  return {
+    dialogMode: null,
+    editingId: null,
+    stagedFile: null,
+    stagedMeta: null,
+    showDiff: false,
+    discardConfirmOpen: false,
+    deleteConfirmId: null,
+    openCreate: () => {
+      revokeStaged()
+      useCardTypeDraft.getState().open('new', { name: '', description: '', constraints: '' })
+      set({ dialogMode: 'create', editingId: null, stagedFile: null, stagedMeta: null, showDiff: false })
+    },
+    openEdit: (ct) => {
+      revokeStaged()
+      useCardTypeDraft.getState().open(String(ct.id), { name: ct.name, description: ct.description, constraints: ct.constraints })
+      set({ dialogMode: 'edit', editingId: ct.id, stagedFile: null, stagedMeta: null, showDiff: false })
+    },
+    closeDialog: () => {
+      revokeStaged()
+      useCardTypeDraft.getState().close()
+      set({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false })
+    },
+    set: (partial) => {
+      // Replacing or clearing stagedMeta releases the previous blob URL.
+      if ('stagedMeta' in partial && partial.stagedMeta?.url !== get().stagedMeta?.url) revokeStaged()
+      set(partial)
+    },
+  }
+})
