@@ -52,19 +52,27 @@ function RevisionRow({ rev, faction, isCurrent }: { rev: FactionRevision; factio
 export function HistoryDialog({ factions }: { factions: Faction[] }) {
   const ui = useFactionsUi()
   const faction = factions.find((f) => f.id === ui.historyFactionId) ?? null
-  const { data: revisions } = useRevisions(faction ? faction.id : null)
+  const { data: revisions, error } = useRevisions(faction ? faction.id : null)
 
-  if (!faction || !revisions) return null
+  if (!faction) return null
 
   return (
     <Dialog title={`${faction.name} — History`} width="min(640px,100%)"
       titleExtra={<Button onClick={() => ui.set({ historyFactionId: null, expandedRevId: null })}>Close</Button>}>
-      <div className="flex flex-col gap-2">
-        {revisions.map((rev, i) => (
-          <RevisionRow key={rev.id} rev={rev} faction={faction} isCurrent={i === 0} />
-        ))}
-        {revisions.length === 0 && <p className="m-0 text-sm text-ink/50">No revisions yet.</p>}
-      </div>
+      {error ? (
+        <p role="alert" className="text-danger">
+          Failed to load history: {error instanceof Error ? error.message : 'unknown error'}
+        </p>
+      ) : !revisions ? (
+        <p className="text-ink/60">Loading…</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {revisions.map((rev, i) => (
+            <RevisionRow key={rev.id} rev={rev} faction={faction} isCurrent={i === 0} />
+          ))}
+          {revisions.length === 0 && <p className="m-0 text-sm text-ink/50">No revisions yet.</p>}
+        </div>
+      )}
     </Dialog>
   )
 }

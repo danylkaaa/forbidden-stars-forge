@@ -31,7 +31,7 @@ beforeEach(() => {
 test('lists revisions newest first with source badges', async () => {
   renderDlg()
   const dialog = await screen.findByRole('dialog', { name: /Eldar — History/ })
-  expect(within(dialog).getByText('claude')).toBeInTheDocument()
+  expect(await within(dialog).findByText('claude')).toBeInTheDocument()
   expect(within(dialog).getByText('manual')).toBeInTheDocument()
   expect(within(dialog).getByText('current')).toBeInTheDocument()
 })
@@ -46,7 +46,7 @@ test('expanding an old revision shows diff and restore posts', async () => {
   )
   renderDlg()
   const dialog = await screen.findByRole('dialog', { name: /History/ })
-  await userEvent.click(within(dialog).getByText(/v1 text/))
+  await userEvent.click(await within(dialog).findByText(/v1 text/))
   expect(within(dialog).getByText('Before')).toBeInTheDocument()
   const restoreBtn = within(dialog).getByRole('button', { name: 'Restore this version' })
   expect(restoreBtn).toBeEnabled()
@@ -57,6 +57,18 @@ test('expanding an old revision shows diff and restore posts', async () => {
 test('newest revision restore disabled', async () => {
   renderDlg()
   const dialog = await screen.findByRole('dialog', { name: /History/ })
-  await userEvent.click(within(dialog).getByText(/v2 text/))
+  await userEvent.click(await within(dialog).findByText(/v2 text/))
   expect(within(dialog).getByRole('button', { name: 'Restore this version' })).toBeDisabled()
+})
+
+test('revisions query error still renders dialog shell with Close and an alert', async () => {
+  server.use(http.get('/api/factions/1/revisions', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+  renderDlg()
+  const dialog = await screen.findByRole('dialog', { name: /Eldar — History/ })
+  const alert = await within(dialog).findByRole('alert')
+  expect(alert).toHaveTextContent('boom')
+  const closeBtn = within(dialog).getByRole('button', { name: 'Close' })
+  await userEvent.click(closeBtn)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(useFactionsUi.getState().historyFactionId).toBeNull()
 })
