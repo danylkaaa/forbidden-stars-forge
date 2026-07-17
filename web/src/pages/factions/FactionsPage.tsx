@@ -49,7 +49,7 @@ export default function FactionsPage() {
         <FactionsTable factions={data}
           onEdit={ui.openEdit}
           onHistory={(f) => ui.set({ historyFactionId: f.id, expandedRevId: null })}
-          onDelete={(f) => ui.set({ deleteConfirmId: f.id })} />
+          onDelete={(f) => { setDeleteError(null); ui.set({ deleteConfirmId: f.id }) }} />
       )}
 
       <FactionDialog generateSlot={<GenerateButton />} />
