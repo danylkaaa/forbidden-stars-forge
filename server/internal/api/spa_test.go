@@ -13,7 +13,7 @@ func TestSPAServesFilesAndFallsBackToIndex(t *testing.T) {
 		"index.html":    {Data: []byte("<html>app</html>")},
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}
-	r := NewRouter(nil, staticFS)
+	r := NewRouter(nil, staticFS, t.TempDir())
 
 	cases := []struct {
 		path string
@@ -37,7 +37,7 @@ func TestSPAFallbackExcludesAPIPaths(t *testing.T) {
 	staticFS := fstest.MapFS{
 		"index.html": {Data: []byte("<html>app</html>")},
 	}
-	r := NewRouter(nil, staticFS)
+	r := NewRouter(nil, staticFS, t.TempDir())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/does-not-exist", nil)
 	rec := httptest.NewRecorder()

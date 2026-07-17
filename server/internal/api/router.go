@@ -14,7 +14,7 @@ import (
 	"cardforge/internal/store"
 )
 
-func NewRouter(db *sql.DB, staticFS fs.FS) http.Handler {
+func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -42,6 +42,18 @@ func NewRouter(db *sql.DB, staticFS fs.FS) http.Handler {
 			r.Post("/factions/generate-description", jobsH.GenerateDescription)
 			r.Get("/jobs/{id}", jobsH.Get)
 			r.Post("/jobs/{id}/cancel", jobsH.Cancel)
+
+			cardTypes := &CardTypesHandler{
+				Store:    store.NewCardTypesStore(db),
+				Settings: store.NewSettingsStore(db),
+				DataDir:  dataDir,
+			}
+			r.Get("/card-types", cardTypes.List)
+			r.Post("/card-types", cardTypes.Create)
+			r.Put("/card-types/{id}", cardTypes.Update)
+			r.Delete("/card-types/{id}", cardTypes.Delete)
+			r.Get("/card-types/{id}/template", cardTypes.ServeTemplate)
+			r.Post("/card-types/{id}/upload-to-openai", cardTypes.UploadToOpenAI)
 		}
 	})
 

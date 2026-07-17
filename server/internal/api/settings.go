@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"cardforge/internal/claude"
+	"cardforge/internal/openai"
 	"cardforge/internal/store"
 )
 
@@ -131,11 +133,22 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *SettingsHandler) TestOpenAI(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"message": "stub: real connection test arrives with the Card Types milestone",
-	})
+func (h *SettingsHandler) TestOpenAI(w http.ResponseWriter, r *http.Request) {
+	all, err := h.Store.GetAll()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	client := openai.New(resolveOpenAIKey(all))
+	client.BaseURL = openAIBaseURL
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	n, err := client.ListModels(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": fmt.Sprintf("Connected — %d models available", n)})
 }
 
 func (h *SettingsHandler) TestClaude(w http.ResponseWriter, r *http.Request) {

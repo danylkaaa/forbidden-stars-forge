@@ -18,7 +18,7 @@ func newTestRouter(t *testing.T) http.Handler {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return NewRouter(db, nil)
+	return NewRouter(db, nil, t.TempDir())
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
@@ -102,17 +102,5 @@ func TestEnvVarOverridesKey(t *testing.T) {
 	}
 	if out["openai_api_key_from_env"] != true {
 		t.Fatal("from_env should be true")
-	}
-}
-
-func TestStubTestEndpoints(t *testing.T) {
-	r := newTestRouter(t)
-	// test-claude is real (Task 6, covered by TestRealTestClaudeEndpoint);
-	// only test-openai remains a stub until M3.
-	for _, path := range []string{"/api/settings/test-openai"} {
-		rec, out := doJSON(t, r, http.MethodPost, path, "")
-		if rec.Code != 200 || out["ok"] != true {
-			t.Fatalf("%s: status %d body %v", path, rec.Code, out)
-		}
 	}
 }

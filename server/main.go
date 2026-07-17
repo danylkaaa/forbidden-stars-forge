@@ -30,7 +30,11 @@ func main() {
 		log.Fatalf("webdist: %v", err)
 	}
 
-	r := api.NewRouter(db, dist)
+	dataDir := os.Getenv("CARDFORGE_DATA")
+	if dataDir == "" {
+		dataDir = "./data"
+	}
+	r := api.NewRouter(db, dist, dataDir)
 	log.Println("cardforge listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

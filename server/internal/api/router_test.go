@@ -7,7 +7,7 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	r := NewRouter(nil, nil)
+	r := NewRouter(nil, nil, t.TempDir())
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
