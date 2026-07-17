@@ -28,6 +28,15 @@ export function GenerateButton({ intervalMs = 2000 }: { intervalMs?: number }) {
     }
   }, [job.data])
 
+  useEffect(() => {
+    if (!activeJobId || !job.isError) return
+    const ui = useFactionsUi.getState()
+    if (ui.activeJobId !== activeJobId) return
+    ui.set({ activeJobId: null })
+    const msg = job.error instanceof Error ? job.error.message : 'unknown error'
+    setJobError(`failed to check generation status: ${msg}`)
+  }, [job.isError, job.error, activeJobId])
+
   async function onGenerate() {
     if (starting) return
     setStarting(true)

@@ -61,6 +61,20 @@ test('failed generation shows error', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('claude CLI failed: quota')
 })
 
+test('poll failure clears the stuck job and shows an alert', async () => {
+  server.use(
+    http.post('/api/factions/generate-description', () =>
+      HttpResponse.json({ job_id: 'job-6', status: 'pending' }, { status: 202 })),
+    http.get('/api/jobs/job-6', () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+  )
+  renderBtn()
+  await userEvent.click(screen.getByRole('button', { name: /Generate with Claude/ }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('failed to check generation status: boom')
+  expect(screen.getByRole('button', { name: 'Generate with Claude' })).toBeEnabled()
+  expect(useFactionsUi.getState().activeJobId).toBeNull()
+})
+
 test('rapid double-click only fires one generate request', async () => {
   let calls = 0
   server.use(
