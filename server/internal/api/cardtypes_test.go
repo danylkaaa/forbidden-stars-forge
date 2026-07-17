@@ -85,6 +85,20 @@ func TestCardTypeCreateWithoutTemplate(t *testing.T) {
 	}
 }
 
+func TestCardTypeCreateRejectsOversizedBody(t *testing.T) {
+	h := newTestRouter(t)
+	oversized := bytes.Repeat([]byte{0}, 22<<20) // 22 MB, above the 20 MB template cap
+	rec, out := doMultipart(t, h, http.MethodPost, "/api/card-types",
+		map[string]string{"name": "toobig", "description": "", "constraints": ""}, "big.png", oversized)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("oversized body: %d %v", rec.Code, out)
+	}
+	msg, _ := out["error"].(string)
+	if !strings.Contains(msg, "limit") {
+		t.Fatalf("error message: %q", msg)
+	}
+}
+
 func TestCardTypeValidation(t *testing.T) {
 	h := newTestRouter(t)
 	rec, _ := doMultipart(t, h, http.MethodPost, "/api/card-types",

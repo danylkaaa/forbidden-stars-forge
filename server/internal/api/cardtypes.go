@@ -90,8 +90,13 @@ type cardTypeFields struct {
 	Constraints string
 }
 
-func parseCardTypeForm(r *http.Request) (cardTypeFields, string) {
-	if err := r.ParseMultipartForm(maxTemplateBytes + (1 << 20)); err != nil {
+func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, string) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxTemplateBytes+(1<<20))
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return cardTypeFields{}, fmt.Sprintf("template exceeds %d MB limit", maxTemplateBytes>>20)
+		}
 		return cardTypeFields{}, "invalid multipart form: " + err.Error()
 	}
 	f := cardTypeFields{
@@ -126,7 +131,7 @@ func (h *CardTypesHandler) List(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *CardTypesHandler) Create(w http.ResponseWriter, r *http.Request) {
-	fields, msg := parseCardTypeForm(r)
+	fields, msg := parseCardTypeForm(w, r)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -151,7 +156,7 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	fields, msg := parseCardTypeForm(r)
+	fields, msg := parseCardTypeForm(w, r)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
