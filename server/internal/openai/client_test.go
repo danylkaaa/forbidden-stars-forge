@@ -1,7 +1,11 @@
 package openai
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,5 +126,57 @@ func TestUploadFile(t *testing.T) {
 	id, err := c.UploadFile(context.Background(), "combat.png", "vision", strings.NewReader("png-bytes"))
 	if err != nil || id != "file-8a2f91cd" {
 		t.Fatalf("id=%q err=%v", id, err)
+	}
+}
+
+func TestEditImage(t *testing.T) {
+	png := []byte("\x89PNG fake image bytes")
+	b64 := base64.StdEncoding.EncodeToString(png)
+	var gotBody map[string]any
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" || r.Method != http.MethodPost {
+			t.Errorf("bad request: %s %s", r.Method, r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("content type: %q", ct)
+		}
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}],"usage":{"input_tokens":1200,"output_tokens":4800}}`, b64)
+	})
+	res, err := c.EditImage(context.Background(), ImageEditRequest{
+		Model: "gpt-image-2", FileID: "file-abc", Prompt: "p", Size: "816x1104", Quality: "low", InputFidelity: "high",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(res.PNG, png) || res.InputTokens != 1200 || res.OutputTokens != 4800 {
+		t.Fatalf("result: tokens=%d/%d pngLen=%d", res.InputTokens, res.OutputTokens, len(res.PNG))
+	}
+	img := gotBody["image"].([]any)[0].(map[string]any)
+	if img["file_id"] != "file-abc" || gotBody["output_format"] != "png" || gotBody["n"] != float64(1) ||
+		gotBody["quality"] != "low" || gotBody["size"] != "816x1104" || gotBody["input_fidelity"] != "high" {
+		t.Fatalf("body: %v", gotBody)
+	}
+}
+
+func TestEditImageEmptyData(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[],"usage":{"input_tokens":0,"output_tokens":0}}`))
+	})
+	_, err := c.EditImage(context.Background(), ImageEditRequest{Model: "m", FileID: "f", Prompt: "p", Size: "s", Quality: "low", InputFidelity: "high"})
+	if err == nil || !strings.Contains(err.Error(), "empty images response") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestEditImageAPIError(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-request-id", "req_77")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"image_generation_user_error: reference image rejected"}}`))
+	})
+	_, err := c.EditImage(context.Background(), ImageEditRequest{Model: "m", FileID: "f", Prompt: "p", Size: "s", Quality: "low", InputFidelity: "high"})
+	if err == nil || !strings.Contains(err.Error(), "image_generation_user_error") || !strings.Contains(err.Error(), "req_77") {
+		t.Fatalf("err = %v", err)
 	}
 }

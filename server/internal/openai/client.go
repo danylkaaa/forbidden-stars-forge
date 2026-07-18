@@ -5,6 +5,7 @@ package openai
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -154,4 +155,63 @@ func (c *Client) UploadFile(ctx context.Context, filename, purpose string, data 
 		return "", fmt.Errorf("openai: bad files response: %w", err)
 	}
 	return out.ID, nil
+}
+
+type ImageEditRequest struct {
+	Model         string
+	FileID        string
+	Prompt        string
+	Size          string
+	Quality       string
+	InputFidelity string
+}
+
+type ImageEditResult struct {
+	PNG          []byte
+	InputTokens  int64
+	OutputTokens int64
+}
+
+// EditImage calls POST /v1/images/edits referencing an uploaded template
+// by file_id (PRD §7.3/§8.3 body shape) and decodes the b64 PNG.
+func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEditResult, error) {
+	body := map[string]any{
+		"model":          req.Model,
+		"image":          []map[string]string{{"file_id": req.FileID}},
+		"prompt":         req.Prompt,
+		"size":           req.Size,
+		"quality":        req.Quality,
+		"input_fidelity": req.InputFidelity,
+		"output_format":  "png",
+		"n":              1,
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return ImageEditResult{}, err
+	}
+	data, err := c.do(ctx, http.MethodPost, "/v1/images/edits", "application/json",
+		func() (io.Reader, error) { return bytes.NewReader(payload), nil })
+	if err != nil {
+		return ImageEditResult{}, err
+	}
+	var out struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+		Usage struct {
+			InputTokens  int64 `json:"input_tokens"`
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return ImageEditResult{}, fmt.Errorf("openai: bad images response: %w", err)
+	}
+	if len(out.Data) == 0 || out.Data[0].B64JSON == "" {
+		return ImageEditResult{}, errors.New("openai: empty images response")
+	}
+	png, err := base64.StdEncoding.DecodeString(out.Data[0].B64JSON)
+	if err != nil {
+		return ImageEditResult{}, fmt.Errorf("openai: bad image base64: %w", err)
+	}
+	return ImageEditResult{PNG: png, InputTokens: out.Usage.InputTokens, OutputTokens: out.Usage.OutputTokens}, nil
 }
