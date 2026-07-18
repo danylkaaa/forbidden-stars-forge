@@ -19,3 +19,19 @@ func TestFactionDescriptionInterpolates(t *testing.T) {
 		}
 	}
 }
+
+func TestImageEditInterpolates(t *testing.T) {
+	p := ImageEdit("combat", "frontline warriors", "fill the crimson zone; keep banner", "blue-grey plating")
+	for _, want := range []string{
+		"Edit this card template image. fill the crimson zone; keep banner",
+		"Card type: combat — frontline warriors",
+		"Faction aesthetic: blue-grey plating",
+		"Photorealistic style",
+		"at least 6 mm",
+		"Do not add any text or lettering.",
+	} {
+		if !strings.Contains(p, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, p)
+		}
+	}
+}
