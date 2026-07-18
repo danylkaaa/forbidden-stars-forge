@@ -33,11 +33,12 @@ function renderPage() {
 
 beforeEach(() => {
   vi.stubGlobal('Image', FakeImage)
-  // Spreading `URL` into a plain object drops its constructor behavior, which
-  // breaks msw's fetch interceptor (it calls `new URL(...)` internally under
-  // jsdom). Assign the stub methods onto the real URL constructor instead so
-  // `new URL(...)` keeps working while `URL.createObjectURL` is still stubbed.
-  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {} }))
+  // Subclass keeps `new URL(...)` working (msw's interceptor needs it) while
+  // stubbing the statics — and unstubbing restores the untouched real URL.
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = () => 'blob:fake'
+    static revokeObjectURL = () => {}
+  })
   useCardTypeDraft.getState().close()
   useCardTypesUi.setState({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null })
   server.use(http.get('/api/card-types', () => HttpResponse.json(cardTypes)))
@@ -134,4 +135,28 @@ test('delete failure shows alert in confirm dialog', async () => {
   await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1])
   await userEvent.click(screen.getByRole('button', { name: 'Delete card type' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('boom')
+})
+
+test('undecodable file shows error, revokes blob url, stages nothing', async () => {
+  const revoke = vi.fn()
+  class FailImage {
+    onload: null | (() => void) = null
+    onerror: null | (() => void) = null
+    set src(_v: string) {
+      queueMicrotask(() => this.onerror?.())
+    }
+  }
+  vi.stubGlobal('Image', FailImage)
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = () => 'blob:bad'
+    static revokeObjectURL = revoke
+  })
+  renderPage()
+  await userEvent.click(await screen.findByRole('button', { name: /New Card Type/ }))
+  const dialog = screen.getByRole('dialog', { name: 'New Card Type' })
+  const file = new File(['junk'], 'broken.png', { type: 'image/png' })
+  await userEvent.upload(within(dialog).getByLabelText(/Template image/), file)
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(/could not be read as an image/)
+  expect(revoke).toHaveBeenCalledWith('blob:bad')
+  expect(useCardTypesUi.getState().stagedFile).toBeNull()
 })
