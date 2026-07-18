@@ -54,6 +54,19 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Delete("/card-types/{id}", cardTypes.Delete)
 			r.Get("/card-types/{id}/template", cardTypes.ServeTemplate)
 			r.Post("/card-types/{id}/upload-to-openai", cardTypes.UploadToOpenAI)
+
+			gens := &GenerationsHandler{
+				Gens:      store.NewGenerationsStore(db),
+				Factions:  store.NewFactionsStore(db),
+				CardTypes: store.NewCardTypesStore(db),
+				Settings:  store.NewSettingsStore(db),
+				DataDir:   dataDir,
+			}
+			r.Post("/generate", gens.Generate)
+			r.Get("/generate/preview", gens.Preview)
+			r.Get("/generations", gens.List)
+			r.Get("/generations/{id}", gens.Get)
+			r.Get("/generations/{id}/image", gens.ServeImage)
 		}
 	})
 
