@@ -87,3 +87,73 @@ func TestGenerationNotFound(t *testing.T) {
 		t.Fatalf("failed: %v", err)
 	}
 }
+
+// TestFactionDeleteCascadesGenerations guards the PRD §7.1 intent: test
+// generations are disposable artifacts, so deleting a faction that has
+// generations must not fail on the FK - the generations should simply be
+// removed along with it (migration 0005).
+func TestFactionDeleteCascadesGenerations(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	fs := NewFactionsStore(db)
+	cts := NewCardTypesStore(db)
+	gs := NewGenerationsStore(db)
+
+	f, err := fs.Create("Tau", "desc", "Galaxy in Flames", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := cts.Create("combat", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := gs.Create(f.ID, ct.ID, "draft", "the prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := fs.Delete(f.ID); err != nil {
+		t.Fatalf("delete faction with generations: %v", err)
+	}
+	if _, err := gs.Get(g.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("generation survived faction delete: %v", err)
+	}
+}
+
+// TestCardTypeDeleteCascadesGenerations mirrors the faction case for the
+// other FK generations carries.
+func TestCardTypeDeleteCascadesGenerations(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	fs := NewFactionsStore(db)
+	cts := NewCardTypesStore(db)
+	gs := NewGenerationsStore(db)
+
+	f, err := fs.Create("Tau", "desc", "Galaxy in Flames", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := cts.Create("combat", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := gs.Create(f.ID, ct.ID, "draft", "the prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cts.Delete(ct.ID); err != nil {
+		t.Fatalf("delete card type with generations: %v", err)
+	}
+	if _, err := gs.Get(g.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("generation survived card type delete: %v", err)
+	}
+}
