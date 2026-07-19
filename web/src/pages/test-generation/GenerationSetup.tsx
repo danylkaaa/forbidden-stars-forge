@@ -12,7 +12,7 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
   const ui = useTestGenUi()
   const { data: factions, error: factionsError } = useFactions()
   const { data: cardTypes, error: cardTypesError } = useCardTypes()
-  const preview = usePreview(ui.factionId, ui.cardTypeId)
+  const { data: previewData, error: previewError } = usePreview(ui.factionId, ui.cardTypeId)
   const gen = useGeneration(ui.activeGenerationId, intervalMs)
   const [genError, setGenError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
@@ -53,8 +53,8 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
     }
   }
 
-  const estimate = preview.data ? (ui.mode === 'draft' ? preview.data.est_draft_usd : preview.data.est_final_usd) : null
-  const canGenerate = ui.factionId !== null && ui.cardTypeId !== null && preview.data?.has_file === true && !pending && !starting
+  const estimate = previewData ? (ui.mode === 'draft' ? previewData.est_draft_usd : previewData.est_final_usd) : null
+  const canGenerate = ui.factionId !== null && ui.cardTypeId !== null && previewData?.has_file === true && !pending && !starting
 
   if (factionsError || cardTypesError) {
     return (
@@ -106,47 +106,55 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
         </Field>
       </div>
 
-      {preview.data && !preview.data.has_file && (
+      {previewData && !previewData.has_file && (
         <p className="m-0 flex items-center justify-between gap-3 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[13px] text-warn">
           <span>This card type has no OpenAI file uploaded yet.</span>
           <Link to="/card-types" className="whitespace-nowrap text-warn underline underline-offset-2">Go to Card Types →</Link>
         </p>
       )}
 
-      <div>
-        <span className="mb-1 block text-xs text-ink/70">Mode</span>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex overflow-hidden rounded-md border border-divider" role="group" aria-label="Mode">
-            {(['draft', 'final'] as const).map((m, i) => (
-              <button key={m} type="button" onClick={() => ui.set({ mode: m })}
-                className={`px-3.5 py-1.5 text-[13px] cursor-pointer bg-transparent border-0 ${i > 0 ? 'border-l border-divider' : ''} ${ui.mode === m ? 'text-accent shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'text-ink'}`}>
-                {m === 'draft' ? 'Draft' : 'Final'}
-              </button>
-            ))}
+      {previewError ? (
+        <p role="alert" className="m-0 text-sm text-danger">
+          Failed to load prompt preview: {previewError instanceof Error ? previewError.message : 'unknown'}
+        </p>
+      ) : (
+        <>
+          <div>
+            <span className="mb-1 block text-xs text-ink/70">Mode</span>
+            <div className="flex items-center gap-3">
+              <div className="inline-flex overflow-hidden rounded-md border border-divider" role="group" aria-label="Mode">
+                {(['draft', 'final'] as const).map((m, i) => (
+                  <button key={m} type="button" onClick={() => ui.set({ mode: m })}
+                    className={`px-3.5 py-1.5 text-[13px] cursor-pointer bg-transparent border-0 ${i > 0 ? 'border-l border-divider' : ''} ${ui.mode === m ? 'text-accent shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'text-ink'}`}>
+                    {m === 'draft' ? 'Draft' : 'Final'}
+                  </button>
+                ))}
+              </div>
+              {estimate !== null && <span className="text-xs text-ink/50">est. {formatCost(estimate)} per image (estimate)</span>}
+            </div>
           </div>
-          {estimate !== null && <span className="text-xs text-ink/50">est. {formatCost(estimate)} per image (estimate)</span>}
-        </div>
-      </div>
 
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <label htmlFor="tg-prompt" className="text-xs text-ink/70">{ui.editingPrompt ? 'Prompt override' : 'Prompt preview'}</label>
-          <button type="button"
-            onClick={() => ui.set(ui.editingPrompt ? { editingPrompt: false, promptOverride: '' } : { editingPrompt: true, promptOverride: preview.data?.prompt ?? '' })}
-            className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent">
-            {ui.editingPrompt ? 'Use assembled prompt' : 'Edit prompt'}
-          </button>
-        </div>
-        {ui.editingPrompt ? (
-          <textarea id="tg-prompt" aria-label="Prompt override" value={ui.promptOverride}
-            onChange={(e) => ui.set({ promptOverride: e.target.value })}
-            className={`${inputClass} min-h-36 resize-y font-mono text-[12.5px] leading-normal`} />
-        ) : (
-          <div id="tg-prompt" className="min-h-36 whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12.5px] leading-normal text-ink/75">
-            {preview.data?.prompt ?? (ui.factionId && ui.cardTypeId ? 'Loading…' : 'Select a faction and card type')}
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label htmlFor="tg-prompt" className="text-xs text-ink/70">{ui.editingPrompt ? 'Prompt override' : 'Prompt preview'}</label>
+              <button type="button"
+                onClick={() => ui.set(ui.editingPrompt ? { editingPrompt: false, promptOverride: '' } : { editingPrompt: true, promptOverride: previewData?.prompt ?? '' })}
+                className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent">
+                {ui.editingPrompt ? 'Use assembled prompt' : 'Edit prompt'}
+              </button>
+            </div>
+            {ui.editingPrompt ? (
+              <textarea id="tg-prompt" aria-label="Prompt override" value={ui.promptOverride}
+                onChange={(e) => ui.set({ promptOverride: e.target.value })}
+                className={`${inputClass} min-h-36 resize-y font-mono text-[12.5px] leading-normal`} />
+            ) : (
+              <div id="tg-prompt" className="min-h-36 whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12.5px] leading-normal text-ink/75">
+                {previewData?.prompt ?? (ui.factionId && ui.cardTypeId ? 'Loading…' : 'Select a faction and card type')}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {genError && <p role="alert" className="m-0 text-sm text-danger">{genError}</p>}
 
