@@ -63,7 +63,11 @@ export function generationImageUrl(g: Generation): string | null {
 }
 
 export function formatCost(usd: number): string {
-  return usd < 0.1 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`
+  if (usd < 0.1) {
+    const s = usd.toFixed(3)
+    return `$${s.endsWith('0') ? s.slice(0, -1) : s}`
+  }
+  return `$${usd.toFixed(2)}`
 }
 
 export function formatDuration(ms: number): string {
