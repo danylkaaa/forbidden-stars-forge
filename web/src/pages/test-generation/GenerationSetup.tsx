@@ -10,8 +10,8 @@ import { useTestGenUi } from './store'
 
 export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) {
   const ui = useTestGenUi()
-  const { data: factions } = useFactions()
-  const { data: cardTypes } = useCardTypes()
+  const { data: factions, error: factionsError } = useFactions()
+  const { data: cardTypes, error: cardTypesError } = useCardTypes()
   const preview = usePreview(ui.factionId, ui.cardTypeId)
   const gen = useGeneration(ui.activeGenerationId, intervalMs)
   const [genError, setGenError] = useState<string | null>(null)
@@ -55,6 +55,23 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
 
   const estimate = preview.data ? (ui.mode === 'draft' ? preview.data.est_draft_usd : preview.data.est_final_usd) : null
   const canGenerate = ui.factionId !== null && ui.cardTypeId !== null && preview.data?.has_file === true && !pending && !starting
+
+  if (factionsError || cardTypesError) {
+    return (
+      <div className="flex flex-col gap-3.5 rounded-md bg-surface p-4 shadow-[0_0_0_1px_var(--color-neutral-800)]">
+        {factionsError && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            Failed to load factions: {factionsError instanceof Error ? factionsError.message : 'unknown'}
+          </p>
+        )}
+        {cardTypesError && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            Failed to load card types: {cardTypesError instanceof Error ? cardTypesError.message : 'unknown'}
+          </p>
+        )}
+      </div>
+    )
+  }
 
   if (!factions || !cardTypes) {
     return (

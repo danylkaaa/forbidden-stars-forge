@@ -134,6 +134,14 @@ test('failed generation shows alert', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(/boom/)
 })
 
+test('faction load failure shows alert instead of stuck loading', async () => {
+  server.use(
+    http.get('/api/factions', () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+  )
+  renderPage()
+  expect(await screen.findByRole('alert')).toHaveTextContent(/Failed to load factions/)
+})
+
 test('expanding a history row shows prompt and download link', async () => {
   renderPage()
   await screen.findByText(/Tau Empire/)
