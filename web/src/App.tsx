@@ -1,9 +1,10 @@
 import { Navigate, type RouteObject } from 'react-router'
 import { AppLayout } from './components/AppLayout'
-import { PlaceholderPage } from './components/PlaceholderPage'
 import FactionsPage from './pages/factions/FactionsPage'
 import CardTypesPage from './pages/card-types/CardTypesPage'
 import TestGenerationPage from './pages/test-generation/TestGenerationPage'
+import BatchesPage from './pages/batches/BatchesPage'
+import NewBatchPage from './pages/batches/NewBatchPage'
 import SettingsPage from './pages/settings/SettingsPage'
 
 export const routes: RouteObject[] = [
@@ -14,7 +15,8 @@ export const routes: RouteObject[] = [
       { path: '/factions', element: <FactionsPage /> },
       { path: '/card-types', element: <CardTypesPage /> },
       { path: '/test-generation', element: <TestGenerationPage /> },
-      { path: '/batches', element: <PlaceholderPage title="Batch Processing" milestone={5} /> },
+      { path: '/batches', element: <BatchesPage /> },
+      { path: '/batches/new', element: <NewBatchPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],
   },
