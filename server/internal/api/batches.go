@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -236,6 +237,11 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.MarkSubmitted(b.ID, openaiBatchID); err != nil {
+		// OpenAI has already accepted this batch (openaiBatchID is real) —
+		// cleanupFailedSubmit would be wrong here since the batch isn't
+		// actually abandoned, just locally out of sync. Log the id so it's
+		// recoverable by hand rather than silently discarding it.
+		log.Printf("batchpoller: batch %d: submitted to openai as %s but failed to record it: %v", b.ID, openaiBatchID, err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -181,3 +181,33 @@ func TestPollDoesNotCompleteWhenErrorFileDownloadFails(t *testing.T) {
 		t.Fatalf("item should remain pending for retry, got: %+v", items[0])
 	}
 }
+
+func TestPollDoesNotCompleteWhenOutputLineIsMalformed(t *testing.T) {
+	p, bs, _, fid, ctid := pollerFixtures(t)
+	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	bs.MarkSubmitted(b.ID, "batch_openai_1")
+
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/batches/batch_openai_1":
+			w.Write([]byte(`{"status":"completed","request_counts":{"completed":1,"failed":0,"total":1},"output_file_id":"file-out"}`))
+		case "/v1/files/file-out/content":
+			w.Write([]byte("not valid json\n"))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer fake.Close()
+	withFakeClient(p, fake.URL)
+
+	p.Poll(context.Background())
+
+	got, _ := bs.Get(b.ID)
+	if got.Status == "completed" {
+		t.Fatalf("batch flipped to completed despite an unparseable output line: %+v", got)
+	}
+	items, _ := bs.Items(b.ID)
+	if items[0].Status != "pending" {
+		t.Fatalf("item should remain pending for retry, got: %+v", items[0])
+	}
+}

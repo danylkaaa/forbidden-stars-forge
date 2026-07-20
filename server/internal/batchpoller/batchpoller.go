@@ -211,6 +211,7 @@ func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt p
 		var line outputLine
 		if err := json.Unmarshal([]byte(raw), &line); err != nil {
 			log.Printf("batchpoller: batch %d: bad output line: %v", batchID, err)
+			ok = false
 			continue
 		}
 		if len(line.Response.Body.Data) == 0 || line.Response.Body.Data[0].B64JSON == "" {
@@ -253,6 +254,8 @@ func (p *Poller) processErrorLines(batchID int64, data []byte) bool {
 		}
 		var line errorLine
 		if err := json.Unmarshal([]byte(raw), &line); err != nil {
+			log.Printf("batchpoller: batch %d: bad error line: %v", batchID, err)
+			ok = false
 			continue
 		}
 		msg := line.Error.Message
