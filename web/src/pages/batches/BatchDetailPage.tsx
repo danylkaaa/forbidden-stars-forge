@@ -83,7 +83,7 @@ export default function BatchDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {active && <Button onClick={() => refetch()}>Refresh</Button>}
-          {cancellable && !confirmCancel && <Button onClick={() => setConfirmCancel(true)}>Cancel batch</Button>}
+          {cancellable && <Button onClick={() => setConfirmCancel(true)}>Cancel</Button>}
           {batch.status === 'completed' && (
             <a href={batchDownloadUrl(batch.id)}
               className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-accent bg-transparent px-3.5 py-2 text-sm font-medium text-accent no-underline hover:bg-accent/10">

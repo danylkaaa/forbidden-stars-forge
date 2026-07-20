@@ -71,7 +71,7 @@ test('cancel confirms, calls the API, and closes the dialog', async () => {
     }),
   )
   renderPage()
-  await userEvent.click(await screen.findByRole('button', { name: 'Cancel batch' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
   expect(screen.getByText(/stop processing/)).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel batch' }))
   expect(cancelled).toBe(true)
@@ -83,7 +83,7 @@ test('cancel failure shows an error inside the confirm dialog', async () => {
     http.post('/api/batches/5/cancel', () => HttpResponse.json({ error: 'openai: already finalizing' }, { status: 502 })),
   )
   renderPage()
-  await userEvent.click(await screen.findByRole('button', { name: 'Cancel batch' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
   await userEvent.click(screen.getByRole('button', { name: 'Cancel batch' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(/already finalizing/)
 })
