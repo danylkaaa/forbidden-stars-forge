@@ -251,7 +251,7 @@ func TestSubmittedBatchCountsTotalImmediately(t *testing.T) {
 }
 
 func TestFailedSubmitDoesNotOrphanBatchOrBlockDelete(t *testing.T) {
-	h := newTestRouter(t)
+	h, _, dataDir := newTestRouterWithStore(t)
 	// The fixture (createFactionAndUploadedCardType) uploads the card type's
 	// template with purpose=vision before the test even starts — only the
 	// batch's own upload (purpose=batch) should fail here.
@@ -284,5 +284,16 @@ func TestFailedSubmitDoesNotOrphanBatchOrBlockDelete(t *testing.T) {
 	rec, out = doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/factions/%d", fid), "")
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("faction delete should not be blocked by an orphaned batch: %d %v", rec.Code, out)
+	}
+
+	// cleanupFailedSubmit should also remove the batch's on-disk directory
+	// (not just requests.jsonl inside it), so nothing empty is left behind
+	// under batches/.
+	entries, err := os.ReadDir(filepath.Join(dataDir, "batches"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no leftover batch directories after cleanup, got: %v", entries)
 	}
 }

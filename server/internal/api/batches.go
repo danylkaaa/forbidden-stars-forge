@@ -210,6 +210,7 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.client()
 	if err != nil {
+		h.cleanupFailedSubmit(b.ID, relPath)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -217,6 +218,7 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	f, err := os.Open(filepath.Join(h.DataDir, relPath))
 	if err != nil {
+		h.cleanupFailedSubmit(b.ID, relPath)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -252,7 +254,7 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 // implicitly via the caller's own error response, not escalated further).
 func (h *BatchesHandler) cleanupFailedSubmit(batchID int64, jsonlRelPath string) {
 	_ = h.Store.Delete(batchID)
-	_ = os.Remove(filepath.Join(h.DataDir, jsonlRelPath))
+	_ = os.RemoveAll(filepath.Join(h.DataDir, filepath.Dir(jsonlRelPath)))
 }
 
 func (h *BatchesHandler) List(w http.ResponseWriter, _ *http.Request) {
