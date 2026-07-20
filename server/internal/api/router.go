@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io/fs"
@@ -10,7 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"cardforge/internal/batchpoller"
 	"cardforge/internal/jobs"
+	"cardforge/internal/openai"
 	"cardforge/internal/store"
 )
 
@@ -24,13 +27,18 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		})
 		if db != nil {
-			settings := &SettingsHandler{Store: store.NewSettingsStore(db)}
+			settingsStore := store.NewSettingsStore(db)
+			factionsStore := store.NewFactionsStore(db)
+			cardTypesStore := store.NewCardTypesStore(db)
+			batchesStore := store.NewBatchesStore(db)
+
+			settings := &SettingsHandler{Store: settingsStore}
 			r.Get("/settings", settings.Get)
 			r.Put("/settings", settings.Put)
 			r.Post("/settings/test-openai", settings.TestOpenAI)
 			r.Post("/settings/test-claude", settings.TestClaude)
 
-			factions := &FactionsHandler{Store: store.NewFactionsStore(db)}
+			factions := &FactionsHandler{Store: factionsStore, Batches: batchesStore}
 			r.Get("/factions", factions.List)
 			r.Post("/factions", factions.Create)
 			r.Put("/factions/{id}", factions.Update)
@@ -38,14 +46,15 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/factions/{id}/revisions", factions.Revisions)
 			r.Post("/factions/{id}/revisions/{revID}/restore", factions.Restore)
 
-			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: store.NewSettingsStore(db)}
+			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}
 			r.Post("/factions/generate-description", jobsH.GenerateDescription)
 			r.Get("/jobs/{id}", jobsH.Get)
 			r.Post("/jobs/{id}/cancel", jobsH.Cancel)
 
 			cardTypes := &CardTypesHandler{
-				Store:    store.NewCardTypesStore(db),
-				Settings: store.NewSettingsStore(db),
+				Store:    cardTypesStore,
+				Settings: settingsStore,
+				Batches:  batchesStore,
 				DataDir:  dataDir,
 			}
 			r.Get("/card-types", cardTypes.List)
@@ -57,9 +66,9 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 
 			gens := &GenerationsHandler{
 				Gens:      store.NewGenerationsStore(db),
-				Factions:  store.NewFactionsStore(db),
-				CardTypes: store.NewCardTypesStore(db),
-				Settings:  store.NewSettingsStore(db),
+				Factions:  factionsStore,
+				CardTypes: cardTypesStore,
+				Settings:  settingsStore,
 				DataDir:   dataDir,
 			}
 			r.Post("/generate", gens.Generate)
@@ -67,6 +76,36 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/generations", gens.List)
 			r.Get("/generations/{id}", gens.Get)
 			r.Get("/generations/{id}/image", gens.ServeImage)
+
+			// The poller's own client factory reads openAIBaseURL/resolveOpenAIKey
+			// fresh on every call, so tests that swap openAIBaseURL for a fake
+			// server also cover any request the poller makes.
+			poller := batchpoller.New(batchesStore, settingsStore, dataDir, func() (*openai.Client, error) {
+				all, err := settingsStore.GetAll()
+				if err != nil {
+					return nil, err
+				}
+				c := openai.New(resolveOpenAIKey(all))
+				c.BaseURL = openAIBaseURL
+				return c, nil
+			})
+			go poller.Start(context.Background())
+
+			batches := &BatchesHandler{
+				Store:     batchesStore,
+				Factions:  factionsStore,
+				CardTypes: cardTypesStore,
+				Settings:  settingsStore,
+				Poller:    poller,
+				DataDir:   dataDir,
+			}
+			r.Post("/batches/preview", batches.Preview)
+			r.Post("/batches", batches.Create)
+			r.Get("/batches", batches.List)
+			r.Get("/batches/{id}", batches.Get)
+			r.Post("/batches/{id}/cancel", batches.Cancel)
+			r.Get("/batches/{id}/items/{itemID}/image", batches.ItemImage)
+			r.Get("/batches/{id}/download", batches.Download)
 		}
 	})
 
