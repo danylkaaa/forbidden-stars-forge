@@ -15,7 +15,8 @@ import (
 var dlcValues = []string{"Galaxy in Flames", "Symphony of War", "Darkest Dawn"}
 
 type FactionsHandler struct {
-	Store *store.FactionsStore
+	Store   *store.FactionsStore
+	Batches *store.BatchesStore
 }
 
 type factionSave struct {
@@ -108,6 +109,15 @@ func (h *FactionsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	ref, err := h.Batches.FactionReferenced(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if ref {
+		writeError(w, http.StatusConflict, "referenced by a batch — cannot delete")
 		return
 	}
 	if err := h.Store.Delete(id); err != nil {
