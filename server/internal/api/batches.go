@@ -44,22 +44,25 @@ func (h *BatchesHandler) client() (*openai.Client, error) {
 	return c, nil
 }
 
-// counts merges in-flight counts from the poller's in-memory cache for
-// active batches, and derives them from persisted items for everything
-// else (created batches have no counts yet; terminal batches keep them
-// even after a restart empties the poller's cache).
+// counts always derives Total from persisted items (fixed at creation, so
+// it's correct immediately — no need to wait for the poller's first tick).
+// Completed/Failed come from the poller's live in-memory cache while a
+// batch is active, since that reflects OpenAI's real-time progress; once
+// the batch leaves submitted/in_progress (or the poller has no cache entry
+// yet, e.g. right after a server restart), they're derived from persisted
+// items instead, which is always correct for anything terminal.
 func (h *BatchesHandler) counts(b store.Batch) batchpoller.Counts {
-	if b.Status == "submitted" || b.Status == "in_progress" {
-		if c, ok := h.Poller.Counts(b.ID); ok {
-			return c
-		}
-		return batchpoller.Counts{}
-	}
 	items, err := h.Store.Items(b.ID)
 	if err != nil {
 		return batchpoller.Counts{}
 	}
 	c := batchpoller.Counts{Total: len(items)}
+	if b.Status == "submitted" || b.Status == "in_progress" {
+		if live, ok := h.Poller.Counts(b.ID); ok {
+			c.Completed, c.Failed = live.Completed, live.Failed
+			return c
+		}
+	}
 	for _, it := range items {
 		switch it.Status {
 		case "done":
@@ -220,11 +223,13 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	fileID, err := client.UploadFile(ctx, "requests.jsonl", "batch", f)
 	f.Close()
 	if err != nil {
+		h.cleanupFailedSubmit(b.ID, relPath)
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	openaiBatchID, err := client.CreateBatch(ctx, fileID)
 	if err != nil {
+		h.cleanupFailedSubmit(b.ID, relPath)
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -238,6 +243,16 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, h.out(got))
+}
+
+// cleanupFailedSubmit removes a batch that was persisted locally but
+// never reached OpenAI, so it doesn't linger as an orphaned row that
+// permanently blocks the delete guards on its referenced faction/card
+// types with no way to remove it (best-effort — a failure here is logged
+// implicitly via the caller's own error response, not escalated further).
+func (h *BatchesHandler) cleanupFailedSubmit(batchID int64, jsonlRelPath string) {
+	_ = h.Store.Delete(batchID)
+	_ = os.Remove(filepath.Join(h.DataDir, jsonlRelPath))
 }
 
 func (h *BatchesHandler) List(w http.ResponseWriter, _ *http.Request) {

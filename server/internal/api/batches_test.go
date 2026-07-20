@@ -221,3 +221,68 @@ func TestBatchItemImageAndDownload(t *testing.T) {
 		t.Fatalf("zip: %v %+v", err, zr)
 	}
 }
+
+func TestSubmittedBatchCountsTotalImmediately(t *testing.T) {
+	h := newTestRouter(t)
+	withFakeOpenAI(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/files":
+			w.Write([]byte(`{"id":"file-abc"}`))
+		case r.URL.Path == "/v1/batches" && r.Method == http.MethodPost:
+			w.Write([]byte(`{"id":"batch_openai_1"}`))
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	})
+	fid, ctid := createFactionAndUploadedCardType(t, h)
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/batches",
+		fmt.Sprintf(`{"faction_ids":[%d],"card_type_ids":[%d],"mode":"draft"}`, fid, ctid))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("submit: %d %v", rec.Code, out)
+	}
+	counts, _ := out["counts"].(map[string]any)
+	if counts["total"].(float64) != 1 {
+		t.Fatalf("counts.total should be 1 immediately, not waiting for a poll tick: %v", out["counts"])
+	}
+	if out["est_cost_usd"].(float64) <= 0 {
+		t.Fatalf("est_cost_usd should be nonzero immediately: %v", out["est_cost_usd"])
+	}
+}
+
+func TestFailedSubmitDoesNotOrphanBatchOrBlockDelete(t *testing.T) {
+	h := newTestRouter(t)
+	// The fixture (createFactionAndUploadedCardType) uploads the card type's
+	// template with purpose=vision before the test even starts — only the
+	// batch's own upload (purpose=batch) should fail here.
+	withFakeOpenAI(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/files" {
+			_ = r.ParseMultipartForm(1 << 20)
+			if r.FormValue("purpose") == "vision" {
+				w.Write([]byte(`{"id":"file-abc"}`))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":{"message":"upload rejected"}}`))
+	})
+	fid, ctid := createFactionAndUploadedCardType(t, h)
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/batches",
+		fmt.Sprintf(`{"faction_ids":[%d],"card_type_ids":[%d],"mode":"draft"}`, fid, ctid))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 on upload failure: %d %v", rec.Code, out)
+	}
+
+	rec, _ = doJSON(t, h, http.MethodGet, "/api/batches", "")
+	var batches []map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &batches)
+	if len(batches) != 0 {
+		t.Fatalf("failed submit should not leave a batch row behind: %v", batches)
+	}
+
+	rec, out = doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/factions/%d", fid), "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("faction delete should not be blocked by an orphaned batch: %d %v", rec.Code, out)
+	}
+}

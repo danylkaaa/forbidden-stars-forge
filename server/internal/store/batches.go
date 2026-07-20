@@ -137,6 +137,14 @@ func (s *BatchesStore) Complete(id int64, outputPath string, totalCost float64) 
 		outputPath, totalCost, id)
 }
 
+// Delete removes a batch and its items (batch_items cascades via its FK
+// to batches). Only meant for cleaning up a batch that failed to reach
+// OpenAI — a submitted batch should be cancelled, not deleted, so its
+// history is preserved.
+func (s *BatchesStore) Delete(id int64) error {
+	return s.execOne(`DELETE FROM batches WHERE id = ?`, id)
+}
+
 func (s *BatchesStore) execOne(q string, args ...any) error {
 	res, err := s.db.Exec(q, args...)
 	if err != nil {
