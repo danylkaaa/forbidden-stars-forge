@@ -5,6 +5,7 @@ import CardTypesPage from './pages/card-types/CardTypesPage'
 import TestGenerationPage from './pages/test-generation/TestGenerationPage'
 import BatchesPage from './pages/batches/BatchesPage'
 import NewBatchPage from './pages/batches/NewBatchPage'
+import BatchDetailPage from './pages/batches/BatchDetailPage'
 import SettingsPage from './pages/settings/SettingsPage'
 
 export const routes: RouteObject[] = [
@@ -17,6 +18,7 @@ export const routes: RouteObject[] = [
       { path: '/test-generation', element: <TestGenerationPage /> },
       { path: '/batches', element: <BatchesPage /> },
       { path: '/batches/new', element: <NewBatchPage /> },
+      { path: '/batches/:id', element: <BatchDetailPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],
   },
