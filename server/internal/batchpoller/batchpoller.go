@@ -163,6 +163,7 @@ func (p *Poller) complete(ctx context.Context, b store.Batch, status openai.Batc
 
 	var outputPath string
 	total := 0.0
+	ok := true
 	if status.OutputFileID != "" {
 		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		data, err := client.FileContent(reqCtx, status.OutputFileID)
@@ -176,7 +177,7 @@ func (p *Poller) complete(ctx context.Context, b store.Batch, status openai.Batc
 			log.Printf("batchpoller: batch %d: save output: %v", b.ID, err)
 			return
 		}
-		total = p.processOutputLines(b.ID, dir, data, pt, all["openai_model"])
+		total, ok = p.processOutputLines(b.ID, dir, data, pt, all["openai_model"])
 	}
 	if status.ErrorFileID != "" {
 		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -184,17 +185,25 @@ func (p *Poller) complete(ctx context.Context, b store.Batch, status openai.Batc
 		cancel()
 		if err != nil {
 			log.Printf("batchpoller: batch %d: error content: %v", b.ID, err)
-		} else {
-			p.processErrorLines(b.ID, data)
+			ok = false
+		} else if !p.processErrorLines(b.ID, data) {
+			ok = false
 		}
+	}
+	// A failure marking or persisting any single item leaves the batch
+	// non-terminal so the next tick retries — never flip to completed
+	// with an item still stuck at pending (PRD §10).
+	if !ok {
+		return
 	}
 	if err := p.Store.Complete(b.ID, outputPath, total); err != nil {
 		log.Printf("batchpoller: batch %d: complete: %v", b.ID, err)
 	}
 }
 
-func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt pricing.PriceTable, model string) float64 {
+func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt pricing.PriceTable, model string) (float64, bool) {
 	total := 0.0
+	ok := true
 	for _, raw := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		if raw == "" {
 			continue
@@ -205,17 +214,24 @@ func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt p
 			continue
 		}
 		if len(line.Response.Body.Data) == 0 || line.Response.Body.Data[0].B64JSON == "" {
-			_ = p.Store.MarkItemFailed(batchID, line.CustomID, "empty image in batch output")
+			if err := p.Store.MarkItemFailed(batchID, line.CustomID, "empty image in batch output"); err != nil {
+				log.Printf("batchpoller: batch %d: mark failed %s: %v", batchID, line.CustomID, err)
+				ok = false
+			}
 			continue
 		}
 		png, err := base64.StdEncoding.DecodeString(line.Response.Body.Data[0].B64JSON)
 		if err != nil {
-			_ = p.Store.MarkItemFailed(batchID, line.CustomID, "bad image data: "+err.Error())
+			if err := p.Store.MarkItemFailed(batchID, line.CustomID, "bad image data: "+err.Error()); err != nil {
+				log.Printf("batchpoller: batch %d: mark failed %s: %v", batchID, line.CustomID, err)
+				ok = false
+			}
 			continue
 		}
 		rel := filepath.Join(dir, line.CustomID+".png")
 		if err := os.WriteFile(filepath.Join(p.DataDir, rel), png, 0o644); err != nil {
 			log.Printf("batchpoller: batch %d: save %s: %v", batchID, line.CustomID, err)
+			ok = false
 			continue
 		}
 		usage := line.Response.Body.Usage
@@ -223,12 +239,14 @@ func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt p
 		total += cost
 		if err := p.Store.MarkItemDone(batchID, line.CustomID, rel, usage.InputTokens, usage.OutputTokens, cost); err != nil {
 			log.Printf("batchpoller: batch %d: mark done %s: %v", batchID, line.CustomID, err)
+			ok = false
 		}
 	}
-	return total
+	return total, ok
 }
 
-func (p *Poller) processErrorLines(batchID int64, data []byte) {
+func (p *Poller) processErrorLines(batchID int64, data []byte) bool {
+	ok := true
 	for _, raw := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		if raw == "" {
 			continue
@@ -241,6 +259,10 @@ func (p *Poller) processErrorLines(batchID int64, data []byte) {
 		if msg == "" {
 			msg = "batch item failed"
 		}
-		_ = p.Store.MarkItemFailed(batchID, line.CustomID, msg)
+		if err := p.Store.MarkItemFailed(batchID, line.CustomID, msg); err != nil {
+			log.Printf("batchpoller: batch %d: mark failed %s: %v", batchID, line.CustomID, err)
+			ok = false
+		}
 	}
+	return ok
 }
