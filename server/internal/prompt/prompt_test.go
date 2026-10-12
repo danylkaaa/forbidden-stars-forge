@@ -130,3 +130,11 @@ func TestImagePromptChatEditsCurrentPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestAreaEditAppendsInstructionToOriginalPrompt(t *testing.T) {
+	p := AreaEdit("## Faction\nTau\n", "  replace the skull with a cog ")
+	if !strings.HasPrefix(p, "## Faction\nTau\n\n## Edit\nreplace the skull with a cog\n") ||
+		!strings.Contains(p, "Change only the masked (transparent) area") {
+		t.Fatalf("prompt:\n%s", p)
+	}
+}

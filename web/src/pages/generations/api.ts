@@ -16,6 +16,9 @@ export type GalleryEntry = {
   name: string
   favorite: boolean
   ref: ImageRef
+  parentName: string // set for area edits
+  editInstruction: string
+  compareSrc: string | null // image it was edited from
   source: 'test' | 'batch'
   factionId: number
   cardTypeId: number

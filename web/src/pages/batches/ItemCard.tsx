@@ -11,7 +11,8 @@ export function ItemCard({
   return (
     <div className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
       {imageUrl ? (
-        <ZoomableImage src={imageUrl} alt={`${factionName} ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={item.name} favorite={{ target: { kind: 'batch-item', batchId, itemId: item.id }, value: item.favorite }} className="block w-full">
+        <ZoomableImage src={imageUrl} alt={`${factionName} ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={item.name} favorite={{ target: { kind: 'batch-item', batchId, itemId: item.id }, value: item.favorite }}
+          editTarget={{ kind: 'batch-item', batchId, itemId: item.id }} className="block w-full">
           <img src={imageUrl} alt={`${factionName} ${cardTypeName}`} className="block aspect-[3/4] w-full object-cover" />
         </ZoomableImage>
       ) : (

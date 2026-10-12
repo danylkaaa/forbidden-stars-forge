@@ -9,6 +9,8 @@ import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
 import { LayerControls, LayeredImage } from '../../components/PreviewLayers'
 import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
+import { EditOf } from '../../components/EditOf'
+import { parentImageUrl } from '../../lib/imageEdits'
 import { Tag } from '../../components/Tag'
 import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
@@ -356,6 +358,7 @@ export default function FactionLabPage() {
               {...previewLayers(cardType)}
               label={runLabel(current.id)}
               onUseFields={runLabel(current.id) && runLabel(current.id) !== 'current fields' ? () => applyRunFields(current.id) : undefined}
+              onEdited={(g) => setSelectedId(g.id)}
             />
           )}
           {results.length > 1 && cardType && (
@@ -385,8 +388,9 @@ export default function FactionLabPage() {
 }
 
 // The selected run, as large as the column allows.
-function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields }: {
-  gen: Generation; alt: string; overlaySrc: string | null; maskSrc: string | null; label: string | null; onUseFields?: () => void
+function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields, onEdited }: {
+  gen: Generation; alt: string; overlaySrc: string | null; maskSrc: string | null; label: string | null
+  onUseFields?: () => void; onEdited: (g: Generation) => void
 }) {
   const pending = gen.status === 'pending'
   const elapsed = useElapsedMs(gen.created_at, pending)
@@ -396,7 +400,8 @@ function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields }: {
       {imageUrl && <LayerControls overlaySrc={overlaySrc} maskSrc={maskSrc} />}
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }} className="block h-full w-full">
+          <ZoomableImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+            editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
             <LayeredImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} fit="contain" />
           </ZoomableImage>
         ) : (
@@ -412,7 +417,9 @@ function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields }: {
         )}
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink/80" title={gen.name}>{gen.name}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink/80" title={gen.name}>
+          {gen.name}{gen.parent_name && <EditOf gen={gen} />}
+        </span>
         <FavoriteButton target={{ kind: 'generation', id: gen.id }} favorite={gen.favorite} />
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink/45">

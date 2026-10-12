@@ -16,7 +16,8 @@ const cardTypes = [
   { id: 2, name: 'upgrade', description: '', constraints: '', template_path: '', openai_file_id: '', created_at: 'a', updated_at: 'b' },
 ]
 const doneGen: Generation = {
-  id: 9, faction_id: 1, card_type_id: 1, mode: 'final', model: '', quality: 'low', name: '1-tau_empire-combat-low', favorite: false, prompt: 'stored prompt', status: 'done',
+  id: 9, faction_id: 1, card_type_id: 1, mode: 'final', model: '', quality: 'low', name: '1-tau_empire-combat-low', favorite: false,
+  parent_kind: '', parent_id: 0, parent_batch_id: 0, parent_name: '', edit_instruction: '', prompt: 'stored prompt', status: 'done',
   image_path: 'generated/gen-9.png', input_tokens: 100, output_tokens: 400,
   cost_usd: 0.19, duration_ms: 78000, error: '', created_at: 'Jul 18',
 }

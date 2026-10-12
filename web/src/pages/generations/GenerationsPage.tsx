@@ -2,6 +2,8 @@ import { Link, useSearchParams } from 'react-router'
 import { ZoomableImage } from '../../components/ImageLightbox'
 import { MultiSelect } from '../../components/MultiSelect'
 import { FavoriteButton } from '../../components/FavoriteButton'
+import { EditOf } from '../../components/EditOf'
+import { parentImageUrl } from '../../lib/imageEdits'
 import { inputClass } from '../../components/Field'
 import { Tag } from '../../components/Tag'
 import { formatCost } from '../../lib/format'
@@ -25,12 +27,14 @@ export default function GenerationsPage() {
 
   const entries: GalleryEntry[] = [
     ...(gens ?? []).filter((g) => g.status === 'done').map((g): GalleryEntry => ({
-      key: `test-${g.id}`, name: g.name, favorite: g.favorite, ref: { kind: 'generation', id: g.id }, source: 'test', factionId: g.faction_id, cardTypeId: g.card_type_id,
+      key: `test-${g.id}`, name: g.name, favorite: g.favorite, ref: { kind: 'generation', id: g.id }, source: 'test',
+      parentName: g.parent_name, editInstruction: g.edit_instruction, compareSrc: parentImageUrl(g), factionId: g.faction_id, cardTypeId: g.card_type_id,
       mode: g.mode, model: g.model, imageUrl: `/api/generations/${g.id}/image`, costUsd: g.cost_usd, createdAt: g.created_at,
     })),
     ...(batchItems ?? []).map((it): GalleryEntry => ({
       key: `batch-${it.id}`, name: it.name, favorite: it.favorite,
-      ref: { kind: 'batch-item', batchId: it.batch_id, itemId: it.id }, source: 'batch', factionId: it.faction_id, cardTypeId: it.card_type_id,
+      ref: { kind: 'batch-item', batchId: it.batch_id, itemId: it.id }, source: 'batch',
+      parentName: '', editInstruction: '', compareSrc: null, factionId: it.faction_id, cardTypeId: it.card_type_id,
       mode: it.mode, model: it.model, imageUrl: `/api/batches/${it.batch_id}/items/${it.id}/image`,
       costUsd: it.cost_usd, createdAt: it.completed_at, batchId: it.batch_id,
     })),
@@ -112,7 +116,8 @@ export default function GenerationsPage() {
           const alt = `${faction} × ${ct?.name ?? '—'}`
           return (
             <div key={e.key} className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
-              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }} className="block w-full">
+              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
+                editTarget={e.ref} compareSrc={e.compareSrc} className="block w-full">
                 <img src={e.imageUrl} alt={alt} loading="lazy" className="block aspect-[3/4] w-full object-cover" />
               </ZoomableImage>
               <div className="flex flex-col gap-1 p-2.5">
@@ -121,6 +126,7 @@ export default function GenerationsPage() {
                   <FavoriteButton target={e.ref} favorite={e.favorite} />
                 </div>
                 {e.name && <div className="truncate font-mono text-[11px] text-ink/60" title={e.name}>{e.name}</div>}
+                {e.parentName && <div className="truncate"><EditOf gen={{ parent_name: e.parentName, edit_instruction: e.editInstruction }} /></div>}
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Tag variant={e.mode === 'final' ? 'solid-accent' : 'neutral'}>{e.mode}</Tag>
                   {e.source === 'batch' && e.batchId !== undefined ? (

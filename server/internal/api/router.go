@@ -76,10 +76,12 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 				Factions:  factionsStore,
 				CardTypes: cardTypesStore,
 				Settings:  settingsStore,
+				Batches:   batchesStore,
 				Usage:     usageStore,
 				DataDir:   dataDir,
 			}
 			r.Post("/generate", gens.Generate)
+			r.Post("/image-edits", gens.Edit)
 			r.Get("/generate/preview", gens.Preview)
 			r.Post("/generate/assemble", gens.Assemble)
 			r.Get("/generations", gens.List)

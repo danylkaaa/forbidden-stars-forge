@@ -23,6 +23,7 @@ type GenerationsHandler struct {
 	Factions  *store.FactionsStore
 	CardTypes *store.CardTypesStore
 	Settings  *store.SettingsStore
+	Batches   *store.BatchesStore // for editing batch item images
 	Usage     *store.UsageStore
 	DataDir   string
 }
@@ -92,7 +93,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.run(g.ID, quality, model, p, ct.OpenAIFileID)
+	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, Prompt: p, Quality: quality}, nil)
 	writeJSON(w, http.StatusCreated, g)
 }
 
@@ -148,8 +149,11 @@ func (h *GenerationsHandler) resolveModel(override string) (string, error) {
 }
 
 // run performs the OpenAI call in the background and persists the outcome.
+// req carries model, input image (FileID or ImageURL), optional mask,
+// prompt and quality; size/fidelity/background come from Settings.
+// postProcess, if set, transforms the PNG before it's saved (area edits).
 // All artifacts are written before status flips to done (PRD §7.3).
-func (h *GenerationsHandler) run(id int64, quality, model, promptText, fileID string) {
+func (h *GenerationsHandler) run(id int64, req openai.ImageEditRequest, postProcess func([]byte) ([]byte, error)) {
 	fail := func(msg string) { _ = h.Gens.MarkFailed(id, msg) }
 
 	all, err := h.Settings.GetAll()
@@ -163,16 +167,20 @@ func (h *GenerationsHandler) run(id int64, quality, model, promptText, fileID st
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	start := time.Now()
-	res, err := client.EditImage(ctx, openai.ImageEditRequest{
-		Model: model, FileID: fileID, Prompt: promptText,
-		Size: all["image_size"], Quality: quality, InputFidelity: all["input_fidelity"],
-		Background: all["background"],
-	})
+	req.Size, req.InputFidelity, req.Background = all["image_size"], all["input_fidelity"], all["background"]
+	res, err := client.EditImage(ctx, req)
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
 		fail(err.Error())
 		return
 	}
+	if postProcess != nil {
+		if res.PNG, err = postProcess(res.PNG); err != nil {
+			fail("post-process: " + err.Error())
+			return
+		}
+	}
+	model := req.Model
 
 	dir := filepath.Join(h.DataDir, "generated")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

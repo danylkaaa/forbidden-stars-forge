@@ -187,7 +187,9 @@ func (c *Client) UploadFile(ctx context.Context, filename, purpose string, data 
 
 type ImageEditRequest struct {
 	Model         string
-	FileID        string
+	FileID        string // input image as an uploaded file…
+	ImageURL      string // …or as a URL / base64 data URL (used when FileID is empty)
+	MaskURL       string // optional mask (PNG with alpha) as a URL / data URL
 	Prompt        string
 	Size          string
 	Quality       string
@@ -210,7 +212,7 @@ func usesV2(model string) bool {
 func EditBody(req ImageEditRequest) map[string]any {
 	body := map[string]any{
 		"model":         req.Model,
-		"images":        []map[string]string{{"file_id": req.FileID}},
+		"images":        []map[string]string{imageRef(req)},
 		"prompt":        req.Prompt,
 		"size":          req.Size,
 		"quality":       req.Quality,
@@ -224,7 +226,17 @@ func EditBody(req ImageEditRequest) map[string]any {
 	if req.Background != "" {
 		body["background"] = req.Background
 	}
+	if req.MaskURL != "" {
+		body["mask"] = map[string]string{"image_url": req.MaskURL}
+	}
 	return body
+}
+
+func imageRef(req ImageEditRequest) map[string]string {
+	if req.FileID != "" {
+		return map[string]string{"file_id": req.FileID}
+	}
+	return map[string]string{"image_url": req.ImageURL}
 }
 
 type ImageEditResult struct {

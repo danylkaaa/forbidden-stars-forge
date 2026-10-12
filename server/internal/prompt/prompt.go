@@ -217,3 +217,16 @@ var assembledPromptShape = ImageEdit("{description}", "{constraints}", FactionSt
 	Name: "{faction name}", PrimaryColor: "{faction primary color}", Texture: "{faction texture}",
 	Description: "{faction-specific style description}",
 })
+
+// AreaEdit is the prompt for editing a painted area of an existing image:
+// the image's original prompt for context, plus the requested change.
+func AreaEdit(originalPrompt, instruction string) string {
+	return strings.TrimSpace(originalPrompt) + `
+
+## Edit
+` + strings.TrimSpace(instruction) + `
+
+Change only the masked (transparent) area of the provided image. Keep
+everything outside it exactly as it is: same layout, colors, lighting and
+details. Blend the edited area seamlessly into its surroundings.`
+}

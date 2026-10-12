@@ -11,6 +11,12 @@ export type Generation = {
   quality: string
   name: string // "<n>-<faction>-<type>-<quality>"
   favorite: boolean
+  // Set when this is an area edit of an earlier image.
+  parent_kind: '' | 'generation' | 'batch-item'
+  parent_id: number
+  parent_batch_id: number
+  parent_name: string
+  edit_instruction: string
   prompt: string
   status: 'pending' | 'done' | 'failed'
   image_path: string

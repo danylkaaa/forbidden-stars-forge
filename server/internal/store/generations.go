@@ -27,23 +27,29 @@ func ImageNameSuffix(factionName, cardTypeName, quality string) string {
 }
 
 type Generation struct {
-	ID           int64   `json:"id"`
-	FactionID    int64   `json:"faction_id"`
-	CardTypeID   int64   `json:"card_type_id"`
-	Mode         string  `json:"mode"`
-	Model        string  `json:"model"`
-	Quality      string  `json:"quality"`
-	Name         string  `json:"name"` // "<n>-<faction>-<type>-<quality>", searchable
-	Favorite     bool    `json:"favorite"`
-	Prompt       string  `json:"prompt"`
-	Status       string  `json:"status"`
-	ImagePath    string  `json:"image_path"`
-	InputTokens  int64   `json:"input_tokens"`
-	OutputTokens int64   `json:"output_tokens"`
-	CostUSD      float64 `json:"cost_usd"`
-	DurationMS   int64   `json:"duration_ms"`
-	Error        string  `json:"error"`
-	CreatedAt    string  `json:"created_at"`
+	ID         int64  `json:"id"`
+	FactionID  int64  `json:"faction_id"`
+	CardTypeID int64  `json:"card_type_id"`
+	Mode       string `json:"mode"`
+	Model      string `json:"model"`
+	Quality    string `json:"quality"`
+	Name       string `json:"name"` // "<n>-<faction>-<type>-<quality>", searchable
+	Favorite   bool   `json:"favorite"`
+	// Set when this generation is an area edit of an earlier image.
+	ParentKind      string  `json:"parent_kind"` // "", "generation" or "batch-item"
+	ParentID        int64   `json:"parent_id"`
+	ParentBatchID   int64   `json:"parent_batch_id"` // batch of a batch-item parent
+	ParentName      string  `json:"parent_name"`
+	EditInstruction string  `json:"edit_instruction"`
+	Prompt          string  `json:"prompt"`
+	Status          string  `json:"status"`
+	ImagePath       string  `json:"image_path"`
+	InputTokens     int64   `json:"input_tokens"`
+	OutputTokens    int64   `json:"output_tokens"`
+	CostUSD         float64 `json:"cost_usd"`
+	DurationMS      int64   `json:"duration_ms"`
+	Error           string  `json:"error"`
+	CreatedAt       string  `json:"created_at"`
 }
 
 type GenerationsStore struct {
@@ -54,13 +60,15 @@ func NewGenerationsStore(db *sql.DB) *GenerationsStore {
 	return &GenerationsStore{db: db}
 }
 
-const generationCols = `id, faction_id, card_type_id, mode, model, quality, name, favorite, prompt, status,
+const generationCols = `id, faction_id, card_type_id, mode, model, quality, name, favorite,
+	parent_kind, parent_id, parent_batch_id, parent_name, edit_instruction, prompt, status,
 	COALESCE(image_path,''), COALESCE(input_tokens,0), COALESCE(output_tokens,0),
 	COALESCE(cost_usd,0), COALESCE(duration_ms,0), COALESCE(error,''), created_at`
 
 func scanGeneration(row interface{ Scan(...any) error }) (Generation, error) {
 	var g Generation
-	err := row.Scan(&g.ID, &g.FactionID, &g.CardTypeID, &g.Mode, &g.Model, &g.Quality, &g.Name, &g.Favorite, &g.Prompt, &g.Status,
+	err := row.Scan(&g.ID, &g.FactionID, &g.CardTypeID, &g.Mode, &g.Model, &g.Quality, &g.Name, &g.Favorite,
+		&g.ParentKind, &g.ParentID, &g.ParentBatchID, &g.ParentName, &g.EditInstruction, &g.Prompt, &g.Status,
 		&g.ImagePath, &g.InputTokens, &g.OutputTokens, &g.CostUSD, &g.DurationMS, &g.Error, &g.CreatedAt)
 	if err == sql.ErrNoRows {
 		return g, ErrNotFound
@@ -120,6 +128,28 @@ func (s *GenerationsStore) MarkDone(id int64, imagePath string, inTok, outTok in
 		return ErrNotFound
 	}
 	return nil
+}
+
+// EditOrigin describes the image an area edit was made from.
+type EditOrigin struct {
+	Kind        string // "generation" or "batch-item"
+	ID          int64
+	BatchID     int64 // for batch-item parents
+	Name        string
+	Instruction string
+}
+
+// SetEditOrigin marks a (just created) generation as an edit of origin.
+func (s *GenerationsStore) SetEditOrigin(id int64, o EditOrigin) (Generation, error) {
+	res, err := s.db.Exec(`UPDATE generations SET parent_kind = ?, parent_id = ?, parent_batch_id = ?,
+		parent_name = ?, edit_instruction = ? WHERE id = ?`, o.Kind, o.ID, o.BatchID, o.Name, o.Instruction, id)
+	if err != nil {
+		return Generation{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Generation{}, ErrNotFound
+	}
+	return s.Get(id)
 }
 
 func (s *GenerationsStore) SetFavorite(id int64, favorite bool) error {

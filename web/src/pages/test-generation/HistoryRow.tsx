@@ -7,6 +7,8 @@ import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { Tag } from '../../components/Tag'
 import { formatCost, formatDuration, generationImageUrl, useStartGeneration, type Generation } from './api'
 import { useTestGenUi } from './store'
+import { parentImageUrl } from '../../lib/imageEdits'
+import { EditOf } from '../../components/EditOf'
 
 export function HistoryRow({ gen, factionName, cardTypeName, overlaySrc, maskSrc }: {
   gen: Generation; factionName: string; cardTypeName: string; overlaySrc?: string | null; maskSrc?: string | null
@@ -54,7 +56,8 @@ export function HistoryRow({ gen, factionName, cardTypeName, overlaySrc, maskSrc
       }`}>
       <div className="flex items-center gap-3.5 px-3.5 py-3">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={`${factionName} × ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }} className="flex-none">
+          <ZoomableImage src={imageUrl} alt={`${factionName} × ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+            editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} className="flex-none">
             <img src={imageUrl} alt="" className="block h-14 w-10 rounded object-cover" />
           </ZoomableImage>
         ) : pending ? (
@@ -73,7 +76,12 @@ export function HistoryRow({ gen, factionName, cardTypeName, overlaySrc, maskSrc
             {gen.model && <span className="font-mono text-[11px] text-ink/45">{gen.model}</span>}
             {pending && <Tag variant="outline-accent"><span className="animate-pulse">generating…</span></Tag>}
           </div>
-          {gen.name && <div className="mt-0.5 font-mono text-[11.5px] text-ink/70">{gen.name}</div>}
+          {gen.name && (
+            <div className="mt-0.5 font-mono text-[11.5px] text-ink/70">
+              {gen.name}
+              {gen.parent_name && <EditOf gen={gen} />}
+            </div>
+          )}
           <div className="mt-0.5 text-xs text-ink/50">
             {pending ? (
               <>{gen.created_at} · {formatDuration(elapsedMs)} elapsed</>
@@ -102,7 +110,8 @@ export function HistoryRow({ gen, factionName, cardTypeName, overlaySrc, maskSrc
       {expanded && (
         <div className="flex gap-4 px-3.5 pb-4">
           {imageUrl && (
-            <ZoomableImage src={imageUrl} alt={`${factionName} × ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}>
+            <ZoomableImage src={imageUrl} alt={`${factionName} × ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+            editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)}>
               <img src={imageUrl} alt="Generated card" className="block max-h-72 rounded" />
             </ZoomableImage>
           )}
