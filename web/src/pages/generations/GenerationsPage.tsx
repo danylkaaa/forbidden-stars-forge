@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router'
 import { ZoomableImage } from '../../components/ImageLightbox'
 import { MultiSelect } from '../../components/MultiSelect'
+import { Pagination } from '../../components/Pagination'
 import { FavoriteButton } from '../../components/FavoriteButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
@@ -13,12 +14,23 @@ import { DLC_VALUES } from '../factions/dlc'
 import { useGenerations } from '../test-generation/api'
 import { filtersToParams, parseFilters, useDoneBatchItems, type GalleryEntry, type GalleryFilters } from './api'
 
+const PER_PAGE_OPTIONS = [24, 48, 96]
+
 // Every finished image — Test Generation and batches — in one filterable
 // grid. Filters are kept in the URL so other pages can deep-link here.
 export default function GenerationsPage() {
   const [params, setParams] = useSearchParams()
   const filters = parseFilters(params)
+  // Changing a filter goes back to page 1 (page is dropped from the URL).
   const setFilters = (patch: Partial<GalleryFilters>) => setParams(filtersToParams({ ...filters, ...patch }), { replace: true })
+  const perPage = PER_PAGE_OPTIONS.includes(Number(params.get('per'))) ? Number(params.get('per')) : PER_PAGE_OPTIONS[0]
+  const setPaging = (page: number, per = perPage) => {
+    const next = filtersToParams(filters)
+    if (page > 1) next.set('page', String(page))
+    if (per !== PER_PAGE_OPTIONS[0]) next.set('per', String(per))
+    setParams(next) // pushes history: Back returns to the previous page
+    document.querySelector('main')?.scrollTo({ top: 0 })
+  }
 
   const { data: gens, isLoading: gensLoading, error: gensError } = useGenerations()
   const { data: batchItems, isLoading: itemsLoading, error: itemsError } = useDoneBatchItems()
@@ -57,6 +69,26 @@ export default function GenerationsPage() {
   })
   const filtering = terms.length > 0 || favorites || dlcs.length + factionIds.length + cardTypeIds.length + sources.length + modes.length > 0
   const total = shown.reduce((sum, e) => sum + e.costUsd, 0)
+  const pages = Math.max(1, Math.ceil(shown.length / perPage))
+  const page = Math.min(pages, Math.max(1, Number(params.get('page')) || 1))
+  const pageItems = shown.slice((page - 1) * perPage, page * perPage)
+  const pager = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span className="text-xs text-ink/45">
+        {shown.length > 0 && `${(page - 1) * perPage + 1}–${Math.min(page * perPage, shown.length)} of ${shown.length}`}
+      </span>
+      <div className="flex items-center gap-3">
+        <Pagination page={page} pages={pages} onPage={(p) => setPaging(p)} />
+        <label className="flex items-center gap-1.5 text-xs text-ink/55">
+          Per page
+          <select value={perPage} onChange={(e) => setPaging(1, Number(e.target.value))} aria-label="Images per page"
+            className="min-h-7 rounded-md border border-divider bg-bg py-0.5 pl-2 text-xs text-ink">
+            {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>
+  )
   const loading = gensLoading || itemsLoading
   const error = gensError ?? itemsError
 
@@ -109,8 +141,10 @@ export default function GenerationsPage() {
         </p>
       )}
 
+      {shown.length > 0 && pager}
+
       <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-        {shown.map((e) => {
+        {pageItems.map((e) => {
           const faction = factionById.get(e.factionId)?.name ?? '—'
           const ct = cardTypeById.get(e.cardTypeId)
           const alt = `${faction} × ${ct?.name ?? '—'}`
@@ -142,6 +176,8 @@ export default function GenerationsPage() {
           )
         })}
       </div>
+
+      {shown.length > perPage && pager}
     </div>
   )
 }

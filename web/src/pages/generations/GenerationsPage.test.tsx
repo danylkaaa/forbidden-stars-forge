@@ -128,3 +128,32 @@ test('image popup has a favorite button', async () => {
   expect(await within(dialog).findByRole('button', { name: 'Remove from favorites' })).toHaveTextContent('★ Favorite')
   expect(screen.getByRole('dialog')).toBeInTheDocument() // starring doesn't close the popup
 })
+
+test('paginates 24 per page; page and per-page live in the URL; filters reset to page 1', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    ...gen(i + 1, 1, 1), created_at: `2026-10-${String(1 + Math.floor(i / 10)).padStart(2, '0')} 10:${String(i).padStart(2, '0')}:00`,
+  }))
+  server.use(
+    http.get('/api/generations', () => HttpResponse.json(many)),
+    http.get('/api/batch-items', () => HttpResponse.json([])),
+  )
+  renderAt('/generations')
+  expect((await screen.findAllByText('1–24 of 30')).length).toBe(2) // pager above and below
+  expect(cards()).toHaveLength(24)
+
+  await userEvent.click(screen.getAllByRole('button', { name: 'Next page' })[0])
+  expect(cards()).toHaveLength(6)
+  expect(screen.getAllByText('25–30 of 30')).toHaveLength(2)
+  expect(screen.getByTestId('search')).toHaveTextContent('page=2')
+  expect(screen.getAllByRole('button', { name: 'Page 2' })[0]).toHaveAttribute('aria-current', 'page')
+
+  await userEvent.selectOptions(screen.getAllByLabelText('Images per page')[0], '48')
+  expect(cards()).toHaveLength(30)
+  expect(screen.getByTestId('search')).toHaveTextContent('per=48')
+  expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument()
+
+  await userEvent.selectOptions(screen.getByLabelText('Images per page'), '24')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Page 2' })[0])
+  await userEvent.type(screen.getByLabelText('Search by name'), '1')
+  expect(screen.getByTestId('search')).not.toHaveTextContent('page=')
+})
