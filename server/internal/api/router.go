@@ -30,6 +30,7 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			settingsStore := store.NewSettingsStore(db)
 			factionsStore := store.NewFactionsStore(db)
 			cardTypesStore := store.NewCardTypesStore(db)
+			cardsStore := store.NewCardsStore(db)
 			batchesStore := store.NewBatchesStore(db)
 			usageStore := store.NewUsageStore(db)
 
@@ -40,13 +41,20 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Post("/settings/test-claude", settings.TestClaude)
 			r.Post("/settings/openai-models", settings.OpenAIModels)
 
-			factions := &FactionsHandler{Store: factionsStore, Batches: batchesStore}
+			factions := &FactionsHandler{Store: factionsStore, Batches: batchesStore, Cards: cardsStore}
 			r.Get("/factions", factions.List)
 			r.Post("/factions", factions.Create)
 			r.Put("/factions/{id}", factions.Update)
 			r.Delete("/factions/{id}", factions.Delete)
 			r.Get("/factions/{id}/revisions", factions.Revisions)
 			r.Post("/factions/{id}/revisions/{revID}/restore", factions.Restore)
+
+			cards := &CardsHandler{Store: cardsStore, Factions: factionsStore}
+			r.Get("/cards", cards.List)
+			r.Get("/cards/{id}", cards.Get)
+			r.Post("/cards", cards.Create)
+			r.Put("/cards/{id}", cards.Update)
+			r.Post("/cards/import", cards.Import)
 
 			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}
 			r.Post("/factions/generate-description", jobsH.GenerateDescription)

@@ -1,0 +1,691 @@
+[
+  {
+    "name": "combat zero values",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "level 1",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 1,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "level 2",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 2,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "level 3",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 3,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "maximum safe integer",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 9007199254740991,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "schema rotate_clockwise",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "schema",
+      "text": "",
+      "action": "rotate_clockwise"
+    },
+    "valid": true
+  },
+  {
+    "name": "schema rotate_counterclockwise",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "schema",
+      "text": "",
+      "action": "rotate_counterclockwise"
+    },
+    "valid": true
+  },
+  {
+    "name": "schema move_vertical",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "schema",
+      "text": "",
+      "action": "move_vertical"
+    },
+    "valid": true
+  },
+  {
+    "name": "schema move_horizontal",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "schema",
+      "text": "",
+      "action": "move_horizontal"
+    },
+    "valid": true
+  },
+  {
+    "name": "tactic rotate_clockwise",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "tactic",
+      "text": "",
+      "action": "rotate_clockwise"
+    },
+    "valid": true
+  },
+  {
+    "name": "tactic rotate_counterclockwise",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "tactic",
+      "text": "",
+      "action": "rotate_counterclockwise"
+    },
+    "valid": true
+  },
+  {
+    "name": "tactic move_vertical",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "tactic",
+      "text": "",
+      "action": "move_vertical"
+    },
+    "valid": true
+  },
+  {
+    "name": "tactic move_horizontal",
+    "card": {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "tactic",
+      "text": "",
+      "action": "move_horizontal"
+    },
+    "valid": true
+  },
+  {
+    "name": "deploy",
+    "card": {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "deploy",
+      "text": "Текст"
+    },
+    "valid": true
+  },
+  {
+    "name": "advance",
+    "card": {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "advance",
+      "text": "Текст"
+    },
+    "valid": true
+  },
+  {
+    "name": "strategize",
+    "card": {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "strategize",
+      "text": "Текст"
+    },
+    "valid": true
+  },
+  {
+    "name": "upgrade",
+    "card": {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "upgrade",
+      "text": "Текст"
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid level -1",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": -1,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid level 4",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 4,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid resource_cost -1",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": -1,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid shields -1",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": -1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid guns 0.5",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 0.5,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid eagles 9007199254740992",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 9007199254740992,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid level 0",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": "0",
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid upper_text None",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": null,
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid lower_text 2",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": 2
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid faction_id 999",
+    "card": {
+      "faction_id": 999,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid faction_id 0",
+    "card": {
+      "faction_id": 0,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid faction_id 1",
+    "card": {
+      "faction_id": "1",
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid name   ",
+    "card": {
+      "faction_id": 1,
+      "name": "  ",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid name None",
+    "card": {
+      "faction_id": 1,
+      "name": null,
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid category other",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "other",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing faction_id",
+    "card": {
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing name",
+    "card": {
+      "faction_id": 1,
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing category",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing level",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing resource_cost",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing shields",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing guns",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing eagles",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing upper_text",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "lower_text": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "missing lower_text",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown key",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "unknown": true
+    },
+    "valid": false
+  },
+  {
+    "name": "foreign null field",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "text": null
+    },
+    "valid": false
+  },
+  {
+    "name": "non-object",
+    "card": null,
+    "valid": false
+  },
+  {
+    "name": "array",
+    "card": [],
+    "valid": false
+  },
+  {
+    "name": "invalid schema enum",
+    "card": {
+      "faction_id": 1,
+      "name": "Plan",
+      "category": "schema",
+      "subtype": "other",
+      "text": "",
+      "action": "move_vertical"
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid action",
+    "card": {
+      "faction_id": 1,
+      "name": "Plan",
+      "category": "schema",
+      "subtype": "schema",
+      "text": "",
+      "action": "other"
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid upgrade",
+    "card": {
+      "faction_id": 1,
+      "name": "Up",
+      "category": "upgrade",
+      "upgrade_type": "dominate",
+      "text": ""
+    },
+    "valid": false
+  }
+]

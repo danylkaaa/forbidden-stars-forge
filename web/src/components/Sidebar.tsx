@@ -5,6 +5,7 @@ import { FactionsIcon, CardTypesIcon, LabIcon, TestGenIcon, GalleryIcon, BatchIc
 
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
   { to: '/factions', label: 'Factions', Icon: FactionsIcon },
+  { to: '/cards', label: 'Cards', Icon: CardTypesIcon },
   { to: '/card-types', label: 'Card Types', Icon: CardTypesIcon },
   { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
   { to: '/test-generation', label: 'Test Generation', Icon: TestGenIcon },

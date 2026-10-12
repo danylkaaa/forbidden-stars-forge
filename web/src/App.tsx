@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router'
 import { AppLayout } from './components/AppLayout'
+import CardsPage from './pages/cards/CardsPage'
 import FactionsPage from './pages/factions/FactionsPage'
 import CardTypesPage from './pages/card-types/CardTypesPage'
 import TestGenerationPage from './pages/test-generation/TestGenerationPage'
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
     element: <AppLayout />,
     children: [
       { path: '/', element: <Navigate to="/factions" replace /> },
+      { path: '/cards', element: <CardsPage /> },
       { path: '/factions', element: <FactionsPage /> },
       { path: '/card-types', element: <CardTypesPage /> },
       { path: '/faction-lab', element: <FactionLabPage /> },

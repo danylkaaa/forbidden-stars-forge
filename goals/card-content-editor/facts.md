@@ -1,0 +1,25 @@
+# Facts
+
+- Cards are separate persisted game-card records in three categories: combat, schema/tactic, and upgrade.
+- Every card belongs to one existing faction and has a required non-empty name.
+- The first version supports manual creation and editing; AI generation and AI editing of card content are outside this goal.
+- A combat card has a level of 0, 1, 2, or 3.
+- A combat card has a resource price stored as one non-negative integer.
+- A combat card has independently editable upper and lower text fields; either may be empty.
+- A combat card has independent non-negative integer counts for shields, guns, and eagles.
+- A schema/tactic card has a subtype of schema or tactic and an editable text field.
+- Each schema/tactic card selects exactly one action: clockwise rotation, counterclockwise rotation, vertical movement, or horizontal movement.
+- Movement on a schema/tactic card is described as taking place within its own field; the editor does not simulate or enforce board movement.
+- An upgrade card selects exactly one type: deploy, advance, strategize, or upgrade.
+- An upgrade card has an editable text field; upgrade price and level are outside the first version.
+- A Cards section lists saved cards and supports filtering by faction and category.
+- Creating or editing a card persists its content only after Save; reopening the card and restarting the application retain saved values.
+- A dirty card form offers a diff of saved and draft values, including changed text and non-text fields.
+- Closing a dirty card form or navigating away asks whether to discard unsaved changes; canceling preserves the draft.
+- The editor UI is in English and card names and texts support any language, including Cyrillic.
+- The API rejects invalid category-specific values and missing faction references; the UI shows errors and retains the draft when saving fails.
+- Deletion, duplication, revision history, illustration linking, card rendering, printing, export, imports other than the specified JSON upload, and automatic balancing are outside this goal.
+- Existing faction, card-template, artwork-generation, and batch workflows continue to work with their existing data.
+- The Cards UI accepts a UTF-8 JSON file with a non-empty cards array: {"cards": [...]}. Each entry uses an existing faction_id, a name, a category (combat, schema, or upgrade), and that category's fields. Upload creates new cards; it does not update existing cards.
+- The upload UI displays the JSON format and validation rules, with a downloadable example. It checks JSON syntax, required fields, integer ranges, category-specific fields, enum values, unknown fields, and existing faction IDs before sending a POST request; errors identify the affected entry and field.
+- A valid JSON upload shows a preview and persists only after an explicit Import action sends POST /api/cards/import. The backend independently validates the entire payload and saves all cards in one transaction; any invalid entry saves zero cards. A failed import retains the upload preview and errors for correction.

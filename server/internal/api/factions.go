@@ -17,6 +17,7 @@ var dlcValues = []string{"Galaxy in Flames", "Symphony of War", "Darkest Dawn"}
 type FactionsHandler struct {
 	Store   *store.FactionsStore
 	Batches *store.BatchesStore
+	Cards   *store.CardsStore
 }
 
 type factionSave struct {
@@ -119,6 +120,17 @@ func (h *FactionsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if ref {
 		writeError(w, http.StatusConflict, "referenced by a batch — cannot delete")
 		return
+	}
+	if h.Cards != nil {
+		ref, err := h.Cards.FactionReferenced(id)
+		if err != nil {
+			writeError(w, 500, err.Error())
+			return
+		}
+		if ref {
+			writeError(w, 409, "referenced by a card — cannot delete")
+			return
+		}
 	}
 	if err := h.Store.Delete(id); err != nil {
 		h.storeErr(w, err)

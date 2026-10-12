@@ -1,0 +1,31 @@
+{
+  "cards": [
+    {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "level": 0,
+      "resource_cost": 0,
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": ""
+    },
+    {
+      "faction_id": 1,
+      "name": "План",
+      "category": "schema",
+      "subtype": "tactic",
+      "text": "",
+      "action": "move_horizontal"
+    },
+    {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "upgrade",
+      "text": "Текст"
+    }
+  ]
+}
