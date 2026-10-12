@@ -13,7 +13,7 @@ export function ClaudeSection() {
   if (!draft) return null
 
   return (
-    <section className="flex flex-col gap-3.5 p-4 rounded-md bg-surface shadow-[0_0_0_1px_#3f424d]">
+    <section className="flex flex-col gap-3.5 p-4 rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
       <h2 className="text-[13px] font-medium">Claude CLI</h2>
       <Field label="Binary path">
         {(id) => (

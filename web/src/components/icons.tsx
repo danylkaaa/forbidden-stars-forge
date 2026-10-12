@@ -85,3 +85,34 @@ export function LabIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+// Cog Mechanicum: a toothed cog, half machine and half skull, for the
+// sidebar crest.
+export function CogMechanicumIcon({ className }: IconProps) {
+  const teeth = Array.from({ length: 12 }, (_, i) => i * 30)
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+      <g fill="currentColor">
+        {teeth.map((deg) => (
+          <rect key={deg} x="28.5" y="2" width="7" height="10" rx="1" transform={`rotate(${deg} 32 32)`} />
+        ))}
+        <circle cx="32" cy="32" r="22" />
+      </g>
+      {/* skull face cut out of the cog */}
+      <g fill="var(--color-bg)">
+        <path d="M32 15 C22 15 17 22 17 30 C17 36 20 39 23 41 L23 47 L41 47 L41 41 C44 39 47 36 47 30 C47 22 42 15 32 15 Z" />
+      </g>
+      <g fill="currentColor">
+        {/* left: organic eye; right: augmetic lens */}
+        <ellipse cx="25.5" cy="30" rx="4.5" ry="4" />
+        <rect x="35" y="25.5" width="9" height="9" rx="1.5" />
+        <path d="M32 34 L29.5 39 L34.5 39 Z" />
+        <rect x="26" y="42" width="2" height="5" />
+        <rect x="31" y="42" width="2" height="5" />
+        <rect x="36" y="42" width="2" height="5" />
+        <rect x="31.25" y="15" width="1.5" height="32" opacity="0.55" />
+      </g>
+      <circle cx="39.5" cy="30" r="2.2" fill="var(--color-phosphor)" />
+    </svg>
+  )
+}

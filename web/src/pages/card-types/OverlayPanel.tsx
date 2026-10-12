@@ -37,7 +37,7 @@ export function OverlayPanel({ persisted }: { persisted: CardType | null }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-ink/10 bg-bg p-3">
       {url ? (
-        <img src={url} alt="Overlay" className="h-16 w-12 flex-none rounded bg-[repeating-conic-gradient(#5d5294_0%_25%,#2b2741_0%_50%)] bg-[length:10px_10px] object-contain" />
+        <img src={url} alt="Overlay" className="h-16 w-12 flex-none rounded bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:10px_10px] object-contain" />
       ) : (
         <div className="h-16 w-12 flex-none rounded border border-dashed border-divider" />
       )}

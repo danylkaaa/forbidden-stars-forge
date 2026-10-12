@@ -1,33 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 @import 'tailwindcss';
 
 @theme {
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-ink: #e9e9ed;
-  --color-accent: #9184d9;
-  --color-accent-2: #a7a1db;
-  --color-divider: rgba(233, 233, 237, 0.16);
-  --color-warn: #d9b86a;
-  --color-danger: #e29393;
-  --color-success: #a8d9a8;
+  /* Adeptus Mechanicus: Mars-red robes, brass and copper fittings,
+     gunmetal plating, and phosphor-green noosphere data screens. */
+  --color-bg: #0b0706;
+  --color-surface: #1a1311;
+  --color-ink: #ecdfcb;
+  --color-accent: #d08b3e;
+  --color-accent-2: #e8b06a;
+  --color-divider: rgba(208, 139, 62, 0.24);
+  --color-warn: #e0a53c;
+  --color-danger: #e0503c;
+  --color-success: #79e08e;
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-300: #d2cefd;
-  --color-accent-500: #968ae0;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
+  --color-accent-100: #f8e9d2;
+  --color-accent-300: #edc38a;
+  --color-accent-500: #d08b3e;
+  --color-accent-700: #7e4f1f;
+  --color-accent-800: #4a2e14;
+  --color-accent-900: #26170c;
 
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-500: #9397ab;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  --color-neutral-100: #ece2d4;
+  --color-neutral-500: #8d7f71;
+  --color-neutral-800: #3a2d27;
+  --color-neutral-900: #201815;
 
-  --radius-md: 8px;
-  --radius-lg: 14px;
+  --color-mars: #a3231a;
+  --color-mars-700: #6e1610;
+  --color-phosphor: #79e08e;
+
+  --radius-md: 3px;
+  --radius-lg: 6px;
 
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Cinzel', 'Times New Roman', serif;
+  --font-mono: 'Share Tech Mono', ui-monospace, monospace;
 
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   @keyframes shimmer {
@@ -38,7 +46,14 @@
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  /* Forge-glow of Mars from above, a faint machine-grid over gunmetal. */
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(163, 35, 26, 0.16), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(208, 139, 62, 0.07), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(208, 139, 62, 0.025) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, rgba(208, 139, 62, 0.025) 0 1px, transparent 1px 32px),
+    var(--color-bg);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 15px;
@@ -46,7 +61,56 @@ body {
 }
 
 ::selection {
-  background: rgba(145, 132, 217, 0.3);
+  background: rgba(121, 224, 142, 0.3);
+}
+
+/* Gothic display type for page and section headings and table headers. */
+h1, h2, h3, th {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+h1 {
+  text-transform: uppercase;
+  color: var(--color-accent-300);
+  text-shadow: 0 1px 0 #000, 0 0 20px rgba(163, 35, 26, 0.45);
+}
+
+/* Data-slate readouts: phosphor-green text with faint scanlines. */
+pre {
+  color: var(--color-phosphor) !important;
+  text-shadow: 0 0 6px rgba(121, 224, 142, 0.25);
+  background-image: repeating-linear-gradient(180deg, rgba(121, 224, 142, 0.04) 0 1px, transparent 1px 3px);
+}
+
+h2 {
+  color: var(--color-accent-100);
+}
+
+/* Panels: a faint top-lit metal sheen on every surface, plus gold corner
+   brackets on rectangular panels (tables, dialogs, cards, columns). */
+.bg-surface {
+  background-image: linear-gradient(180deg, rgba(255, 220, 180, 0.035), transparent 45%);
+}
+
+.bg-surface.rounded-md,
+.bg-surface.rounded-lg {
+  --bracket: rgba(208, 139, 62, 0.75);
+  background-image:
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(var(--bracket), var(--bracket)), linear-gradient(var(--bracket), var(--bracket)),
+    linear-gradient(180deg, rgba(255, 220, 180, 0.035), transparent 45%);
+  background-size:
+    14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px,
+    14px 1.5px, 1.5px 14px, 14px 1.5px, 1.5px 14px,
+    100% 100%;
+  background-position:
+    top left, top left, top right, top right,
+    bottom left, bottom left, bottom right, bottom right,
+    0 0;
+  background-repeat: no-repeat;
 }
 
 /* App-wide checkbox look: dark box, accent fill + check when checked.
@@ -105,7 +169,7 @@ input[type='checkbox']:disabled {
 select {
   appearance: none;
   padding-right: 2rem !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%239397ab' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%23c08a50' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.7rem center;
   background-size: 12px 12px;
@@ -164,4 +228,9 @@ select option {
 
 *:hover {
   scrollbar-color: var(--color-neutral-500) transparent;
+}
+
+/* Black-and-yellow hazard striping (machine panels, warnings). */
+.hazard-stripe {
+  background: repeating-linear-gradient(-45deg, #d9a521 0 8px, #15100c 8px 16px);
 }

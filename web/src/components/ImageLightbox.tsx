@@ -52,7 +52,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(
 export type FavoriteProp = { target: ImageRef; value: boolean }
 
 // Full-size image popup. Closes on backdrop click, the × button, or Escape.
-// The purple checkerboard behind the image shows real alpha transparency;
+// The gold checkerboard behind the image shows real alpha transparency;
 // a grey/white checkerboard means the model painted one into the pixels.
 // Overlay/mask layers and their toggles come from PreviewLayers; Download
 // includes the overlay when it's on (never the mask, a diagnostic aid).
@@ -159,7 +159,7 @@ export function ImageLightbox({
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
           <LayeredImage src={shownSrc} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} fit="natural"
-            imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(#5d5294_0%_25%,#2b2741_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />
+            imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />
         </div>
       )}
     </div>

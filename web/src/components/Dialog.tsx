@@ -26,12 +26,12 @@ export function Dialog({
         if (pressedBackdrop.current && e.target === e.currentTarget) onBackdropClick?.()
         pressedBackdrop.current = false
       }}
-      className="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-neutral-900/50 p-5"
+      className="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-black/65 p-5 backdrop-blur-[2px]"
     >
       <div
         role="dialog"
         aria-label={title}
-        className="flex max-h-[90vh] flex-col gap-4 overflow-y-auto rounded-lg bg-surface p-5 shadow-[0_0_0_1px_var(--color-neutral-500),0_16px_40px_rgba(0,0,0,0.65)]"
+        className="flex max-h-[90vh] flex-col gap-4 overflow-y-auto rounded-lg bg-surface p-5 shadow-[0_0_0_1px_var(--color-accent-700),0_0_0_4px_var(--color-bg),0_0_0_5px_var(--color-accent-800),0_18px_50px_rgba(0,0,0,0.8)]"
         style={{ width }}
       >
         <div className="flex items-center justify-between gap-3">

@@ -14,7 +14,7 @@ function Thumb({ src, alt }: { src: string; alt: string }) {
   return (
     <ZoomableImage src={src} alt={alt} className="block flex-none">
       <img src={src} alt={alt} loading="lazy" title={alt}
-        className="block h-12 w-9 rounded border border-divider bg-[repeating-conic-gradient(#5d5294_0%_25%,#2b2741_0%_50%)] bg-[length:8px_8px] object-contain" />
+        className="block h-12 w-9 rounded border border-divider bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:8px_8px] object-contain" />
     </ZoomableImage>
   )
 }

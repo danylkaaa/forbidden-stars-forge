@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { generationsLink } from '../generations/api'
 import { Button } from '../../components/Button'
+import { buttonClass } from '../../components/buttonStyles'
 import { DlcTag } from './DlcTag'
 import type { Faction } from './api'
 
@@ -47,8 +48,7 @@ export function FactionsTable({
               <td className="whitespace-nowrap px-4 py-3 text-[13px] text-ink/50">{f.updated_at}</td>
               <td className="whitespace-nowrap px-4 py-3 text-right">
                 <span className="inline-flex gap-1.5">
-                  <Link to={`/faction-lab?faction=${f.id}`}
-                    className="inline-flex items-center rounded-md border border-divider px-3.5 py-2 text-sm font-medium text-ink no-underline hover:bg-ink/5">
+                  <Link to={`/faction-lab?faction=${f.id}`} className={buttonClass()}>
                     Lab
                   </Link>
                   <Button onClick={() => onHistory(f)}>History</Button>
