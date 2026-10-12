@@ -20,7 +20,7 @@ export function FactionsTable({
   onDelete: (f: Faction) => void
 }) {
   return (
-    <div className="max-w-5xl overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
+    <div className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wider text-ink/60">
@@ -40,10 +40,10 @@ export function FactionsTable({
                   className="text-ink no-underline hover:text-accent hover:underline">{f.name}</Link>
               </td>
               <td className="px-4 py-3"><DlcTag dlc={f.dlc} /></td>
-              <td className="max-w-48 px-4 py-3 text-[13px] text-ink/70">
+              <td className="max-w-64 px-4 py-3 text-[13px] text-ink/70">
                 {[f.primary_color, f.texture].filter(Boolean).join(' · ') || <span className="text-ink/35">—</span>}
               </td>
-              <td className="max-w-80 px-4 py-3 text-ink/70">{truncate(f.description, 78)}</td>
+              <td className="px-4 py-3 text-ink/70">{truncate(f.description, 220)}</td>
               <td className="whitespace-nowrap px-4 py-3 text-[13px] text-ink/50">{f.updated_at}</td>
               <td className="whitespace-nowrap px-4 py-3 text-right">
                 <span className="inline-flex gap-1.5">

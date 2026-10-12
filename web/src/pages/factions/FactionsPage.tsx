@@ -35,7 +35,7 @@ export default function FactionsPage() {
   }
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Factions</h1>

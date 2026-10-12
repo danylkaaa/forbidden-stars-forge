@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { deleteCardType, useCardTypes } from './api'
-import { CardTypeCard } from './CardTypeCard'
+import { CardTypesTable } from './CardTypesTable'
 import { CardTypeDialog } from './CardTypeDialog'
 import { useCardTypesUi } from './store'
 
@@ -27,7 +27,7 @@ export default function CardTypesPage() {
   }
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Card Types</h1>
@@ -39,13 +39,9 @@ export default function CardTypesPage() {
       {isLoading && <p className="text-ink/60">Loading…</p>}
       {error && <p role="alert" className="text-danger">Failed to load card types: {error instanceof Error ? error.message : 'unknown'}</p>}
       {data && (
-        <div className="grid grid-cols-3 gap-4">
-          {data.map((ct) => (
-            <CardTypeCard key={ct.id} ct={ct}
-              onEdit={() => ui.openEdit(ct)}
-              onDelete={() => { setDeleteError(null); ui.set({ deleteConfirmId: ct.id }) }} />
-          ))}
-        </div>
+        <CardTypesTable cardTypes={data}
+          onEdit={(ct) => ui.openEdit(ct)}
+          onDelete={(ct) => { setDeleteError(null); ui.set({ deleteConfirmId: ct.id }) }} />
       )}
 
       <CardTypeDialog cardTypes={data ?? []} />

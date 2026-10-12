@@ -51,7 +51,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-test('renders grid with file-id tag and not-uploaded state', async () => {
+test('renders table with file-id tag and not-uploaded state', async () => {
   renderPage()
   expect(await screen.findByText('combat')).toBeInTheDocument()
   expect(screen.getByText('file-8a2f91cd')).toBeInTheDocument()
@@ -213,4 +213,11 @@ test('overlay upload saves immediately via its own endpoint', async () => {
 test('card type name links to its generations', async () => {
   renderPage()
   expect(await screen.findByRole('link', { name: 'combat' })).toHaveAttribute('href', '/generations?card_type=1')
+})
+
+test('rows show a small template thumbnail; rows without a template show none', async () => {
+  renderPage()
+  await screen.findByText('combat')
+  expect(screen.getByRole('button', { name: 'Open combat template' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Open upgrade template' })).not.toBeInTheDocument()
 })
