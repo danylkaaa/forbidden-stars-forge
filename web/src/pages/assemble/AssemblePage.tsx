@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
 import { buttonClass } from '../../components/buttonStyles'
-import { selectClass } from '../../components/Field'
+import { FactionSelect } from './FactionSelect'
 import { GearIcon } from '../../components/icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { deleteCards, useCards } from '../cards/api'
@@ -22,6 +22,7 @@ import { useAssembly } from './state'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
+import { BackImage } from './BackImage'
 import { DemoText, TemplateSettingsDialog } from './TemplateSettingsDialog'
 
 // Selection checkbox in a tile's top-left corner; always visible once
@@ -38,14 +39,14 @@ const tile = 'group block min-w-0 text-left no-underline'
 const frame = 'overflow-hidden rounded-md shadow-[0_6px_18px_rgba(0,0,0,0.55)] ring-1 ring-divider transition-shadow'
 const caption = 'mt-2 flex items-baseline justify-between gap-2 px-0.5 text-sm text-ink/80'
 
-function CombatTile({ card, image, template, back, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
+function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; backLogoUrl?: string; backLogoScale?: number; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
   const { input } = useCardRenderInput(card, image, template)
   const { issues, dirty } = useCardDraft(card)
   const { result, error } = useRenderedCard(input)
   useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
   return <div className="group/tile relative min-w-0">
   <SelectBox name={card.name} {...select} />
-  {result && <Preview3DButton title={card.name} canvas={result.canvas} back={back} className="absolute right-2 top-2 z-10" />}
+  {result && <Preview3DButton title={card.name} canvas={result.canvas} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} className="absolute right-2 top-2 z-10" />}
   <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
     <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : 'group-hover:ring-2 group-hover:ring-accent'}`}>
       {result
@@ -66,7 +67,7 @@ function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImag
   return <div className="min-w-0">
     <button type="button" aria-label={`Choose ${label}`} onClick={onChoose} className={`${frame} block w-full cursor-pointer bg-transparent p-0 hover:ring-2 hover:ring-accent`}>
       {image
-        ? <img src={image.url} alt={label} className="block aspect-[816/1104] w-full object-cover" />
+        ? <BackImage url={image.url} logoUrl={image.logoUrl} scale={image.logoScale} alt={label} />
         : <span className="grid aspect-[816/1104] place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-3 text-center text-xs text-ink/55">No card back chosen. Click to choose one.</span>}
     </button>
     <span className={caption}><span className="truncate">{label}</span>{generateLink && <Link to={generateLink} className="shrink-0 text-xs text-accent no-underline hover:underline">Generate</Link>}</span>
@@ -160,9 +161,7 @@ export default function AssemblePage() {
     <div className="flex flex-wrap items-center gap-3">
       <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen('front')} className="px-2!"><GearIcon /></Button>
       <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
-      <select aria-label="Faction" className={`${selectClass} w-60!`} value={factionId ?? ''} onChange={e => state.select({ factionId: Number(e.target.value) || null })}>
-        {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-      </select>
+      <FactionSelect factions={factions.data ?? []} value={factionId} onChange={factionId => state.select({ factionId })} />
       <Link to="/cards" className={buttonClass('secondary')}>Cards / JSON import</Link>
       {factionId && <div className="ml-auto flex gap-2">
         <Button onClick={() => setImportOpen(true)}>Import JSON</Button>
@@ -202,7 +201,7 @@ export default function AssemblePage() {
         </h2>}
         <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
           {group.cards.map(card => card.category === 'combat'
-            ? <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} onRendered={onRendered} {...selectProps(card)} />
+            ? <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} onRendered={onRendered} {...selectProps(card)} />
             : <TextTile key={card.id} card={card} image={template.image} {...selectProps(card)} />)}
         </div>
       </section>)}

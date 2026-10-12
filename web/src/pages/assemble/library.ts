@@ -6,15 +6,16 @@ import { batchItemImageUrl } from '../batches/api'
 import type { Category } from '../cards/model'
 import { useAssemblyTemplates, useCardTypeLayouts, type Side } from './api'
 import { LIBRARY_TABS, assemblyLayout } from './model'
+import type { ImageRef } from '../../lib/favorites'
 
 // A finished generated image (Faction Lab or batch) usable as a card template.
-export type LibraryImage = { key: string; name: string; factionId: number; cardTypeId: number; url: string; createdAt: string; source: 'Lab' | 'Batch'; favorite: boolean; generationId?: number }
+export type LibraryImage = { key: string; name: string; factionId: number; cardTypeId: number; url: string; createdAt: string; source: 'Lab' | 'Batch'; favorite: boolean; generationId?: number; logoUrl?: string; logoScale?: number; ref: ImageRef }
 
 export function useLibraryImages() {
   const generations = useGenerations(), batches = useDoneBatchItems()
   const data = useMemo(() => [
-    ...(generations.data ?? []).flatMap<LibraryImage>(g => { const url = generationImageUrl(g); return url ? [{ key: `test-${g.id}`, name: g.name || `Generation #${g.id}`, factionId: g.faction_id, cardTypeId: g.card_type_id, url, createdAt: g.created_at, source: 'Lab', favorite: g.favorite, generationId: g.id }] : [] }),
-    ...(batches.data ?? []).flatMap<LibraryImage>(b => { const url = batchItemImageUrl(b.batch_id, b); return url ? [{ key: `batch-${b.id}`, name: b.name || `Batch image #${b.id}`, factionId: b.faction_id, cardTypeId: b.card_type_id, url, createdAt: b.completed_at, source: 'Batch', favorite: b.favorite }] : [] }),
+    ...(generations.data ?? []).flatMap<LibraryImage>(g => { const url = generationImageUrl(g); return url ? [{ key: `test-${g.id}`, name: g.name || `Generation #${g.id}`, factionId: g.faction_id, cardTypeId: g.card_type_id, url, createdAt: g.created_at, source: 'Lab', favorite: g.favorite, generationId: g.id, ref: { kind: 'generation', id: g.id } }] : [] }),
+    ...(batches.data ?? []).flatMap<LibraryImage>(b => { const url = batchItemImageUrl(b.batch_id, b); return url ? [{ key: `batch-${b.id}`, name: b.name || `Batch image #${b.id}`, factionId: b.faction_id, cardTypeId: b.card_type_id, url, createdAt: b.completed_at, source: 'Batch', favorite: b.favorite, ref: { kind: 'batch-item', batchId: b.batch_id, itemId: b.id } }] : [] }),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [generations.data, batches.data])
   return { data, queries: [generations, batches], isPending: generations.isPending || batches.isPending }
 }
@@ -47,8 +48,10 @@ export function useTemplateLayout(category: Category = 'combat') {
 // The template chosen for a faction and category, if it still exists.
 export function useTemplate(factionId: number | null, category: Category, side: Side = 'front') {
   const templates = useAssemblyTemplates(), images = useLibraryImages()
-  const key = templates.data?.find(t => t.faction_id === factionId && t.category === category && (t.side ?? 'front') === side)?.image_key
-  const image = key ? images.data.find(i => i.key === key) : undefined
+  const saved = templates.data?.find(t => t.faction_id === factionId && t.category === category && (t.side ?? 'front') === side)
+  const key = saved?.image_key
+  const source = key ? images.data.find(i => i.key === key) : undefined
+  const image = useMemo(() => source && side === 'back' ? { ...source, logoUrl: saved?.logo_url, logoScale: saved?.logo_scale } : source, [source, side, saved?.logo_url, saved?.logo_scale])
   return { key, image, isPending: templates.isPending || images.isPending, queries: [templates, ...images.queries] }
 }
 

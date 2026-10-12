@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -8,6 +8,7 @@ import { useFactionLab } from './store'
 import { usePreviewLayers } from '../../lib/previewLayers'
 import FactionLabPage from './FactionLabPage'
 import { renderCard } from '../assemble/render'
+import { DEMO_ARTWORK } from '../assemble/demoArtwork'
 vi.mock('../assemble/render', () => ({ renderCard: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
 
 const faction = {
@@ -45,6 +46,8 @@ beforeEach(() => {
   server.use(
     http.get('/api/factions', () => HttpResponse.json([faction])),
     http.get('/api/card-types', () => HttpResponse.json(cardTypes)),
+    http.get('/api/batch-items', () => HttpResponse.json([])),
+    http.get('/api/assembly-templates', () => HttpResponse.json([])),
     http.get('/api/generations', () => HttpResponse.json(gens)),
     http.get('/api/generate/preview', () => HttpResponse.json({ prompt: 'saved prompt', has_file: true, est_draft_usd: 0.015, est_final_usd: 0.048 })),
     http.post('/api/generate/assemble', async ({ request }) => {
@@ -55,7 +58,7 @@ beforeEach(() => {
     http.post('/api/generate', async ({ request }) => {
       generated.push((await request.json()) as Record<string, unknown>)
       const g = { ...gen, id: 50, status: 'pending', prompt: 'x', image_path: '' }
-      gens = [g]
+      gens = [g, ...gens]
       return HttpResponse.json(g, { status: 201 })
     }),
     http.put('/api/card-types/1', () => {
@@ -183,4 +186,122 @@ test('a finished run can be previewed as a card with an existing card of the fac
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ imageUrl: '/api/generations/41/image', card: expect.objectContaining({ name: 'Righteous Fury' }) })))
   await userEvent.selectOptions(screen.getByLabelText('Preview with card'), '7')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Purge' }), artworkUrl: '/api/cards/7/artwork?v=a', artwork: { scale: 1.5, x: 3, y: 0 } })))
+})
+
+
+test('back generation attaches a selected lab or batch front and clears it when the pair changes', async () => {
+  const back = { ...cardTypes[0], id: 2, name: 'combat back' }
+  gens = [
+    { ...gen, id: 41, name: 'lab-front', status: 'done', image_path: 'front' },
+    { ...gen, id: 42, status: 'pending' },
+    { ...gen, id: 43, faction_id: 99, status: 'done' },
+    { ...gen, id: 44, card_type_id: 2, status: 'done' },
+  ]
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([...cardTypes, back])),
+    http.get('/api/batch-items', () => HttpResponse.json([{ ...gen, id: 9, batch_id: 3, status: 'done', name: 'batch-front' }])),
+    http.get('/api/assembly-templates', () => HttpResponse.json([
+      { faction_id: 99, category: 'combat', image_key: 'test-41' },
+      { faction_id: 1, category: 'combat', side: 'back', image_key: 'test-41' },
+      { faction_id: 1, category: 'combat', side: 'front', image_key: 'batch-9' },
+    ])),
+  )
+  renderAt('/faction-lab?faction=1&card_type=2')
+  await userEvent.click(await screen.findByRole('button', { name: 'Choose front image' }))
+  const popup = screen.getByRole('dialog', { name: 'Choose front image' })
+  await waitFor(() => expect(within(popup).getAllByRole('button', { name: /^Use (lab-front|batch-front)$/ })).toHaveLength(2))
+  await waitFor(() => expect(within(popup).getByText('Current faction front')).toBeInTheDocument())
+  expect(within(popup).getAllByRole('img').map((img) => img.getAttribute('src'))).toEqual(['/api/batches/3/items/9/image', '/api/generations/41/image'])
+  expect(within(popup).getByRole('button', { name: 'Use batch-front' })).toHaveTextContent('Current faction front')
+  expect(within(popup).getByRole('button', { name: 'Use lab-front' })).not.toHaveTextContent('Current faction front')
+  await userEvent.keyboard('{Escape}')
+  expect(screen.queryByRole('dialog', { name: 'Choose front image' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Choose front image' })).toHaveFocus()
+  await userEvent.click(screen.getByRole('button', { name: 'Choose front image' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Use lab-front' }))
+  expect(screen.queryByRole('dialog', { name: 'Choose front image' })).not.toBeInTheDocument()
+  expect(screen.getByAltText('Selected front reference')).toHaveAttribute('src', '/api/generations/41/image')
+  await waitFor(() => expect(assembled.at(-1)).toMatchObject({ has_front_image: true }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'generation', id: 41 } }))
+  await userEvent.click(screen.getByAltText('Selected front reference'))
+  await userEvent.click(screen.getByRole('button', { name: 'Use batch-front' }))
+  await userEvent.click(screen.getByAltText('Selected front reference'))
+  expect(screen.getByRole('button', { name: 'Use batch-front' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: 'Use batch-front' })).toHaveTextContent('Selected reference')
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Choose front image' })).getByRole('button', { name: 'Close' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'batch-item', id: 9, batch_id: 3 } }))
+  await userEvent.selectOptions(screen.getByLabelText('Card Type'), '1')
+  expect(screen.queryByRole('button', { name: 'Choose front image' })).not.toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Card Type'), '2')
+  expect(screen.getByRole('button', { name: 'Choose front image' })).toBeInTheDocument()
+  expect(screen.queryByAltText('Selected front reference')).not.toBeInTheDocument()
+  await waitFor(() => expect(assembled.at(-1)).toMatchObject({ has_front_image: false }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  await waitFor(() => expect(generated).toHaveLength(3))
+  expect(generated.at(-1)).not.toHaveProperty('front_image')
+})
+
+
+test.each(['combat', 'combat back'])('%s opens a 3D preview on the generated side', async (name) => {
+  vi.mocked(renderCard).mockReset().mockImplementation(async () => ({ canvas: document.createElement('canvas'), warnings: [], textPositions: {} as never }))
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,assembled-front')
+
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name }])),
+    http.get('/api/assembly-templates', () => HttpResponse.json([])),
+    http.get('/api/batch-items', () => HttpResponse.json([])),
+    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', lower_text: '', created_at: '', updated_at: '' }])),
+    http.get('/api/cards/7/assembly', () => HttpResponse.json({ image_url: '/api/cards/7/artwork', subtype_id: 0, transform: { scale: 1.5, x: 3, y: 0 }, layout: {} })),
+    http.get('/api/card-type-layouts', () => HttpResponse.json([])),
+    http.get('/api/subtypes', () => HttpResponse.json([])),
+    http.get('/api/faction-logos', () => HttpResponse.json([])),
+  )
+  renderAt()
+  const title = `Sisters × ${name} #41`
+  await userEvent.click(await screen.findByRole('button', { name: `3D preview of ${title}` }))
+  const viewer = screen.getByRole('dialog', { name: `3D preview of ${title}` })
+  const side = name === 'combat' ? 'front' : 'back'
+  if (side === 'front') {
+    await waitFor(() => expect(within(viewer).getByRole('img', { name: `${title} front` })).toHaveAttribute('src', 'data:image/png;base64,assembled-front'))
+    expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ imageUrl: '/api/generations/41/image', card: expect.objectContaining({ id: 0 }) }))
+    const demoArtwork = vi.mocked(renderCard).mock.calls.at(-1)![0].artworkUrl
+    expect(DEMO_ARTWORK).toContain(demoArtwork)
+    await userEvent.selectOptions(within(viewer).getByLabelText('Preview with card'), '7')
+    await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Purge' }), artworkUrl: '/api/cards/7/artwork' })))
+    await userEvent.selectOptions(within(viewer).getByLabelText('Preview with card'), '0')
+    await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ id: 0 }), artworkUrl: expect.any(String) })))
+    expect(vi.mocked(renderCard).mock.calls.at(-1)![0].artworkUrl).toBe(demoArtwork)
+  } else {
+    expect(within(viewer).getByRole('img', { name: `${title} back` })).toHaveAttribute('src', '/api/generations/41/image')
+  }
+  const rotation = side === 'front' ? 'rotateY(-22deg)' : 'rotateY(158deg)'
+  expect(within(viewer).getByTestId('card-3d').style.transform).toContain(rotation)
+  await userEvent.click(within(viewer).getByRole('button', { name: 'Flip' }))
+  await userEvent.click(within(viewer).getByRole('button', { name: 'Reset' }))
+  expect(within(viewer).getByTestId('card-3d').style.transform).toContain(rotation)
+  await userEvent.click(within(viewer).getByRole('button', { name: 'Close' }))
+  await userEvent.click(screen.getByRole('button', { name: `Open ${title}` }))
+  const lightbox = screen.getByRole('dialog', { name: title })
+  await userEvent.click(within(lightbox).getByRole('button', { name: `3D preview of ${title}` }))
+  expect(screen.getByRole('dialog', { name: `3D preview of ${title}` })).toBeInTheDocument()
+  if (side === 'back') {
+    expect(screen.queryByRole('tab', { name: 'Card preview' })).not.toBeInTheDocument()
+    expect(within(lightbox).queryByRole('button', { name: 'Card preview' })).not.toBeInTheDocument()
+  }
+})
+
+test('non-combat types do not offer combat overlay or 3D preview', async () => {
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  server.use(http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name: 'events' }])))
+  renderAt()
+  await userEvent.click(await screen.findByRole('button', { name: 'Open Sisters × events #41' }))
+  expect(screen.queryByRole('tab', { name: 'Card preview' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Card preview' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /3D preview/ })).not.toBeInTheDocument()
 })

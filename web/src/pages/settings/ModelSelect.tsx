@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Field, inputClass, selectClass } from '../../components/Field'
@@ -42,7 +43,7 @@ export function ModelSelect({ settings }: { settings: Settings }) {
       {(id) => (
         <>
           {models.length > 0 ? (
-            <select
+            <SearchableSelect
               id={id}
               value={model}
               onChange={(e) => setField('openai_model', e.target.value)}
@@ -53,7 +54,7 @@ export function ModelSelect({ settings }: { settings: Settings }) {
                   {m}
                 </option>
               ))}
-            </select>
+            </SearchableSelect>
           ) : (
             <>
               <input

@@ -1,3 +1,4 @@
+import { SearchableSelect } from './SearchableSelect'
 import { useQuery } from '@tanstack/react-query'
 import { Field, selectClass } from './Field'
 import { postOpenAIModels, useSettings } from '../pages/settings/api'
@@ -21,10 +22,10 @@ export function ModelOverrideSelect({ value, onChange }: { value: string; onChan
   return (
     <Field label="Model">
       {(id) => (
-        <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
+        <SearchableSelect id={id} value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
           <option value="">Default{defaultModel ? ` (${defaultModel})` : ''}</option>
           {options.filter((m) => m !== '').map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
+        </SearchableSelect>
       )}
     </Field>
   )

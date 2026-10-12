@@ -7,6 +7,7 @@ import { DEMO_COMBAT, withSubtypeLayout, type CombatCard } from './model'
 import type { RenderInput } from './render'
 import { resolveSubtype, useSubtypes } from './subtypes'
 import { useRenderedCard } from './useCardView'
+import { useDemoArtwork } from './demoArtwork'
 
 // The faction's combat cards, for "preview with" pickers.
 export function useFactionCombatCards(factionId: number | null) {
@@ -23,16 +24,17 @@ export function usePreviewCard(factionId: number, cardId: number, demoLevel = DE
 
 // A generated image assembled with `card`: its text, artwork, level subtype
 // and the faction logo, exactly as the library would draw it.
-export function useAssembledPreview(imageUrl: string, factionId: number, card: CombatCard) {
+export function useAssembledPreview(imageUrl: string | null, factionId: number, card: CombatCard) {
+  const demoArtwork = useDemoArtwork()
   const assembly = useCardAssembly(card.id ? String(card.id) : '')
   const template = useTemplateLayout()
   const subtypes = useSubtypes(), logos = useFactionLogos()
   const subtype = resolveSubtype(subtypes.data, assembly.data?.subtype_id, card)
   const logoUrl = logos.data?.find(l => l.faction_id === factionId)?.url ?? null
   const ready = template.ready && !subtypes.isPending && !logos.isPending && (!card.id || !assembly.isPending)
-  const input = useMemo<RenderInput | null>(() => ready ? {
+  const input = useMemo<RenderInput | null>(() => ready && imageUrl ? {
     card, layout: withSubtypeLayout(template.layout, subtype?.layout), imageUrl, overlayUrl: null,
-    overlayUrls: subtype?.overlays.map(o => o.url) ?? [], logoUrl, artworkUrl: card.id ? assembly.data?.image_url || null : null, artwork: assembly.data?.transform,
-  } : null, [ready, card, template.layout, subtype, imageUrl, logoUrl, assembly.data])
+    overlayUrls: subtype?.overlays.map(o => o.url) ?? [], logoUrl, logoScale: assembly.data?.logo_scale ?? 1, artworkUrl: card.id ? assembly.data?.image_url || null : demoArtwork, artwork: assembly.data?.transform,
+  } : null, [ready, card, template.layout, subtype, imageUrl, logoUrl, assembly.data, demoArtwork])
   return useRenderedCard(input)
 }

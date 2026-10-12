@@ -117,6 +117,13 @@ function textureInsets(scale: number) {
 // The resource column stacks guns, then shields, then morale.
 const RESOURCES = ['guns', 'shields', 'eagles'] as const
 const PLAIN_GLYPHS = { guns: '}', shields: '{', eagles: '<' }
+function setCardShadow(ctx: CanvasRenderingContext2D, height: number) {
+  const scale = height / 1104
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.85)'
+  ctx.shadowBlur = 2 * scale
+  ctx.shadowOffsetX = scale
+  ctx.shadowOffsetY = 2 * scale
+}
 function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Placement, w: number, h: number) {
   const size = p.size * h / 100, count = glyphs.length
   const x = p.x * w / 100, y = p.y * h / 100
@@ -132,8 +139,8 @@ function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Plac
 // Layers, bottom first: the card's artwork (positioned by `artwork` inside
 // ART_WINDOW), the faction template (generated image), overlays, panels, text.
 // The artwork only shows where the template is transparent.
-export type RenderInput = { card: CombatCard; layout: Layout; imageUrl: string; overlayUrl: string | null; overlayUrls?: string[]; logoUrl?: string | null; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
-export async function renderCard({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput): Promise<{ canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }> {
+export type RenderInput = { card: CombatCard; layout: Layout; imageUrl: string; overlayUrl: string | null; overlayUrls?: string[]; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
+export async function renderCard({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput): Promise<{ canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }> {
   // A subtype's overlay stack (bottom first) replaces the card type overlay.
   const stack = overlayUrls?.length ? overlayUrls : overlayUrl ? [overlayUrl] : []
   const [template, overlays, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.level === 0 && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
@@ -185,16 +192,25 @@ export async function renderCard({ card, layout, imageUrl, overlayUrl, overlayUr
     const p = paintLayout[layer]
     const family = familyFor(p, layer)
     const stack = RESOURCES.flatMap(r => Array.from({ length: card[r] }, () => PLAIN_GLYPHS[r]))
+    const shadowed = layer === 'resources' || layer === 'resource_cost'
+    if (shadowed) {
+      ctx.save()
+      setCardShadow(ctx, h)
+    }
     const overflow = layer === 'resources'
       ? paintResources(ctx, stack, p, w, h)
       : paintText(ctx, texts[layer], p, family, w, h)
+    if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${LAYER_LABELS[layer]} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
   ctx.drawImage(bottom, 0, panels.bottomY, w, bottomHeight)
   if (logo) {
     const box = layout.logo, bw = box.width * w / 100, bh = box.height * h / 100
-    const fit = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight)
+    const fit = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight) * logoScale
+    ctx.save()
+    setCardShadow(ctx, h)
     ctx.drawImage(logo, box.x * w / 100 + (bw - logo.naturalWidth * fit) / 2, box.y * h / 100 + (bh - logo.naturalHeight * fit) / 2, logo.naturalWidth * fit, logo.naturalHeight * fit)
+    ctx.restore()
   }
   return { canvas, warnings, textPositions }
 }

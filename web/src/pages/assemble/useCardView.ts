@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFactions } from '../factions/api'
 import { cardDraft, type Card } from '../cards/model'
 import { draftInput, validateCard } from '../cards/validation'
-import { useCardAssembly } from './api'
+import { useCardAssembly, type Assembly } from './api'
 import { defaultArtwork } from './artwork'
 import { withSubtypeLayout, type CombatCard } from './model'
 import { renderCard, type RenderInput } from './render'
@@ -32,23 +32,27 @@ export function useRenderedCard(input: RenderInput | null) {
 }
 
 // The card as currently edited: saved values plus this browser's drafts.
-export function useCardDraft(source: Card | undefined) {
+export function useCardDraft(source: Card | undefined, placeholderTitle = '') {
   const id = source ? String(source.id) : ''
   const edits = useAssembly(s => s.edits[id])
   const factions = useFactions()
   const saved = useMemo(() => source ? cardDraft(source) : null, [source])
   const draft = useMemo(() => saved ? { ...saved, ...edits } : null, [saved, edits])
   const issues = useMemo(() => draft && factions.data ? validateCard(draftInput(draft), factions.data.map(f => f.id)) : [], [draft, factions.data])
-  const card = useMemo(() => draft && factions.data && !issues.length && draft.category === 'combat' ? draftInput(draft) as CombatCard : null, [draft, issues, factions.data])
+  const card = useMemo(() => draft && factions.data && !issues.some(i => i.field !== 'name' || !placeholderTitle) && draft.category === 'combat'
+    ? draftInput({ ...draft, name: draft.name || placeholderTitle }) as CombatCard : null, [draft, issues, factions.data, placeholderTitle])
   const dirty = !!saved && !!draft && Object.keys(draft).some(key => draft[key] !== saved[key])
   return { id, saved, draft, issues, card, dirty }
 }
 
 // Everything renderCard needs for one library card, including unsaved
 // artwork transforms and layout edits.
-export function useCardRenderInput(source: Card | undefined, image: LibraryImage | undefined, template: ReturnType<typeof useTemplateLayout>) {
-  const { id, card } = useCardDraft(source)
-  const assembly = useCardAssembly(id)
+export function useCardRenderInput(source: Card | undefined, image: LibraryImage | undefined, template: ReturnType<typeof useTemplateLayout>, localAssembly?: Assembly) {
+  const { id, card } = useCardDraft(source, localAssembly ? 'New card' : '')
+  const savedAssembly = useCardAssembly(localAssembly ? '' : id)
+  const assembly = { ...savedAssembly, data: localAssembly ?? savedAssembly.data }
+  const localLogoScale = useAssembly(s => s.logoScales[id])
+  const logoScale = localLogoScale ?? assembly.data?.logo_scale ?? 1
   const localTransform = useAssembly(s => s.transforms[id])
   const transform = localTransform ?? assembly.data?.transform ?? NO_TRANSFORM
   const artworkUrl = assembly.data?.image_url || null
@@ -56,9 +60,9 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const subtype = resolveSubtype(subtypes.data, assembly.data?.subtype_id, card)
   const layout = useMemo(() => withSubtypeLayout(template.layout, subtype?.layout), [template.layout, subtype])
   const logos = useFactionLogos()
-  const logoUrl = logos.data?.find(l => l.faction_id === source?.faction_id)?.url ?? null
+  const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
   const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !subtypes.isPending && !logos.isPending
-    ? { card, layout, imageUrl: image.url, overlayUrl: null, overlayUrls: subtype?.overlays.map(o => o.url) ?? [], logoUrl, artworkUrl, artwork: transform }
-    : null, [card, image, template.ready, assembly.data, subtypes.isPending, subtype, logos.isPending, logoUrl, layout, artworkUrl, transform])
-  return { input, assembly, transform, layout, artworkUrl, subtypes, subtype }
+    ? { card, layout, imageUrl: image.url, overlayUrl: null, overlayUrls: subtype?.overlays.map(o => o.url) ?? [], logoUrl, logoScale, artworkUrl, artwork: transform }
+    : null, [card, image, template.ready, assembly.data, subtypes.isPending, subtype, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform])
+  return { input, assembly, logoScale, transform, layout, artworkUrl, subtypes, subtype }
 }

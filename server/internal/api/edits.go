@@ -17,16 +17,18 @@ import (
 
 const maxMaskBytes = 20 << 20
 
+type imageSource struct {
+	Kind    string `json:"kind"`
+	ID      int64  `json:"id"`
+	BatchID int64  `json:"batch_id"`
+}
+
 type imageEditRequest struct {
 	// The image to edit: a generation, or a batch item (BatchID + ID).
-	Parent struct {
-		Kind    string `json:"kind"` // "generation" | "batch-item"
-		ID      int64  `json:"id"`
-		BatchID int64  `json:"batch_id"`
-	} `json:"parent"`
-	Mask        string `json:"mask"` // PNG data URL; transparent pixels = edit here
-	Instruction string `json:"instruction"`
-	Protect     bool   `json:"protect"` // paste original pixels back outside the mask
+	Parent      imageSource `json:"parent"`
+	Mask        string      `json:"mask"` // PNG data URL; transparent pixels = edit here
+	Instruction string      `json:"instruction"`
+	Protect     bool        `json:"protect"` // paste original pixels back outside the mask
 }
 
 // editParent is everything an area edit needs from the image it edits.

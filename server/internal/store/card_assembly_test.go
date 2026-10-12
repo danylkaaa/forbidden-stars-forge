@@ -12,12 +12,13 @@ func TestAssemblyPersistsAfterRestartAndCardEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, err := s.Assembly(c.ID)
-	if err != nil || a.Transform.Scale != 1 || a.ImageKey != "" {
+	if err != nil || a.Transform.Scale != 1 || a.LogoScale != 1 || a.ImageKey != "" {
 		t.Fatalf("default %v %v", a, err)
 	}
 	a.ImageKey = "upload"
 	a.ArtworkPath = "card-artwork/a.png"
 	a.OverlayID = "none"
+	a.LogoScale = 1.65
 	a.Transform = ArtworkTransform{1.7, 12, -9}
 	a.Layout = json.RawMessage(`{"upper_text":{"x":20,"y":70}}`)
 	if _, err = s.SaveAssembly(a); err != nil {
@@ -34,12 +35,12 @@ func TestAssemblyPersistsAfterRestartAndCardEdit(t *testing.T) {
 	}
 	defer db.Close()
 	loaded, err := NewCardsStore(db).Assembly(c.ID)
-	if err != nil || loaded.ArtworkPath != a.ArtworkPath || loaded.Transform != a.Transform || string(loaded.Layout) != string(a.Layout) {
+	if err != nil || loaded.ArtworkPath != a.ArtworkPath || loaded.LogoScale != a.LogoScale || loaded.Transform != a.Transform || string(loaded.Layout) != string(a.Layout) {
 		t.Fatalf("round trip: %v %v", loaded, err)
 	}
 	other, _ := s.Create(combatCard(f))
 	blank, _ := s.Assembly(other.ID)
-	if blank.ImageKey != "" || blank.Transform.Scale != 1 {
+	if blank.ImageKey != "" || blank.LogoScale != 1 || blank.Transform.Scale != 1 {
 		t.Fatal("configuration leaked between cards")
 	}
 }

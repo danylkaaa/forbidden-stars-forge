@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
@@ -41,16 +42,16 @@ export function CardDialog({ id, factions, onClose, onSaved }: { id: number | nu
     titleExtra={dirty ? <span className="text-xs text-warn">Unsaved changes</span> : undefined}>
     <form onSubmit={save} className="flex flex-col gap-4">
       <fieldset disabled={saving} className="m-0 flex flex-col gap-4 border-0 p-0">
-        <Field label="Faction">{fieldId => <select id={fieldId} className={inputClass} value={draft.faction_id} onChange={e => state.setField('faction_id', e.target.value)}>
+        <Field label="Faction">{fieldId => <SearchableSelect id={fieldId} className={inputClass} value={draft.faction_id} onChange={e => state.setField('faction_id', e.target.value)}>
           <option value="">Select a faction</option>{factions.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>}</Field>
+        </SearchableSelect>}</Field>
         <Field label="Name">{fieldId => <input id={fieldId} className={inputClass} value={draft.name} onChange={e => state.setField('name', e.target.value)} />}</Field>
-        <Field label="Category">{fieldId => <select id={fieldId} className={inputClass} value={category} onChange={e => {
+        <Field label="Category">{fieldId => <SearchableSelect id={fieldId} className={inputClass} value={category} onChange={e => {
           const next = newDraft(e.target.value as Category, draft.faction_id); next.name = draft.name
           useCardDraft.setState({ draft: next }); setError('')
-        }}>{CATEGORIES.map(c => <option key={c} value={c}>{LABELS[c]}</option>)}</select>}</Field>
+        }}>{CATEGORIES.map(c => <option key={c} value={c}>{LABELS[c]}</option>)}</SearchableSelect>}</Field>
         {FIELDS[category].map(f => <Field key={f.key} label={f.label}>{fieldId => f.kind === 'select'
-          ? <select id={fieldId} className={inputClass} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)}>{f.options?.map(o => <option key={o} value={o}>{ACTION_LABELS[o] ?? o}</option>)}</select>
+          ? <SearchableSelect id={fieldId} className={inputClass} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)}>{f.options?.map(o => <option key={o} value={o}>{ACTION_LABELS[o] ?? o}</option>)}</SearchableSelect>
           : f.kind === 'text' ? <textarea id={fieldId} className={`${inputClass} min-h-24`} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)} />
             : <input id={fieldId} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" className={inputClass} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)} />
         }</Field>)}

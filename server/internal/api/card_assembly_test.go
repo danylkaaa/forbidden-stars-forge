@@ -117,3 +117,30 @@ func TestGeneratedArtworkSavedAsOwnedCopy(t *testing.T) {
 		t.Fatal("card artwork depended on original generation file")
 	}
 }
+
+func TestCardLogoScalePersistsAndIsPreservedByLegacyClients(t *testing.T) {
+	h := newTestRouter(t)
+	f := createFaction(t, h, "Tau")
+	_, c := doJSON(t, h, "POST", "/api/cards", combatJSON(int64(f["id"].(float64))))
+	base := fmt.Sprintf("/api/cards/%.0f/assembly", c["id"])
+	config := `{"image_key":"","overlay_id":"auto","transform":{"scale":1,"x":0,"y":0},"layout":{},"logo_scale":1.75}`
+	rec, a := doJSON(t, h, "PUT", base, config)
+	if rec.Code != 200 || a["logo_scale"] != 1.75 {
+		t.Fatalf("save: %s", rec.Body.String())
+	}
+	rec, a = doJSON(t, h, "GET", base, "")
+	if rec.Code != 200 || a["logo_scale"] != 1.75 {
+		t.Fatalf("get: %s", rec.Body.String())
+	}
+	legacy := `{"image_key":"","overlay_id":"auto","transform":{"scale":1,"x":0,"y":0},"layout":{}}`
+	rec, a = doJSON(t, h, "PUT", base, legacy)
+	if rec.Code != 200 || a["logo_scale"] != 1.75 {
+		t.Fatalf("legacy: %s", rec.Body.String())
+	}
+	for _, scale := range []float64{0, .09, 3.01} {
+		rec, _ = doJSON(t, h, "PUT", base, fmt.Sprintf(`{"image_key":"","overlay_id":"auto","transform":{"scale":1,"x":0,"y":0},"layout":{},"logo_scale":%g}`, scale))
+		if rec.Code != 400 {
+			t.Fatalf("accepted logo scale %g: %s", scale, rec.Body.String())
+		}
+	}
+}

@@ -186,15 +186,16 @@ func (c *Client) UploadFile(ctx context.Context, filename, purpose string, data 
 }
 
 type ImageEditRequest struct {
-	Model         string
-	FileID        string // input image as an uploaded file…
-	ImageURL      string // …or as a URL / base64 data URL (used when FileID is empty)
-	MaskURL       string // optional mask (PNG with alpha) as a URL / data URL
-	Prompt        string
-	Size          string
-	Quality       string
-	InputFidelity string
-	Background    string // transparent | opaque | auto
+	Model             string
+	FileID            string // input image as an uploaded file…
+	ImageURL          string // …or as a URL / base64 data URL (used when FileID is empty)
+	ReferenceImageURL string // optional second image, used as a visual reference
+	MaskURL           string // optional mask (PNG with alpha) as a URL / data URL
+	Prompt            string
+	Size              string
+	Quality           string
+	InputFidelity     string
+	Background        string // transparent | opaque | auto
 }
 
 // usesV2 reports whether model is a gpt-image-2 family model (incl. 2.5
@@ -210,9 +211,13 @@ func usesV2(model string) bool {
 // Moderation is always "low": grimdark Warhammer subjects (skulls, war,
 // gore) trip the default "auto" filter.
 func EditBody(req ImageEditRequest) map[string]any {
+	images := []map[string]string{imageRef(req)}
+	if req.ReferenceImageURL != "" {
+		images = append(images, map[string]string{"image_url": req.ReferenceImageURL})
+	}
 	body := map[string]any{
 		"model":         req.Model,
-		"images":        []map[string]string{imageRef(req)},
+		"images":        images,
 		"prompt":        req.Prompt,
 		"size":          req.Size,
 		"quality":       req.Quality,

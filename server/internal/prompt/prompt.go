@@ -230,3 +230,20 @@ Change only the masked (transparent) area of the provided image. Keep
 everything outside it exactly as it is: same layout, colors, lighting and
 details. Blend the edited area seamlessly into its surroundings.`
 }
+
+const frontReference = `## Front image reference
+The first input image is the back template to edit. The second input image is
+the front of this generated card. Generate the matching BACK of the card using
+the first image's template and constraints. Use the front only as a visual
+reference: match its palette, materials, lighting, iconography, and overall
+style. Do not copy the front's layout or create another front. Return only the
+finished back image.`
+
+// WithFrontReference also accepts a previewed prompt that already has this section.
+func WithFrontReference(p string) string {
+	p = strings.TrimSpace(p)
+	if strings.HasSuffix(p, frontReference) {
+		return p
+	}
+	return p + "\n\n" + frontReference
+}

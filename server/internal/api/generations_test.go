@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"cardforge/internal/prompt"
+	"cardforge/internal/store"
 )
 
 // setupGenFixtures creates a faction and a card type WITH an openai file id
@@ -339,5 +342,89 @@ func TestAssembleUsesUnsavedCardTypeText(t *testing.T) {
 	p, _ := out["prompt"].(string)
 	if !strings.Contains(p, "## Constraints\ndraft constraints") || !strings.Contains(p, "## Description\nwarriors") {
 		t.Fatalf("prompt:\n%s", p)
+	}
+}
+
+func TestGenerateBackWithFrontReference(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h, batches, dataDir := newTestRouterWithStore(t)
+	fid, frontType := setupGenFixtures(t, h)
+	_, back := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "combat back", "constraints": "keep back layout"}, "back.png", pngBytes)
+	backType := int64(back["id"].(float64))
+	var sent map[string]any
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/files" {
+			w.Write([]byte(`{"id":"file-back"}`))
+			return
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		sent = body
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, base64.StdEncoding.EncodeToString(pngBytes))
+	}))
+	defer fake.Close()
+	old := openAIBaseURL
+	openAIBaseURL = fake.URL
+	defer func() { openAIBaseURL = old }()
+	if rec, _ := doJSON(t, h, http.MethodPost, fmt.Sprintf("/api/card-types/%d/upload-to-openai", backType), ""); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	_, front := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft"}`, fid, frontType))
+	frontID := int64(front["id"].(float64))
+	pollGeneration(t, h, frontID)
+	b, err := batches.Create("draft", "gpt-image-2", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: frontType, CustomID: "front"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "front.png"), pngBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := batches.MarkItemDone(b.ID, "front", "front.png", 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	items, err := batches.Items(b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{
+		fmt.Sprintf(`{"kind":"generation","id":%d}`, frontID),
+		fmt.Sprintf(`{"kind":"batch-item","batch_id":%d,"id":%d}`, b.ID, items[0].ID),
+	} {
+		// Previewed overrides must retain the instruction exactly once.
+		override := prompt.WithFrontReference("custom back prompt")
+		rec, out := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft","front_image":%s,"prompt_override":%q}`, fid, backType, source, override))
+		if rec.Code != 201 {
+			t.Fatalf("start: %d %v", rec.Code, out)
+		}
+		done := pollGeneration(t, h, int64(out["id"].(float64)))
+		if done["status"] != "done" {
+			t.Fatal(done)
+		}
+		images := sent["images"].([]any)
+		if len(images) != 2 || images[0].(map[string]any)["file_id"] != "file-back" || images[1].(map[string]any)["image_url"] != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(pngBytes) {
+			t.Fatalf("images: %v", images)
+		}
+		if sent["prompt"] != override || out["prompt"] != override {
+			t.Fatalf("prompt: %v", sent["prompt"])
+		}
+	}
+	for _, tc := range []struct {
+		target int64
+		source string
+		code   int
+	}{
+		{frontType, fmt.Sprintf(`{"kind":"generation","id":%d}`, frontID), 400},
+		{backType, `{"kind":"generation","id":99999}`, 404},
+		{backType, `{"kind":"unknown","id":1}`, 400},
+		{backType, fmt.Sprintf(`{"kind":"generation","id":%v}`, int64(front["id"].(float64))+1), 400},
+	} {
+		rec, out := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft","front_image":%s}`, fid, tc.target, tc.source))
+		if rec.Code != tc.code {
+			t.Fatalf("validation: %d %v", rec.Code, out)
+		}
+	}
+	rec, preview := doJSON(t, h, http.MethodPost, "/api/generate/assemble", fmt.Sprintf(`{"card_type_id":%d,"has_front_image":true}`, backType))
+	if rec.Code != 200 || !strings.Contains(preview["prompt"].(string), "## Front image reference") {
+		t.Fatalf("preview: %v", preview)
 	}
 }

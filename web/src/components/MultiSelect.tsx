@@ -12,6 +12,7 @@ export function MultiSelect<V extends string | number>({
   onChange: (selected: V[]) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const listId = useId()
 
@@ -41,7 +42,7 @@ export function MultiSelect<V extends string | number>({
     <div ref={rootRef} className="relative">
       <button type="button" aria-haspopup="true" aria-expanded={open} aria-controls={listId}
         aria-label={`${label}: ${summary}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { setSearch(''); setOpen((o) => !o) }}
         className={`inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1 text-[13px] ${
           selected.length > 0 ? 'border-accent text-accent' : 'border-divider text-ink'
         }`}>
@@ -51,13 +52,17 @@ export function MultiSelect<V extends string | number>({
       {open && (
         <div id={listId} role="group" aria-label={label}
           className="absolute left-0 top-full z-10 mt-1 flex max-h-72 min-w-48 flex-col overflow-y-auto rounded-md border border-divider bg-surface p-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
-          {options.map((o) => (
+          <input type="search" aria-label={`Search ${label}`} placeholder="Search by name…" value={search}
+            onChange={(e) => setSearch(e.target.value)} autoFocus
+            className="sticky top-0 z-10 mb-1 min-h-9 rounded border border-divider bg-bg px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none" />
+          {options.filter((o) => o.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((o) => (
             <label key={o.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-ink/5">
               <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
               {o.label}
             </label>
           ))}
           {options.length === 0 && <span className="px-2 py-1.5 text-[13px] text-ink/50">Nothing to filter</span>}
+          {options.length > 0 && !options.some((o) => o.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) && <span role="status" className="px-2 py-1.5 text-[13px] text-ink/50">No matching options</span>}
           {selected.length > 0 && (
             <button type="button" onClick={() => onChange([])}
               className="mt-1 cursor-pointer border-0 border-t border-divider bg-transparent px-2 py-1.5 text-left text-xs font-medium text-accent">

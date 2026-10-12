@@ -94,11 +94,11 @@ func (s *GenerationsStore) Create(factionID, cardTypeID int64, mode, model, qual
 }
 
 func (s *GenerationsStore) Get(id int64) (Generation, error) {
-	return scanGeneration(s.db.QueryRow("SELECT "+generationCols+" FROM generations WHERE id = ?", id))
+	return scanGeneration(s.db.QueryRow("SELECT "+generationCols+" FROM generations WHERE id = ? AND deleted_at=''", id))
 }
 
 func (s *GenerationsStore) List() ([]Generation, error) {
-	rows, err := s.db.Query("SELECT " + generationCols + " FROM generations ORDER BY id DESC")
+	rows, err := s.db.Query("SELECT " + generationCols + " FROM generations WHERE deleted_at='' ORDER BY id DESC")
 	if err != nil {
 		return nil, err
 	}

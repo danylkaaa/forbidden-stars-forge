@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,11 +30,12 @@ type GenerationsHandler struct {
 }
 
 type generateRequest struct {
-	FactionID      int64  `json:"faction_id"`
-	CardTypeID     int64  `json:"card_type_id"`
-	Mode           string `json:"mode"`
-	PromptOverride string `json:"prompt_override"`
-	Model          string `json:"model"` // empty = Settings default
+	FactionID      int64        `json:"faction_id"`
+	CardTypeID     int64        `json:"card_type_id"`
+	Mode           string       `json:"mode"`
+	PromptOverride string       `json:"prompt_override"`
+	Model          string       `json:"model"` // empty = Settings default
+	FrontImage     *imageSource `json:"front_image"`
 }
 
 // loadPair fetches the faction and card type, mapping ErrNotFound to 404.
@@ -74,6 +76,30 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if p == "" {
 		p = prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f))
 	}
+	var frontURL string
+	if req.FrontImage != nil {
+		if !strings.HasSuffix(ct.Name, " back") {
+			writeError(w, http.StatusBadRequest, "front image is only supported for back card types")
+			return
+		}
+		front, status, err := h.loadEditParent(imageEditRequest{Parent: *req.FrontImage})
+		if err != nil {
+			writeError(w, status, err.Error())
+			return
+		}
+		frontType, err := h.CardTypes.Get(front.cardTypeID)
+		if err != nil || front.factionID != f.ID || frontType.Name != strings.TrimSuffix(ct.Name, " back") {
+			writeError(w, http.StatusBadRequest, "front image must match the faction and front card type")
+			return
+		}
+		data, err := os.ReadFile(filepath.Join(h.DataDir, front.imagePath))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "read front image: "+err.Error())
+			return
+		}
+		frontURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+		p = prompt.WithFrontReference(p)
+	}
 	model, err := h.resolveModel(req.Model)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -93,7 +119,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, Prompt: p, Quality: quality}, nil)
+	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality}, nil)
 	writeJSON(w, http.StatusCreated, g)
 }
 
@@ -255,6 +281,7 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 		// nil = use the saved card type text
 		CardTypeDescription *string `json:"card_type_description"`
 		CardTypeConstraints *string `json:"card_type_constraints"`
+		HasFrontImage       bool    `json:"has_front_image"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -271,11 +298,15 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	if req.CardTypeConstraints != nil {
 		ct.Constraints = *req.CardTypeConstraints
 	}
+	p := prompt.ImageEdit(ct.Description, ct.Constraints, prompt.FactionStyle{
+		Name: strings.TrimSpace(req.Name), PrimaryColor: strings.TrimSpace(req.PrimaryColor),
+		Texture: strings.TrimSpace(req.Texture), Description: req.Description,
+	})
+	if req.HasFrontImage && strings.HasSuffix(ct.Name, " back") {
+		p = prompt.WithFrontReference(p)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"prompt": prompt.ImageEdit(ct.Description, ct.Constraints, prompt.FactionStyle{
-			Name: strings.TrimSpace(req.Name), PrimaryColor: strings.TrimSpace(req.PrimaryColor),
-			Texture: strings.TrimSpace(req.Texture), Description: req.Description,
-		}),
+		"prompt":   p,
 		"has_file": ct.OpenAIFileID != "",
 	})
 }

@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { TestButton } from './TestButton'
 import { postTestClaude, type ClaudeEffort } from './api'
@@ -47,7 +48,7 @@ export function ClaudeSection() {
         </Field>
         <Field label="Effort">
           {(id) => (
-            <select
+            <SearchableSelect
               id={id}
               value={draft.claude_effort}
               onChange={(e) => setField('claude_effort', e.target.value as ClaudeEffort)}
@@ -55,7 +56,7 @@ export function ClaudeSection() {
             >
               <option value="">CLI default</option>
               {EFFORTS.map((e) => <option key={e} value={e}>{e}</option>)}
-            </select>
+            </SearchableSelect>
           )}
         </Field>
       </div>

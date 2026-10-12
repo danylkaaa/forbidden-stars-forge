@@ -1,8 +1,12 @@
+import { useImageSelection } from '../../lib/useImageSelection'
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { Link, useSearchParams } from 'react-router'
 import { ZoomableImage } from '../../components/ImageLightbox'
 import { MultiSelect } from '../../components/MultiSelect'
 import { Pagination } from '../../components/Pagination'
 import { FavoriteButton } from '../../components/FavoriteButton'
+import { ImageSelectionCheckbox, ImageSelectionControls } from '../../components/ImageSelection'
+import { DeleteImageButton } from '../../components/DeleteImageButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
 import { inputClass } from '../../components/Field'
@@ -67,6 +71,7 @@ export default function GenerationsPage() {
       (sources.length === 0 || sources.includes(e.source)) &&
       (modes.length === 0 || modes.includes(e.mode))
   })
+  const selection = useImageSelection(shown, filtersToParams(filters).toString())
   const filtering = terms.length > 0 || favorites || dlcs.length + factionIds.length + cardTypeIds.length + sources.length + modes.length > 0
   const total = shown.reduce((sum, e) => sum + e.costUsd, 0)
   const pages = Math.max(1, Math.ceil(shown.length / perPage))
@@ -81,10 +86,10 @@ export default function GenerationsPage() {
         <Pagination page={page} pages={pages} onPage={(p) => setPaging(p)} />
         <label className="flex items-center gap-1.5 text-xs text-ink/55">
           Per page
-          <select value={perPage} onChange={(e) => setPaging(1, Number(e.target.value))} aria-label="Images per page"
+          <SearchableSelect value={perPage} onChange={(e) => setPaging(1, Number(e.target.value))} aria-label="Images per page"
             className="min-h-7 rounded-md border border-divider bg-bg py-0.5 pl-2 text-xs text-ink">
             {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          </SearchableSelect>
         </label>
       </div>
     </div>
@@ -141,6 +146,8 @@ export default function GenerationsPage() {
         </p>
       )}
 
+      <ImageSelectionControls selection={selection} images={shown} />
+
       {shown.length > 0 && pager}
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
@@ -149,11 +156,16 @@ export default function GenerationsPage() {
           const ct = cardTypeById.get(e.cardTypeId)
           const alt = `${faction} × ${ct?.name ?? '—'}`
           return (
-            <div key={e.key} className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
+            <div key={e.key} className="group/image overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
+              <div className="relative">
               <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} cardPreviewFactionId={e.factionId} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
                 editTarget={e.ref} compareSrc={e.compareSrc} className="block w-full">
                 <img src={e.imageUrl} alt={alt} loading="lazy" className="block aspect-[3/4] w-full object-cover" />
               </ZoomableImage>
+              <ImageSelectionCheckbox name={e.name || `Image ${e.key}`} selected={selection.selected.has(e.key)} anySelected={selection.chosen.length > 0}
+                disabled={selection.remove.isPending} onToggle={() => selection.toggle(e.key)} />
+              <DeleteImageButton overlay target={e.ref} name={e.name || `Image ${e.key}`} disabled={selection.remove.isPending} />
+              </div>
               <div className="flex flex-col gap-1 p-2.5">
                 <div className="flex items-center gap-1">
                   <div className="min-w-0 flex-1 truncate text-[13px] font-medium">{faction} <span className="text-ink/40">×</span> {ct?.name ?? '—'}</div>

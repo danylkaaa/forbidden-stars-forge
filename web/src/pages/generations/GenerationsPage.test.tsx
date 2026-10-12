@@ -157,3 +157,73 @@ test('paginates 24 per page; page and per-page live in the URL; filters reset to
   await userEvent.type(screen.getByLabelText('Search by name'), '1')
   expect(screen.getByTestId('search')).not.toHaveTextContent('page=')
 })
+
+test('corner controls select images without opening them; bulk deletion waits for confirmation', async () => {
+  let generations = [gen(1, 1, 1), gen(2, 2, 1)]
+  let batches = [batchItem]
+  const deleted: string[] = []
+  server.use(
+    http.get('/api/generations', () => HttpResponse.json(generations)),
+    http.get('/api/batch-items', () => HttpResponse.json(batches)),
+    http.delete('/api/generations/1', () => { deleted.push('generation-1'); generations = generations.filter(g => g.id !== 1); return new HttpResponse(null, { status: 204 }) }),
+    http.delete('/api/batches/3/items/7', () => { deleted.push('batch-7'); batches = []; return new HttpResponse(null, { status: 204 }) }),
+  )
+  renderAt('/generations')
+  await screen.findByText('3 images')
+  const lab = screen.getByRole('checkbox', { name: 'Select 1-f1-ct1-low' })
+  expect(lab.parentElement).toHaveClass('opacity-0', 'group-hover/image:opacity-100')
+  const cornerDelete = screen.getByRole('button', { name: 'Delete 1-f1-ct1-low' })
+  expect(cornerDelete).toHaveClass('absolute', 'right-2', 'top-2')
+  expect(cornerDelete.parentElement).toContainElement(screen.getByRole('button', { name: 'Open Tau Empire × combat' }))
+  await userEvent.click(lab)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: 'Select 2-f2-ct1-low' }).parentElement).not.toHaveClass('opacity-0')
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1-sisters-upgrade-high' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete selected (2)' }))
+  expect(deleted).toEqual([])
+  const dialog = screen.getByRole('dialog', { name: 'Delete selected images?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  expect(deleted).toEqual([])
+  expect(lab).toBeChecked()
+  await userEvent.click(screen.getByRole('button', { name: 'Delete selected (2)' }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Delete selected images?' })).getByRole('button', { name: 'Delete 2 images' }))
+  await waitFor(() => expect(deleted).toHaveLength(2))
+  await screen.findByText('1 images')
+  expect(cards()).toEqual(['Open Sisters × combat'])
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+test('bulk deletion keeps blocked images selected and retries only failures', async () => {
+  let generations = [gen(1, 1, 1), gen(2, 2, 1)]
+  const deleted: number[] = []
+  server.use(
+    http.get('/api/generations', () => HttpResponse.json(generations)),
+    http.get('/api/batch-items', () => HttpResponse.json([])),
+    http.delete('/api/generations/1', () => { deleted.push(1); generations = generations.filter(g => g.id !== 1); return new HttpResponse(null, { status: 204 }) }),
+    http.delete('/api/generations/2', () => { deleted.push(2); return HttpResponse.json({ error: 'Image is used by a template' }, { status: 409 }) }),
+  )
+  renderAt('/generations')
+  await screen.findByText('2 images')
+  await userEvent.click(screen.getByRole('button', { name: 'Select all' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete selected (2)' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete 2 images' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Image is used by a template')
+  await screen.findByText('1 images')
+  expect(screen.getByRole('checkbox', { name: 'Select 2-f2-ct1-low' })).toBeChecked()
+  await userEvent.click(screen.getByRole('button', { name: 'Delete 1 image' }))
+  await waitFor(() => expect(deleted).toHaveLength(3))
+  expect(deleted.filter(id => id === 1)).toHaveLength(1)
+})
+
+test('selection survives paging and clears when filters change', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ ...gen(i + 1, 1, 1), created_at: String(i).padStart(3, '0') }))
+  server.use(http.get('/api/generations', () => HttpResponse.json(many)), http.get('/api/batch-items', () => HttpResponse.json([])))
+  renderAt('/generations')
+  await screen.findByText('30 images')
+  await userEvent.click(screen.getAllByRole('checkbox')[0])
+  await userEvent.click(screen.getAllByRole('button', { name: 'Next page' })[0])
+  expect(screen.getByText('1 selected')).toBeInTheDocument()
+  expect(screen.getAllByRole('checkbox')[0].parentElement).not.toHaveClass('opacity-0')
+  await userEvent.type(screen.getByLabelText('Search by name'), 'low')
+  expect(screen.queryByRole('button', { name: /Delete selected/ })).not.toBeInTheDocument()
+})

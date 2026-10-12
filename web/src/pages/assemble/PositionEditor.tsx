@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -12,6 +13,7 @@ import type { RenderInput } from './render'
 import { useAssembly } from './state'
 import { useRenderedCard } from './useCardView'
 import { undoShortcut, useUndoable } from './useUndoable'
+import { useDemoArtwork } from './demoArtwork'
 
 const BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const CARD_SIZE = { width: 816, height: 1104 }
@@ -35,6 +37,7 @@ type Props = {
 // Drag-and-drop layer positions on a demo card of the chosen faction, with
 // undo/redo. Used for card type text positions and subtype overlay positions.
 export function PositionEditor({ id: editorId, label, saved, initialLevel, note, resetLabel, layersFor, compose, onSave }: Props) {
+  const demoArtwork = useDemoArtwork()
   const factions = useFactions(), logos = useFactionLogos()
   const [factionId, setFactionId] = useState(() => useAssembly.getState().factionId)
   const previewFaction = factionId ?? factions.data?.[0]?.id ?? null
@@ -58,8 +61,8 @@ export function PositionEditor({ id: editorId, label, saved, initialLevel, note,
   const { layout, overlayUrls } = useMemo(() => compose(draft, level, templateLayout.layout), [compose, draft, level, templateLayout.layout])
   const logoUrl = logos.data?.find(l => l.faction_id === previewFaction)?.url ?? null
   const input = useMemo<RenderInput | null>(() => !template.isPending && (templateLayout.ready || !template.image)
-    ? { card: { ...DEMO_COMBAT, level, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, outputSize: CARD_SIZE }
-    : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, overlayUrls, logoUrl])
+    ? { card: { ...DEMO_COMBAT, level, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
+    : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, overlayUrls, logoUrl, demoArtwork])
   const { result, error } = useRenderedCard(input)
   const save = useMutation({ mutationFn: () => onSave(draft) })
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
@@ -109,19 +112,19 @@ export function PositionEditor({ id: editorId, label, saved, initialLevel, note,
     </div>
     <div className="min-w-64 flex-1 space-y-3">
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Preview faction">{id => <select id={id} className={selectClass} value={previewFaction ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
+        <Field label="Preview faction">{id => <SearchableSelect id={id} className={selectClass} value={previewFaction ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
           {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>}</Field>
-        <Field label="Preview level">{id => <select id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
+        </SearchableSelect>}</Field>
+        <Field label="Preview level">{id => <SearchableSelect id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
           {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l}</option>)}
-        </select>}</Field>
-        <Field label="Preview price">{id => <select id={id} className={selectClass} value={price} disabled={level === 0} title={level === 0 ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
+        </SearchableSelect>}</Field>
+        <Field label="Preview price">{id => <SearchableSelect id={id} className={selectClass} value={price} disabled={level === 0} title={level === 0 ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
           {Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>{n}</option>)}
-        </select>}</Field>
+        </SearchableSelect>}</Field>
       </div>
-      <Field label="Layer">{id => <select id={id} className={selectClass} value={layer} onChange={e => setLayer(e.target.value as Layer)}>
+      <Field label="Layer">{id => <SearchableSelect id={id} className={selectClass} value={layer} onChange={e => setLayer(e.target.value as Layer)}>
         {layers.map(key => <option key={key} value={key}>{LAYER_LABELS[key]}</option>)}
-      </select>}</Field>
+      </SearchableSelect>}</Field>
       {isRules(layer) && <label className="flex items-center gap-2 text-xs text-ink/70"><input type="checkbox" checked={layout[layer].autoY ?? layout[layer].y === defaultLayout()[layer].y} onChange={e => move({ autoY: e.target.checked })} />Automatic vertical position (centred in its panel)</label>}
       <PlacementFields layer={layer} p={p} move={move} />
       <div className="flex flex-wrap gap-2">

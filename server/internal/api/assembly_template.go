@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 func (h *CardsHandler) AssemblyTemplates(w http.ResponseWriter, r *http.Request) {
@@ -13,6 +15,9 @@ func (h *CardsHandler) AssemblyTemplates(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
+	}
+	for i := range list {
+		list[i].LogoURL = backLogoURL(list[i])
 	}
 	writeJSON(w, 200, list)
 }
@@ -32,9 +37,16 @@ func (h *CardsHandler) SaveAssemblyTemplate(w http.ResponseWriter, r *http.Reque
 		writeError(w, 500, err.Error())
 		return
 	}
+	var oldLogo string
+	if in.ImageKey == "" && in.Side == "back" {
+		oldLogo, _ = h.Store.BackLogo(in.FactionID, in.Category)
+	}
 	if err := h.Store.SaveAssemblyTemplate(in); err != nil {
 		writeError(w, 400, err.Error())
 		return
+	}
+	if oldLogo != "" {
+		_ = os.Remove(filepath.Join(h.DataDir, oldLogo))
 	}
 	writeJSON(w, 200, in)
 }

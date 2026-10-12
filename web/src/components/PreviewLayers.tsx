@@ -38,13 +38,15 @@ export function LayerControls({ maskSrc }: { maskSrc?: string | null }) {
 // fit="contain": fills its parent box; every layer is object-contain'ed in
 // the same box, so same-aspect layers stay aligned at any size.
 export function LayeredImage({
-  src, alt, maskSrc, fit, imgClassName = '',
+  src, alt, maskSrc, fit, imgClassName = '', logoUrl, logoScale = 0.5,
 }: {
   src: string
   alt: string
   maskSrc?: string | null
   fit: 'natural' | 'contain'
   imgClassName?: string
+  logoUrl?: string
+  logoScale?: number
 }) {
   const { mask, maskOpacity } = usePreviewLayers()
   const layer = fit === 'contain'
@@ -57,6 +59,8 @@ export function LayeredImage({
       {maskSrc && mask && (
         <img src={maskSrc} alt="" data-testid="mask" className={layer} style={{ opacity: maskOpacity }} />
       )}
+      {logoUrl && <img src={logoUrl} alt="Card back logo" className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
+        style={{ width: `${logoScale * 100}%`, height: `${logoScale * 100}%` }} />}
     </div>
   )
 }

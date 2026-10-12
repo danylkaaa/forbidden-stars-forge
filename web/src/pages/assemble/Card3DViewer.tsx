@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../../components/Button'
 import { CubeIcon } from '../../components/icons'
+import { BackImage } from './BackImage'
 
 type Rotation = { x: number; y: number }
 const START: Rotation = { x: -8, y: -22 }
 
 // A physical-looking card: front and back images on a rotating plane. Drag
 // to turn it (it keeps spinning briefly when let go), scroll to zoom.
-export function Card3DViewer({ title, front, back, onClose }: { title: string; front: string; back: string | null; onClose: () => void }) {
-  const [rotation, setRotation] = useState<Rotation>(START)
+export function Card3DViewer({ title, front, back, backLogoUrl, backLogoScale, initialSide = 'front', controls, onClose }: { title: string; front: string | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; initialSide?: 'front' | 'back'; controls?: ReactNode; onClose: () => void }) {
+  const initialRotation = { ...START, y: START.y + (initialSide === 'back' ? 180 : 0) }
+  const [rotation, setRotation] = useState<Rotation>(initialRotation)
   const [zoom, setZoom] = useState(1)
+  const [logoScale, setLogoScale] = useState(backLogoScale ?? 0.5)
   const [animate, setAnimate] = useState(false)
   const drag = useRef<{ x: number; y: number; t: number; vx: number; vy: number } | null>(null)
   const spin = useRef(0)
@@ -50,10 +53,16 @@ export function Card3DViewer({ title, front, back, onClose }: { title: string; f
       <h2 className="m-0 truncate font-display text-xl text-accent-300">{title}</h2>
       <div className="flex gap-2">
         <Button onClick={() => turn({ x: 0, y: Math.round((rotation.y + 180) / 180) * 180 })}>Flip</Button>
-        <Button onClick={() => { turn(START); setZoom(1) }}>Reset</Button>
+        <Button onClick={() => { turn(initialRotation); setZoom(1) }}>Reset</Button>
         <Button onClick={onClose}>Close</Button>
       </div>
     </div>
+    {controls && <div className="w-full max-w-3xl">{controls}</div>}
+    {backLogoUrl && !controls && <label className="flex items-center gap-2 text-xs text-ink">Back logo size
+      <input type="range" min={5} max={100} step={1} aria-label="Back logo size" value={Math.round(logoScale * 100)}
+        onChange={e => setLogoScale(Number(e.target.value) / 100)} className="w-32 accent-[var(--color-accent)]" />
+      <span>{Math.round(logoScale * 100)}%</span>
+    </label>}
     <div ref={scene} className="flex min-h-0 w-full flex-1 cursor-grab touch-none select-none items-center justify-center [perspective:1800px] active:cursor-grabbing"
       onPointerDown={e => {
         if (e.button !== 0) return
@@ -74,12 +83,14 @@ export function Card3DViewer({ title, front, back, onClose }: { title: string; f
         style={{ transform: `scale(${zoom}) rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`, transition: animate ? 'transform .6s cubic-bezier(.2,.8,.2,1)' : undefined }}
         onTransitionEnd={() => setAnimate(false)}>
         <div className={face}>
-          <img src={front} alt={`${title} front`} draggable={false} className="h-full w-full object-cover" />
+          {front
+            ? <img src={front} alt={`${title} front`} draggable={false} className="h-full w-full object-cover" />
+            : <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-6 text-center text-sm text-ink/60">No card front chosen for this faction and type yet.</div>}
           <div aria-hidden="true" className="absolute inset-0" style={{ background: shine }} />
         </div>
         <div className={`${face} [transform:rotateY(180deg)]`}>
           {back
-            ? <img src={back} alt={`${title} back`} draggable={false} className="h-full w-full object-cover" />
+            ? <BackImage url={back} logoUrl={backLogoUrl} scale={controls ? backLogoScale : logoScale} alt={`${title} back`} />
             : <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-6 text-center text-sm text-ink/60">No card back chosen for this faction and type yet.</div>}
           <div aria-hidden="true" className="absolute inset-0" style={{ background: shine }} />
         </div>
@@ -90,7 +101,7 @@ export function Card3DViewer({ title, front, back, onClose }: { title: string; f
 }
 
 // Opens the card in the 3D viewer: the rendered front and the deck's back.
-export function Preview3DButton({ title, canvas, back, className = '' }: { title: string; canvas: HTMLCanvasElement | null; back: string | null; className?: string }) {
+export function Preview3DButton({ title, canvas, back, backLogoUrl, backLogoScale, className = '' }: { title: string; canvas: HTMLCanvasElement | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; className?: string }) {
   const [front, setFront] = useState<string | null>(null)
   return <>
     <button type="button" aria-label={`3D preview of ${title}`} title="3D preview" disabled={!canvas}
@@ -98,6 +109,6 @@ export function Preview3DButton({ title, canvas, back, className = '' }: { title
       className={`grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-white/20 bg-black/60 text-ink/85 shadow backdrop-blur-sm hover:border-accent hover:text-accent disabled:hidden ${className}`}>
       <CubeIcon />
     </button>
-    {front && <Card3DViewer title={title} front={front} back={back} onClose={() => setFront(null)} />}
+    {front && <Card3DViewer title={title} front={front} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} onClose={() => setFront(null)} />}
   </>
 }

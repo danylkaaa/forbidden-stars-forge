@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { ApiKeyField } from './ApiKeyField'
 import { ModelSelect } from './ModelSelect'
@@ -31,7 +32,7 @@ export function OpenAISection({ settings }: { settings: Settings }) {
   ) => (
     <Field label={label}>
       {(id) => (
-        <select
+        <SearchableSelect
           id={id}
           value={draft[key]}
           onChange={(e) => setField(key, e.target.value as SettingsDraft[K])}
@@ -42,7 +43,7 @@ export function OpenAISection({ settings }: { settings: Settings }) {
               {o}
             </option>
           ))}
-        </select>
+        </SearchableSelect>
       )}
     </Field>
   )

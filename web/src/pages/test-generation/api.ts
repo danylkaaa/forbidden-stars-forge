@@ -79,6 +79,7 @@ export function startGeneration(body: {
   mode: 'draft' | 'final'
   prompt_override?: string
   model?: string
+  front_image?: { kind: 'generation' | 'batch-item'; id: number; batch_id?: number }
 }): Promise<Generation> {
   return apiSend<Generation>('POST', '/api/generate', body)
 }

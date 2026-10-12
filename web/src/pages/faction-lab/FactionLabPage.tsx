@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -11,13 +12,18 @@ import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
+import { useDoneBatchItems } from '../generations/api'
 import { QuickCardPreview } from '../assemble/QuickCardPreview'
+import { GenerationPreview3D } from '../assemble/GenerationPreview3D'
+import { BackLogoScaleControls } from '../assemble/BackLogoPreview'
+import { useBackLogo } from '../assemble/backLogo'
 import { Tag } from '../../components/Tag'
 import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
 import { useElapsedMs } from '../../lib/useElapsedMs'
 import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
 import { useAssembledPrompt } from './api'
+import { FrontImagePicker, type FrontImageOption } from './FrontImagePicker'
 import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
 
 const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
@@ -44,7 +50,9 @@ export default function FactionLabPage() {
   const lab = useFactionLab()
   const { data: factions } = useFactions()
   const { data: cardTypes } = useCardTypes()
-  const { data: gens } = useGenerations()
+  const { data: gens, isPending: gensLoading, error: gensError } = useGenerations()
+  const batchImages = useDoneBatchItems()
+  const [frontKey, setFrontKey] = useState('')
   const queryClient = useQueryClient()
   const start = useStartGeneration()
   const [assistOpen, setAssistOpen] = useState(false)
@@ -67,6 +75,22 @@ export default function FactionLabPage() {
 
   const faction = factions?.find((f) => f.id === lab.factionId) ?? null
   const cardType = cardTypes?.find((c) => c.id === lab.cardTypeId) ?? null
+  const isBack = cardType?.name.endsWith(' back') ?? false
+  const frontType = isBack ? cardTypes?.find((c) => c.name === cardType!.name.slice(0, -5)) : undefined
+  const frontOptions: FrontImageOption[] = [
+    ...(gens ?? []).filter((g) => g.status === 'done' && g.faction_id === faction?.id && g.card_type_id === frontType?.id).map((g) => ({
+      key: `generation-${g.id}`, name: g.name || `Generation #${g.id}`, url: `/api/generations/${g.id}/image`,
+      libraryKey: `test-${g.id}`, source: 'Lab' as const,
+      ref: { kind: 'generation' as const, id: g.id },
+    })),
+    ...(batchImages.data ?? []).filter((b) => b.faction_id === faction?.id && b.card_type_id === frontType?.id).map((b) => ({
+      key: `batch-${b.batch_id}-${b.id}`, name: b.name || `Batch image #${b.id}`, url: `/api/batches/${b.batch_id}/items/${b.id}/image`,
+      libraryKey: `batch-${b.id}`, source: 'Batch' as const,
+      ref: { kind: 'batch-item' as const, id: b.id, batch_id: b.batch_id },
+    })),
+  ]
+  const frontImage = isBack ? frontOptions.find((image) => image.key === frontKey) : undefined
+  useEffect(() => { setFrontKey('') }, [lab.factionId, lab.cardTypeId])
   // Memoized so object identity is stable across renders (debounce/query keys).
   const saved = useMemo(() => (faction ? savedFields(faction) : null), [faction])
   const fields = faction ? lab.drafts[faction.id] ?? saved : null
@@ -77,7 +101,7 @@ export default function FactionLabPage() {
 
   const inputs = useMemo(() => ({ fields, ct: ctFields }), [fields, ctFields])
   const debounced = useDebounced(inputs, 300)
-  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct)
+  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage)
   const { data: preview } = usePreview(lab.factionId, lab.cardTypeId, lab.model)
   const promptReady = assembled.data !== undefined && !assembled.isFetching &&
     debounced.fields !== null && fields !== null && sameFields(debounced.fields, fields) &&
@@ -99,6 +123,7 @@ export default function FactionLabPage() {
       const g = await start({
         faction_id: faction.id, card_type_id: cardType.id, mode: lab.mode,
         prompt_override: assembled.data.prompt, ...(lab.model ? { model: lab.model } : {}),
+        ...(frontImage ? { front_image: frontImage.ref } : {}),
       })
       lab.snapshot(g.id, fields, ctFields)
       setSelectedId(g.id) // show the new run on the right
@@ -176,20 +201,20 @@ export default function FactionLabPage() {
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="Faction">
               {(id) => (
-                <select id={id} className={selectClass} value={lab.factionId ?? ''}
+                <SearchableSelect id={id} className={selectClass} value={lab.factionId ?? ''}
                   onChange={(e) => { lab.set({ factionId: e.target.value ? Number(e.target.value) : null }); setAssistOpen(false); setSelectedId(null) }}>
                   <option value="">Select…</option>
                   {factions?.map((f) => <option key={f.id} value={f.id}>{f.name}{lab.drafts[f.id] && !sameFields(lab.drafts[f.id], savedFields(f)) ? ' •' : ''}</option>)}
-                </select>
+                </SearchableSelect>
               )}
             </Field>
             <Field label="Card Type">
               {(id) => (
-                <select id={id} className={selectClass} value={lab.cardTypeId ?? ''}
+                <SearchableSelect id={id} className={selectClass} value={lab.cardTypeId ?? ''}
                   onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
                   <option value="">Select…</option>
                   {cardTypes?.map((c) => <option key={c.id} value={c.id}>{c.openai_file_id ? c.name : `${c.name} (no file)`}</option>)}
-                </select>
+                </SearchableSelect>
               )}
             </Field>
             <div>
@@ -205,6 +230,12 @@ export default function FactionLabPage() {
             </div>
             <ModelOverrideSelect value={lab.model} onChange={(model) => lab.set({ model })} />
           </div>
+
+          {isBack && (
+            <FrontImagePicker key={`${lab.factionId}-${lab.cardTypeId}`} options={frontOptions} selectedKey={frontImage?.key ?? ''}
+              onSelect={setFrontKey} factionId={lab.factionId} frontTypeName={frontType?.name ?? ''}
+              loading={gensLoading || batchImages.isPending} error={!!gensError || !!batchImages.error} />
+          )}
 
           <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">
             {([['faction', 'Faction', dirty], ['card-type', 'Card type', ctDirty]] as const).map(([key, label, isDirty]) => (
@@ -359,7 +390,9 @@ export default function FactionLabPage() {
             <p className="m-0 text-sm text-ink/50">No generations for this pair yet — click Generate.</p>
           ) : (
             <ResultView
+              key={`${current.id}-${cardType.id}`}
               gen={current}
+              cardTypeName={cardType.name}
               alt={`${faction.name} × ${cardType.name} #${current.id}`}
               {...previewLayers(cardType)}
               label={runLabel(current.id)}
@@ -394,8 +427,8 @@ export default function FactionLabPage() {
 }
 
 // The selected run, as large as the column allows.
-function ResultView({ gen, alt, maskSrc, label, onUseFields, onEdited }: {
-  gen: Generation; alt: string; maskSrc: string | null; label: string | null
+function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdited }: {
+  gen: Generation; cardTypeName: string; alt: string; maskSrc: string | null; label: string | null
   onUseFields?: () => void; onEdited: (g: Generation) => void
 }) {
   const pending = gen.status === 'pending'
@@ -405,21 +438,26 @@ function ResultView({ gen, alt, maskSrc, label, onUseFields, onEdited }: {
   // text and artwork (or the demo card).
   const [asCard, setAsCard] = useState(false)
   const [previewCardId, setPreviewCardId] = useState(0)
+  const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'combat back' ? 'back' : undefined
+  const backCategory = cardTypeName === 'combat back' ? 'combat' : cardTypeName === 'events back' ? 'schema' : cardTypeName === 'upgrade back' ? 'upgrade' : undefined
+  const backLogo = useBackLogo(backCategory ? gen.faction_id : undefined, backCategory)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Result view" className="inline-flex overflow-hidden rounded-md border border-divider text-xs">
+        {combatSide === 'front' && <div role="tablist" aria-label="Result view" className="inline-flex overflow-hidden rounded-md border border-divider text-xs">
           {([['Image', false], ['Card preview', true]] as const).map(([name, value]) => <button key={name} type="button" role="tab" aria-selected={asCard === value} onClick={() => setAsCard(value)}
             className={`cursor-pointer border-0 px-2.5 py-1 ${asCard === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
-        </div>
+        </div>}
+        {combatSide && <GenerationPreview3D imageUrl={imageUrl} factionId={gen.faction_id} side={combatSide} title={alt} />}
         {!asCard && <LayerControls maskSrc={maskSrc} />}
+        {backCategory && <BackLogoScaleControls logo={backLogo} />}
       </div>}
       {imageUrl && asCard ? <QuickCardPreview imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={gen.faction_id} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={combatSide === 'front' ? gen.faction_id : undefined} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />
+            {backCategory && backLogo.logoUrl ? <div className="mx-auto aspect-[816/1104] h-full max-w-full"><LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="natural" imgClassName="h-full w-full object-contain" logoUrl={backLogo.logoUrl} logoScale={backLogo.scale} /></div> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>

@@ -169,7 +169,7 @@ const batchItemCols = `id, batch_id, faction_id, card_type_id, custom_id, qualit
 	COALESCE(cost_usd,0), COALESCE(error,'')`
 
 func (s *BatchesStore) Items(batchID int64) ([]BatchItem, error) {
-	rows, err := s.db.Query("SELECT "+batchItemCols+" FROM batch_items WHERE batch_id = ? ORDER BY custom_id ASC", batchID)
+	rows, err := s.db.Query("SELECT "+batchItemCols+" FROM batch_items WHERE batch_id = ? AND deleted_at='' ORDER BY custom_id ASC", batchID)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *BatchesStore) DoneItems() ([]GalleryItem, error) {
 		COALESCE(i.image_path,''), COALESCE(i.input_tokens,0), COALESCE(i.output_tokens,0),
 		COALESCE(i.cost_usd,0), COALESCE(i.error,''), b.mode, b.model, COALESCE(b.completed_at, b.created_at)
 		FROM batch_items i JOIN batches b ON b.id = i.batch_id
-		WHERE i.status = 'done' AND i.image_path IS NOT NULL AND i.image_path != ''
+		WHERE i.deleted_at='' AND i.status = 'done' AND i.image_path IS NOT NULL AND i.image_path != ''
 		ORDER BY b.id DESC, i.custom_id ASC`)
 	if err != nil {
 		return nil, err

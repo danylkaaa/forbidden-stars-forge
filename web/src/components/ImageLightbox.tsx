@@ -7,6 +7,10 @@ import type { Generation } from '../pages/test-generation/api'
 import { MaskEditor } from './MaskEditor'
 import { exportMask, type Stroke } from '../lib/mask'
 import { QuickCardPreview } from '../pages/assemble/QuickCardPreview'
+import { GenerationPreview3D } from '../pages/assemble/GenerationPreview3D'
+import { BackLogoFlatPreview } from '../pages/assemble/BackLogoPreview'
+
+type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -41,13 +45,13 @@ export type EditProps = {
 }
 
 export function ImageLightbox({
-  src, alt, maskSrc, cardPreviewFactionId, downloadName, favorite, editTarget, compareSrc, onEdited, onClose,
+  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number
   downloadName?: string // file name without extension; defaults to a slug of alt
   favorite?: FavoriteProp
   onClose: () => void
-} & EditProps) {
+} & EditProps & CombatPreviewProps) {
   const [asCard, setAsCard] = useState(false)
   const [previewCardId, setPreviewCardId] = useState(0)
   const [editing, setEditing] = useState(false)
@@ -98,7 +102,8 @@ export function ImageLightbox({
         >
           {downloading ? 'Preparing…' : 'Download'}
         </button>
-        {cardPreviewFactionId !== undefined && !editing && (
+        {combatPreviewSide && previewFactionId !== undefined && !editing && <GenerationPreview3D imageUrl={src} factionId={previewFactionId} side={combatPreviewSide} title={alt} />}
+        {cardPreviewFactionId !== undefined && combatPreviewSide !== 'back' && !editing && (
           <button type="button" aria-pressed={asCard} onClick={() => setAsCard((v) => !v)}
             className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium ${asCard ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink hover:bg-neutral-800'}`}>
             Card preview
@@ -144,8 +149,9 @@ export function ImageLightbox({
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
-            imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />
+          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackLogoFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc}
+            imgClassName="max-h-[80vh] max-w-full rounded-md object-contain" /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
+            imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />}
         </div>
       )}
     </div>
@@ -233,11 +239,11 @@ function AreaEditor({ src, alt, target, onCancel, onStarted }: {
 
 // Wraps a thumbnail in a button that opens the image in an ImageLightbox.
 export function ZoomableImage({
-  src, alt, maskSrc, cardPreviewFactionId, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
+  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number; downloadName?: string
   favorite?: FavoriteProp; className?: string; children: ReactNode
-} & EditProps) {
+} & EditProps & CombatPreviewProps) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -249,7 +255,7 @@ export function ZoomableImage({
       >
         {children}
       </button>
-      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} downloadName={downloadName} favorite={favorite}
+      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} downloadName={downloadName} favorite={favorite}
         editTarget={editTarget} compareSrc={compareSrc} onEdited={onEdited} onClose={() => setOpen(false)} />}
     </>
   )

@@ -1,15 +1,18 @@
+import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { DiffPanel } from '../../components/DiffPanel'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { apiGet } from '../../lib/api'
-import { updateCard } from '../cards/api'
-import type { Card } from '../cards/model'
-import { saveAssembly, uploadArtwork, type Assembly } from './api'
+import { createCard, updateCard } from '../cards/api'
+import { CATEGORIES, newDraft, type Card, type CardInput, type Category } from '../cards/model'
+import { draftInput } from '../cards/validation'
+import { useFactions } from '../factions/api'
+import { emptyAssembly, saveAssembly, uploadArtwork, type Assembly } from './api'
 import { defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
-import { ART_WINDOW, downloadName, LAYER_LABELS } from './model'
+import { ART_WINDOW, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
 import { labLink, useTemplate, useTemplateLayout } from './library'
@@ -24,24 +27,45 @@ import { PositionNumber } from './LayerControls'
 const panel = 'space-y-4 rounded-lg border border-divider bg-surface p-4'
 const NUMBER_FIELDS = [['resource_cost', 'Resource price'], ['guns', 'Guns'], ['shields', 'Shields'], ['eagles', 'Morale / eagles']] as const
 
-export default function CardEditorPage() {
-  const { id = '' } = useParams()
+export default function CardEditorPage({ newFactionId, onCategoryChange }: { newFactionId?: string; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
+  const creating = newFactionId !== undefined
+  const { id: routeId = '' } = useParams()
+  const id = creating ? '-1' : routeId
+  const navigate = useNavigate()
+  const factions = useFactions()
+  const [newSource] = useState<Card>(() => ({ ...draftInput(newDraft('combat', newFactionId ?? '')) as CardInput, id: -1, created_at: '', updated_at: '' }))
+  const [localAssembly, setLocalAssembly] = useState(emptyAssembly)
+  const [artworkFile, setArtworkFile] = useState<File | null>(null)
+  useEffect(() => {
+    if (!creating) return
+    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id)
+    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id) }
+  }, [creating, id])
+  useEffect(() => {
+    if (!creating) return
+    if (!artworkFile) { setLocalAssembly(a => ({ ...a, image_key: '', image_url: '' })); return }
+    const url = URL.createObjectURL(artworkFile)
+    setLocalAssembly(a => ({ ...a, image_key: 'upload', image_url: url }))
+    return () => URL.revokeObjectURL(url)
+  }, [creating, artworkFile])
   const createdArtworkError = (useLocation().state as { artworkError?: string } | null)?.artworkError
   const queryClient = useQueryClient()
-  const cardQuery = useQuery({ queryKey: ['cards', 'one', id], queryFn: () => apiGet<Card>(`/api/cards/${id}`) })
-  const source = cardQuery.data
+  const cardQuery = useQuery({ queryKey: ['cards', 'one', id], enabled: !creating, queryFn: () => apiGet<Card>(`/api/cards/${id}`) })
+  const source = creating ? newSource : cardQuery.data
   const state = useAssembly()
-  const template = useTemplate(source?.faction_id ?? null, source?.category ?? 'combat')
+  const { saved, draft, issues, card, dirty } = useCardDraft(source, creating ? 'New card' : '')
+  const factionId = Number(draft?.faction_id) || null
+  const template = useTemplate(factionId, source?.category ?? 'combat')
   const templateLayout = useTemplateLayout()
-  const back = useTemplate(source?.faction_id ?? null, source?.category ?? 'combat', 'back')
-  const { input, assembly, transform, subtypes, subtype: activeSubtype } = useCardRenderInput(source, template.image, templateLayout)
-  const { saved, draft, issues, card, dirty } = useCardDraft(source)
+  const back = useTemplate(factionId, source?.category ?? 'combat', 'back')
+  const { input, assembly, logoScale, transform, subtypes, subtype: activeSubtype } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
   const preview = useRef<HTMLCanvasElement | null>(null)
   const textTarget = useRef<{ key: string; element: HTMLInputElement | HTMLTextAreaElement } | null>(null)
   const upperText = useRef<HTMLTextAreaElement>(null)
+  const logoScaleDirty = state.logoScales[id] !== undefined
   const transformDirty = !!state.transforms[id]
   const hasArtwork = !!assembly.data?.image_url
   // The artwork moves only while selected: click it on the preview (or use
@@ -53,27 +77,58 @@ export default function CardEditorPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      if (creating && draft) {
+        const created = await createCard(draftInput(draft) as CardInput)
+        let artworkError = ''
+        try {
+          const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, subtype_id: localAssembly.subtype_id, logo_scale: logoScale, transform, layout: {} })
+          queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
+        } catch (e) {
+          artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
+          // Keep the chosen position available for saving from the editor.
+          useAssembly.getState().transform(String(created.id), transform)
+          useAssembly.getState().logoScale(String(created.id), logoScale)
+        }
+        queryClient.setQueryData(['cards', 'one', String(created.id)], created)
+        useAssembly.getState().select({ factionId: created.faction_id, category: created.category })
+        navigate(`/assemble/cards/${created.id}`, { state: artworkError ? { artworkError } : undefined })
+        return
+      }
       if (dirty && card && source) {
         const updated = await updateCard(source.id, card)
         queryClient.setQueryData(['cards', 'one', id], updated)
         useAssembly.getState().clearEdits(id)
       }
-      if (transformDirty && assembly.data) {
-        const value = { ...assembly.data, transform }
+      if ((transformDirty || logoScaleDirty) && assembly.data) {
+        const value = { ...assembly.data, transform, logo_scale: logoScale }
         queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: {} }))
         useAssembly.getState().clearTransform(id)
+        useAssembly.getState().clearLogoScale(id)
       }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['cards'] }),
   })
   const artwork = useMutation({
-    mutationFn: (file: File | null) => file ? uploadArtwork(id, file) : saveAssembly(id, { ...(assembly.data as Assembly), image_key: '', transform: defaultArtwork(), layout: {} }),
-    onSuccess: saved => { queryClient.setQueryData(['card-assembly', id], saved); useAssembly.getState().clearTransform(id) },
+    mutationFn: async (file: File | null) => {
+      if (creating) {
+        setArtworkFile(file)
+        const next = { ...localAssembly, transform: defaultArtwork(), ...(!file ? { image_key: '', image_url: '' } : {}) }
+        setLocalAssembly(next)
+        return next
+      }
+      return file ? uploadArtwork(id, file) : saveAssembly(id, { ...(assembly.data as Assembly), image_key: '', transform: defaultArtwork(), layout: {} })
+    },
+    onSuccess: saved => { if (!creating) queryClient.setQueryData(['card-assembly', id], saved); useAssembly.getState().clearTransform(id) },
   })
 
   const subtype = useMutation({
-    mutationFn: (subtypeId: number) => saveAssembly(id, { ...(assembly.data as Assembly), subtype_id: subtypeId, layout: {} }),
-    onSuccess: saved => queryClient.setQueryData(['card-assembly', id], saved),
+    mutationFn: async (subtypeId: number) => {
+      const value = { ...(assembly.data as Assembly), subtype_id: subtypeId, layout: {} }
+      if (creating) { setLocalAssembly(value); return value }
+      return saveAssembly(id, value)
+    },
+    onSuccess: saved => { if (!creating) queryClient.setQueryData(['card-assembly', id], saved) },
   })
 
   // Undo history for artwork position (text fields keep the browser's own
@@ -160,7 +215,8 @@ export default function CardEditorPage() {
     requestAnimationFrame(() => { target.element.focus(); target.element.setSelectionRange(start + token.length, start + token.length) })
   }
   function discard() {
-    save.reset(); state.clearEdits(id); state.clearTransform(id)
+    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id)
+    if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
   }
   async function download() {
     if (!result || !card) return
@@ -173,11 +229,11 @@ export default function CardEditorPage() {
     } catch (e) { setDownloadError(e instanceof Error ? e.message : 'Download failed.') }
   }
 
-  if (cardQuery.isError) return <div role="alert" className="text-danger">{cardQuery.error.message} <Link to="/assemble" className="text-accent underline">Back to library</Link></div>
+  if (!creating && cardQuery.isError) return <div role="alert" className="text-danger">{cardQuery.error.message} <Link to="/assemble" className="text-accent underline">Back to library</Link></div>
   if (!source || !draft || !saved) return <p role="status" className="text-sm text-ink/60">Loading card…</p>
   if (source.category !== 'combat') return <p className="text-sm text-ink/60">Only combat cards can be assembled for now. <Link to="/assemble" className="text-accent underline">Back to library</Link></p>
 
-  const anyDirty = dirty || transformDirty
+  const anyDirty = creating || dirty || transformDirty || logoScaleDirty
   const busy = save.isPending || artwork.isPending || subtype.isPending
   const categorySubtypes = subtypes.data?.filter(st => st.category === source.category) ?? []
   const queryError = [assembly, ...template.queries].find(q => q.isError)?.error ?? templateLayout.error
@@ -185,7 +241,7 @@ export default function CardEditorPage() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <Link to="/assemble" className="text-sm text-accent no-underline hover:underline">← Library</Link>
-        <h1 className="m-0 font-display text-2xl text-accent-300">{draft.name || 'Untitled card'}</h1>
+        <h1 className="m-0 font-display text-2xl text-accent-300">{creating ? 'New card' : draft.name || 'Untitled card'}</h1>
       </div>
       <div className="flex flex-wrap gap-2">
         {template.image && <Link to={labLink(template.image)} className="inline-flex items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-ink no-underline hover:border-accent/60">Edit template in Faction Lab</Link>}
@@ -193,13 +249,13 @@ export default function CardEditorPage() {
         <Button title="Redo (⇧⌘Z)" disabled={!redoStack.current.length} onClick={redo}>Redo</Button>
         <Button disabled={!anyDirty || busy} onClick={discard}>Discard changes</Button>
         <Button disabled={!result || rendering} onClick={() => void download()}>Download PNG</Button>
-        <Button variant="primary" disabled={!anyDirty || !!issues.length || busy} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save'}</Button>
+        <Button variant="primary" disabled={!anyDirty || !!issues.length || busy} onClick={() => save.mutate()}>{save.isPending ? creating ? 'Creating…' : 'Saving…' : creating ? 'Create card' : 'Save'}</Button>
       </div>
     </div>
     {queryError && <p role="alert" className="text-danger">{queryError.message}</p>}
     {save.isError && <p role="alert" className="text-danger">{save.error.message}</p>}
     {subtype.isError && <p role="alert" className="text-danger">{subtype.error.message}</p>}
-    {createdArtworkError && !hasArtwork && <p role="alert" className="text-danger">The card was created, but its artwork failed to upload: {createdArtworkError}. Add it again below.</p>}
+    {createdArtworkError && !save.isSuccess && !artwork.isSuccess && <p role="alert" className="text-danger">The card was created, but its artwork or position could not be saved: {createdArtworkError}. Retry below.</p>}
     {artwork.isError && <p role="alert" className="text-danger">{artwork.error.message}</p>}
     {downloadError && <p role="alert" className="text-danger">{downloadError}</p>}
     {save.isSuccess && <p role="status" className="text-success">Saved.</p>}
@@ -220,7 +276,7 @@ export default function CardEditorPage() {
             onPointerMove={e => { const start = drag.current; if (!start) return; const rect = e.currentTarget.getBoundingClientRect(); if (!rect.width || !rect.height) return; setTransform(panArtwork(start.transform, (e.clientX - start.x) / rect.width * 100, (e.clientY - start.y) / rect.height * 100), false) }}
             onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
             className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
-          {result && !movable && <Preview3DButton title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} className="absolute right-2 top-2 z-10" />}
+          {result && !movable && <Preview3DButton title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} className="absolute right-2 top-2 z-10" />}
           {result && movable && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]"
             style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
             <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-accent-100">Drag to move · scroll to zoom · Enter applies · Esc cancels</span>
@@ -238,27 +294,44 @@ export default function CardEditorPage() {
       <div className="space-y-5">
         <section aria-label="Card text" className={panel}>
           <h2 className="m-0 font-display text-accent-300">Card</h2>
-          <Field label="Subtype">{fid => <select id={fid} className={selectClass} value={assembly.data?.subtype_id ?? 0} disabled={busy || !assembly.data}
+          {creating && <div className="grid grid-cols-2 gap-3">
+            <Field label="Faction">{fid => <select id={fid} className={selectClass} value={draft.faction_id} onChange={e => edit('faction_id', e.target.value)}>
+              <option value="">Choose a faction…</option>
+              {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>}</Field>
+            <Field label="Type">{fid => <select id={fid} className={selectClass} value="combat" onChange={e => onCategoryChange?.(e.target.value as Category, draft.faction_id)}>
+              {CATEGORIES.map(category => <option key={category} value={category}>{LIBRARY_TABS.find(t => t.category === category)!.label}</option>)}
+            </select>}</Field>
+          </div>}
+          <Field label="Subtype">{fid => <SearchableSelect id={fid} className={selectClass} value={assembly.data?.subtype_id ?? 0} disabled={busy || !assembly.data}
             onChange={e => subtype.mutate(Number(e.target.value))}>
             <option value={0}>{source.category === 'combat' ? `Automatic by level (${levelSubtypeName(Number(draft.level) || 0)})` : 'None (card type overlay)'}</option>
             {categorySubtypes.map(st => <option key={st.id} value={st.id}>{st.name} · {st.overlays.length} overlay{st.overlays.length === 1 ? '' : 's'}</option>)}
-          </select>}</Field>
+          </SearchableSelect>}</Field>
           {activeSubtype && !activeSubtype.overlays.length && <p className="m-0 text-xs text-ink/60">“{activeSubtype.name}” has no overlays yet, so the card type overlay is used. <Link to="/subtypes" className="text-accent underline">Upload overlays</Link>.</p>}
           {!subtypes.isPending && !categorySubtypes.length && <p className="m-0 text-xs text-ink/60"><Link to="/subtypes" className="text-accent underline">Create a subtype</Link> to give this card its own overlays.</p>}
-          <Field label="Title">{fid => <input id={fid} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />}</Field>
+          <Field label="Title">{fid => <input id={fid} autoFocus={creating} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />}</Field>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <Field label="Level">{fid => <select id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</select>}</Field>
+            <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
             {NUMBER_FIELDS.map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
               disabled={key === 'resource_cost' && draft.level === '0'} title={key === 'resource_cost' && draft.level === '0' ? 'Level 0 cards have no resource price' : undefined} />}</Field>)}
           </div>
           {(['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === 'upper_text' ? upperText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
           <SymbolPicker insert={insertSymbol} disabled={busy} />
-          <p className="m-0 text-xs text-ink/60">(B), (S), (M) insert icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. Unsaved edits are kept in this browser.</p>
+          <p className="m-0 text-xs text-ink/60">(B), (S), (M) insert icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
-          {dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
+          {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={['level', 'resource_cost', 'guns', 'shields', 'eagles'].filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
             textDiffs={(['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: LAYER_LABELS[key], before: saved[key], after: draft[key] }))} /></details>}
         </section>
+
+        {draft.level === '0' && <section aria-label="C0 faction logo" className={panel}>
+          <h2 className="m-0 font-display text-accent-300">C0 faction logo</h2>
+          <Field label={`Logo scale (${Math.round(logoScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.1} max={3} step={0.01} value={logoScale} disabled={busy} className="w-full"
+            onChange={e => { save.reset(); state.logoScale(id, Number(e.target.value)) }} />}</Field>
+          <Button disabled={busy || logoScale === 1} onClick={() => { save.reset(); state.logoScale(id, 1) }}>Reset logo scale</Button>
+          <p className="m-0 text-xs text-ink/60">Resizes this card’s faction logo around the center of its badge. {creating ? 'Saved when you create the card.' : 'Click Save to keep the size.'}</p>
+        </section>}
 
         <section ref={artworkPanel} aria-label="Artwork" data-undo-scope className={panel}>
           <h2 className="m-0 font-display text-accent-300">Artwork</h2>

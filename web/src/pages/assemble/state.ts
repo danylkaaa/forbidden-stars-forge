@@ -6,6 +6,9 @@ import type { ArtworkTransform } from './artwork'
 // card id.
 type State = {
   factionId: number | null; category: Category
+  logoScales: Record<string, number>
+  logoScale: (id: string, value: number) => void
+  clearLogoScale: (id: string) => void
   edits: Record<string, CardDraft>; transforms: Record<string, ArtworkTransform>
   select: (selection: Partial<Pick<State, 'factionId' | 'category'>>) => void
   edit: (id: string, field: string, value: string) => void
@@ -15,7 +18,9 @@ type State = {
 }
 const without = <T,>(record: Record<string, T>, key: string) => { const next = { ...record }; delete next[key]; return next }
 export const useAssembly = create<State>()(persist((set) => ({
-  factionId: null, category: 'combat', edits: {}, transforms: {},
+  factionId: null, category: 'combat', logoScales: {}, edits: {}, transforms: {},
+  logoScale: (id, value) => set(s => ({ logoScales: { ...s.logoScales, [id]: value } })),
+  clearLogoScale: id => set(s => ({ logoScales: without(s.logoScales, id) })),
   select: selection => set(selection),
   edit: (id, field, value) => set(s => ({ edits: { ...s.edits, [id]: { ...s.edits[id], [field]: value } } })),
   clearEdits: id => set(s => ({ edits: without(s.edits, id) })),

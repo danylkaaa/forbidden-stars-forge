@@ -25,7 +25,7 @@ func TestAssemblyTemplatesSaveReplaceAndClear(t *testing.T) {
 	if err != nil || len(got) != 2 || got[0].Side != "back" || got[0].ImageKey != "test-5" || got[1].Side != "front" || got[1].ImageKey != "test-6" {
 		t.Fatalf("templates: %+v %v", got, err)
 	}
-	for _, bad := range []AssemblyTemplate{{f, "combat", "front", "test-99"}, {f, "event", "front", "test-5"}, {f, "combat", "side", "test-5"}} {
+	for _, bad := range []AssemblyTemplate{{FactionID: f, Category: "combat", Side: "front", ImageKey: "test-99"}, {FactionID: f, Category: "event", Side: "front", ImageKey: "test-5"}, {FactionID: f, Category: "combat", Side: "side", ImageKey: "test-5"}} {
 		if s.SaveAssemblyTemplate(bad) == nil {
 			t.Fatalf("accepted %+v", bad)
 		}

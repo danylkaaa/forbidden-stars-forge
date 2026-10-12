@@ -17,7 +17,7 @@ const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged H
 const upgrade: Card = { id: 3, faction_id: 1, category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', text: 'Deploy one more unit.', created_at: '', updated_at: '' }
 let records: Card[], deleted: number[][], updates: unknown[], templates: AssemblyTemplate[], assemblies: Record<string, Assembly>, assemblyUpdates: unknown[]
 beforeEach(() => {
-  useAssembly.setState({ factionId: null, category: 'combat', edits: {}, transforms: {} })
+  useAssembly.setState({ factionId: null, category: 'combat', edits: {}, transforms: {}, logoScales: {} })
   records = [{ ...combat }, { ...combat, id: 2, name: 'Second card' }, upgrade]; updates = []; deleted = []
   templates = [{ faction_id: 1, category: 'combat', side: 'front', image_key: 'test-5' }]; assemblies = {}; assemblyUpdates = []
   vi.mocked(renderCard).mockReset().mockImplementation(async input => ({ canvas: document.createElement('canvas'), warnings: [], textPositions: { upper_text: input.layout.upper_text, lower_text: input.layout.lower_text } }))
@@ -27,7 +27,7 @@ beforeEach(() => {
     http.get('/api/faction-logos', () => HttpResponse.json([{ faction_id: 1, url: '/api/factions/1/logo?v=a' }])),
     http.get('/api/subtypes', () => HttpResponse.json([{ id: 1, category: 'combat', name: 'Level 0', overlays: [{ id: 7, url: '/l0' }] }, { id: 2, category: 'combat', name: 'Level 1+', layout: { resources: { x: 33 } }, overlays: [{ id: 8, url: '/l1' }] }, { id: 4, category: 'combat', name: 'Elite', overlays: [{ id: 9, url: '/api/subtypes/4/overlays/9' }] }])),
     http.get('/api/assembly-templates', () => HttpResponse.json(templates)),
-    http.put('/api/assembly-templates', async ({ request }) => { const t = await request.json() as AssemblyTemplate; templates = [...templates.filter(x => x.faction_id !== t.faction_id || x.category !== t.category || (x.side ?? 'front') !== (t.side ?? 'front')), t]; return HttpResponse.json(t) }),
+    http.put('/api/assembly-templates', async ({ request }) => { const input = await request.json() as AssemblyTemplate; const t = { ...templates.find(x => x.faction_id === input.faction_id && x.category === input.category && (x.side ?? 'front') === (input.side ?? 'front')), ...input }; templates = [...templates.filter(x => x.faction_id !== t.faction_id || x.category !== t.category || (x.side ?? 'front') !== (t.side ?? 'front')), t]; return HttpResponse.json(t) }),
     http.get('/api/cards/:id/assembly', ({ params }) => HttpResponse.json(assemblies[String(params.id)] ?? emptyAssembly())),
     http.put('/api/cards/:id/assembly', async ({ params, request }) => { const a = await request.json() as Assembly; assemblyUpdates.push(a); assemblies[String(params.id)] = { ...a, image_url: a.image_key ? `/api/cards/${params.id}/artwork?v=saved` : '' }; return HttpResponse.json(assemblies[String(params.id)]) }),
     http.post('/api/cards/:id/artwork', ({ params }) => { assemblies[String(params.id)] = { ...emptyAssembly(), image_key: 'upload', image_url: `/api/cards/${params.id}/artwork?v=new` }; return HttpResponse.json(assemblies[String(params.id)]) }),
@@ -66,6 +66,43 @@ test('library renders every combat card of the faction on the chosen template', 
   expect(screen.queryByRole('link', { name: 'Edit Winged Horror' })).not.toBeInTheDocument()
 })
 
+test.each(['Lab', 'Batch'])('library deletes an unwanted %s experiment only after confirmation', async source => {
+  templates = []
+  const name = source === 'Lab' ? 'Generated art' : 'Batch art'
+  const path = source === 'Lab' ? '/api/generations/5' : '/api/batches/2/items/6'
+  let removed = false
+  server.use(
+    http.delete(path, () => { removed = true; return new HttpResponse(null, { status: 204 }) }),
+    http.get('/api/generations', () => HttpResponse.json(removed && source === 'Lab' ? [] : [{ id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
+    http.get('/api/batch-items', () => HttpResponse.json(removed && source === 'Batch' ? [] : [{ id: 6, batch_id: 2, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', completed_at: '2025' }])),
+  )
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
+  const picker = await screen.findByRole('dialog', { name: 'Card templates' })
+  await userEvent.click(await within(picker).findByRole('button', { name: `Delete ${name}` }))
+  let confirmation = await screen.findByRole('dialog', { name: 'Delete generated image?' })
+  expect(removed).toBe(false)
+  await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+  expect(removed).toBe(false)
+  await userEvent.click(within(picker).getByRole('button', { name: `Delete ${name}` }))
+  confirmation = await screen.findByRole('dialog', { name: 'Delete generated image?' })
+  await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete image' }))
+  await waitFor(() => expect(within(picker).queryByRole('button', { name: `Use ${name}` })).not.toBeInTheDocument())
+  expect(within(picker).getByRole('button', { name: `Use ${source === 'Lab' ? 'Batch art' : 'Generated art'}` })).toBeInTheDocument()
+})
+
+test('library explains why a used template cannot be deleted', async () => {
+  server.use(http.delete('/api/generations/5', () => HttpResponse.json({ error: 'Choose another image or clear the choice first' }, { status: 409 })))
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
+  const picker = await screen.findByRole('dialog', { name: 'Card templates' })
+  await userEvent.click(await within(picker).findByRole('button', { name: 'Delete Generated art' }))
+  const confirmation = await screen.findByRole('dialog', { name: 'Delete generated image?' })
+  await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete image' }))
+  expect(await within(confirmation).findByRole('alert')).toHaveTextContent('clear the choice first')
+  expect(within(picker).getByRole('button', { name: 'Use Generated art' })).toBeInTheDocument()
+})
+
 test('settings dialog lists faction images as demo cards and saves the choice', async () => {
   templates = []
   mount('/assemble')
@@ -94,7 +131,7 @@ test('editor previews text edits and saves card and artwork position together; t
   await screen.findByText('Saved.')
   expect(updates).toEqual([expect.objectContaining({ upper_text: 'New [MORALE]', guns: 3 })])
   expect(assemblyUpdates).toEqual([expect.objectContaining({ image_key: 'upload', transform: { scale: 1, x: 12, y: 0 } })])
-  expect(useAssembly.getState()).toMatchObject({ edits: {}, transforms: {} })
+  expect(useAssembly.getState()).toMatchObject({ edits: {}, transforms: {}, logoScales: {} })
   expect(screen.getByRole('link', { name: 'Edit template in Faction Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
 })
 
@@ -221,10 +258,21 @@ test('artwork chosen on the new card form previews immediately and is uploaded a
   await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
   await userEvent.upload(screen.getByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: 'blob:art' })))
+  expect(screen.getByRole('region', { name: 'Artwork' })).toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Subtype'), '4')
+  fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
+  fireEvent.change(screen.getByLabelText('Offset Y (%)'), { target: { value: '-8' } })
+  fireEvent.change(screen.getByLabelText(/Scale/), { target: { value: '1.5' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1.5, x: 18, y: -12 }, overlayUrls: ['/api/subtypes/4/overlays/9'] })))
+  expect(assemblyUpdates).toHaveLength(0) // Position and subtype stay local until creation.
+  await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+  expect(screen.getByLabelText('Offset X (%)')).toHaveValue('12')
+  await userEvent.click(screen.getByRole('button', { name: 'Redo' }))
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
-  expect(assemblies['9']).toMatchObject({ image_key: 'upload' })
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: '/api/cards/9/artwork?v=new' })))
+  expect(assemblies['9']).toMatchObject({ image_key: 'upload', subtype_id: 4, transform: { scale: 1.5, x: 18, y: -12 } })
+  await waitFor(() => expect(useAssembly.getState().transforms['-1']).toBeUndefined())
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: '/api/cards/9/artwork?v=saved' })))
 })
 
 test('cards use the card type text layout', async () => {
@@ -242,6 +290,34 @@ test('the deck back is listed first and chosen from the settings on the Back sid
   await waitFor(() => expect(templates).toContainEqual({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' }))
   await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
   expect(await within(backSection).findByRole('img', { name: 'Combat back' })).toHaveAttribute('src', '/api/generations/5/image')
+})
+
+test('card back logo uploads, scales at the center, and persists in library and 3D previews', async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,front')
+  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' })
+  server.use(http.put('/api/assembly-templates/:id/:category/logo', async ({ request }) => {
+    expect(request.headers.get('content-type')).toContain('multipart/form-data')
+    expect(await request.text()).toContain('name="logo"')
+    templates = templates.map(t => t.side === 'back' ? { ...t, logo_url: '/back-logo', logo_scale: 0.5 } : t)
+    return new HttpResponse(null, { status: 204 })
+  }))
+  mount('/assemble')
+  const backSection = await screen.findByRole('region', { name: 'Card back' })
+  await userEvent.click(within(backSection).getByRole('button', { name: 'Choose Combat back' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
+  await userEvent.upload(within(dialog).getByLabelText('Upload card back logo'), new File(['logo'], 'logo.png', { type: 'image/png' }))
+  const logo = await within(dialog).findByRole('img', { name: 'Card back logo' })
+  expect(logo).toHaveClass('left-1/2', 'top-1/2', '-translate-x-1/2', '-translate-y-1/2', 'object-contain')
+  fireEvent.change(within(dialog).getByRole('slider'), { target: { value: '75' } })
+  expect(logo).toHaveStyle({ width: '75%', height: '75%' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save logo size' }))
+  await waitFor(() => expect(templates.find(t => t.side === 'back')?.logo_scale).toBe(0.75))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+  expect(within(backSection).getByRole('img', { name: 'Card back logo' })).toHaveStyle({ width: '75%', height: '75%' })
+  await userEvent.click(screen.getByRole('button', { name: '3D preview of Winged Horror' }))
+  const viewer = await screen.findByRole('dialog', { name: '3D preview of Winged Horror' })
+  expect(within(viewer).getByRole('img', { name: 'Card back logo' })).toHaveAttribute('src', '/back-logo')
+  expect(within(viewer).getByRole('img', { name: 'Card back logo' })).toHaveStyle({ width: '75%', height: '75%' })
 })
 
 test('the cube opens a 3D preview with the rendered front and the deck back, turned by dragging', async () => {
@@ -333,4 +409,90 @@ test('cards can be imported from JSON on the library page, with validation error
   await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }))
   expect(await screen.findByText('Imported 1 card.')).toBeInTheDocument()
   expect(await screen.findByRole('link', { name: 'Edit Imported' })).toBeInTheDocument()
+})
+
+test('new-card artwork supports drag, cancel, wheel zoom, and removal before saving', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:art'), revokeObjectURL: vi.fn() }))
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400, x: 0, y: 0, toJSON: () => ({}) })
+  mount('/assemble/cards/new?faction=1&tab=combat')
+  await userEvent.upload(await screen.findByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
+  await screen.findByRole('button', { name: 'Select artwork to move' })
+  const canvas = screen.getByLabelText('Assembled card')
+  await userEvent.click(screen.getByRole('button', { name: 'Select artwork to move' }))
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 100, clientY: 200, pointerId: 1 })
+  fireEvent.pointerMove(canvas, { clientX: 120, clientY: 200, pointerId: 1 })
+  fireEvent.pointerUp(canvas, { pointerId: 1 })
+  expect(useAssembly.getState().transforms['-1']).toEqual({ scale: 1, x: 10, y: 0 })
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel (Esc)' }))
+  expect(useAssembly.getState().transforms['-1']).toBeUndefined()
+  await userEvent.click(screen.getByRole('button', { name: 'Select artwork to move' }))
+  fireEvent.wheel(canvas, { deltaY: -100, clientX: 100, clientY: 200 })
+  expect(useAssembly.getState().transforms['-1']?.scale).toBeGreaterThan(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Apply (Enter)' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Remove artwork' }))
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: null })))
+  expect(screen.queryByLabelText('Offset X (%)')).not.toBeInTheDocument()
+  expect(assemblyUpdates).toHaveLength(0)
+})
+
+test('failed artwork upload opens the created card instead of creating a duplicate', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:art'), revokeObjectURL: vi.fn() }))
+  server.use(http.post('/api/cards/:id/artwork', () => HttpResponse.json({ error: 'Upload failed' }, { status: 500 })))
+  const router = mount('/assemble/cards/new?faction=1&tab=combat')
+  await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
+  await userEvent.upload(screen.getByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
+  await screen.findByRole('button', { name: 'Select artwork to move' })
+  fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
+  expect(records.filter(c => c.name === 'Iron Will')).toHaveLength(1)
+  expect(await screen.findByText(/artwork or position could not be saved/)).toBeInTheDocument()
+  expect(useAssembly.getState().transforms['9']).toMatchObject({ x: 12 })
+})
+
+
+test('C0 logo scale previews per card, discards, saves, and hides at other levels', async () => {
+  assemblies['1'] = { ...emptyAssembly(), logo_scale: 1.2 }
+  mount('/assemble/cards/1')
+  const slider = await screen.findByLabelText('Logo scale (120%)')
+  fireEvent.change(slider, { target: { value: '1.75' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1.75 })))
+  await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+  expect(screen.getByLabelText('Logo scale (120%)')).toHaveValue('1.2')
+  fireEvent.change(screen.getByLabelText(/Logo scale/), { target: { value: '1.75' } })
+  await userEvent.click(screen.getByRole('button', { name: /^Save$/ }))
+  await waitFor(() => expect(assemblies['1'].logo_scale).toBe(1.75))
+  expect(useAssembly.getState().logoScales['1']).toBeUndefined()
+  await userEvent.selectOptions(screen.getByLabelText('Level'), '1')
+  expect(screen.queryByLabelText(/Logo scale/)).not.toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Level'), '0')
+  await userEvent.click(screen.getByRole('button', { name: 'Reset logo scale' }))
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1 })))
+})
+
+test('a new C0 card saves its chosen logo scale on creation', async () => {
+  const router = mount('/assemble/cards/new?faction=1&tab=combat')
+  await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
+  fireEvent.change(screen.getByLabelText(/Logo scale/), { target: { value: '0.8' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
+  expect(assemblies['9'].logo_scale).toBe(0.8)
+  await waitFor(() => expect(useAssembly.getState().logoScales['-1']).toBeUndefined())
+})
+
+test('template image checkboxes select for deletion without changing the chosen template', async () => {
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
+  const image = await within(dialog).findByRole('checkbox', { name: 'Select Generated art' })
+  const original = structuredClone(templates)
+  await userEvent.click(image)
+  await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Select Batch art' }))
+  expect(templates).toEqual(original)
+  expect(within(dialog).getByRole('button', { name: 'Delete Generated art' })).toHaveClass('absolute', 'top-2', 'right-2')
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Delete selected (2)' }))
+  const confirmation = screen.getByRole('dialog', { name: 'Delete selected images?' })
+  expect(confirmation).toHaveTextContent('Permanently delete 2 selected images')
+  await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+  expect(image).toBeChecked()
 })

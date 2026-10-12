@@ -77,3 +77,16 @@ test('level 0 cards have no level or resource price, even without a logo', async
   await renderCard({ card: { ...card, level: 1, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
   expect(ctx.fillText.mock.calls.some(call => call[0] === '7')).toBe(true)
 })
+
+
+test('C0 logo scale changes size around the badge center with the same aspect ratio', async () => {
+  const layout = defaultLayout()
+  await renderCard({ card, layout, imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo', logoScale: 1 })
+  const normal = ctx.drawImage.mock.calls.at(-1)!.slice(1) as number[]
+  await renderCard({ card, layout, imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo', logoScale: 1.75 })
+  const scaled = ctx.drawImage.mock.calls.at(-1)!.slice(1) as number[]
+  expect(scaled[2]).toBeCloseTo(normal[2] * 1.75)
+  expect(scaled[3]).toBeCloseTo(normal[3] * 1.75)
+  expect(scaled[0] + scaled[2] / 2).toBeCloseTo(normal[0] + normal[2] / 2)
+  expect(scaled[1] + scaled[3] / 2).toBeCloseTo(normal[1] + normal[3] / 2)
+})
