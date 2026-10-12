@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 import type { ComponentType } from 'react'
-import { FactionsIcon, CardTypesIcon, LabIcon, TestGenIcon, GalleryIcon, BatchIcon, SettingsIcon, CogMechanicumIcon } from './icons'
+import { FactionsIcon, CardTypesIcon, LabIcon, GalleryIcon, BatchIcon, SettingsIcon } from './icons'
+
+import { workspaceLink, type WorkspaceMode } from './workspaceMode'
 
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
-  { to: '/factions', label: 'Factions', Icon: FactionsIcon },
+  { to: '/assemble', label: 'Assemble', Icon: CardTypesIcon },
   { to: '/cards', label: 'Cards', Icon: CardTypesIcon },
+  { to: '/factions', label: 'Factions', Icon: FactionsIcon },
   { to: '/card-types', label: 'Card Types', Icon: CardTypesIcon },
   { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
-  { to: '/test-generation', label: 'Test Generation', Icon: TestGenIcon },
   { to: '/generations', label: 'Generations', Icon: GalleryIcon },
   { to: '/batches', label: 'Batch Processing', Icon: BatchIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
@@ -24,22 +26,21 @@ const LITANIES = [
   'Measure twice, generate once.',
 ]
 
-export function Sidebar() {
+export function Sidebar({ mode }: { mode: WorkspaceMode }) {
+  const visible = items.filter(item => mode === 'library'
+    ? ['/assemble', '/cards', '/factions', '/card-types'].includes(item.to)
+    : !['/assemble', '/cards'].includes(item.to))
   const [litany] = useState(() => LITANIES[Math.floor(Math.random() * LITANIES.length)])
   return (
-    <aside className="relative flex w-60 flex-none flex-col gap-5 border-r border-accent/30 bg-[linear-gradient(180deg,#2a0f0b_0%,#140a08_35%,#0b0706_100%)] p-4 shadow-[inset_-1px_0_0_rgba(0,0,0,0.6)]">
-      <div className="flex flex-col items-center gap-1.5 border-b border-accent/25 px-1 pt-2 pb-4 text-center">
-        <CogMechanicumIcon className="h-14 w-14 text-accent drop-shadow-[0_0_10px_rgba(208,139,62,0.35)]" />
-        <div className="font-display text-[17px] font-bold uppercase tracking-[0.18em] text-accent-300">Card Forge</div>
-        <div className="font-mono text-[9.5px] tracking-[0.2em] text-phosphor/70" title="FORGE in binary">01000110 01001111</div>
-      </div>
-      <nav className="flex flex-col gap-0.5">
-        {items.map(({ to, label, Icon }) => (
+    <aside className="relative flex w-full flex-none flex-col gap-3 border-b md:w-60 md:gap-5 md:border-r md:border-b-0 border-accent/30 bg-[linear-gradient(180deg,#2a0f0b_0%,#140a08_35%,#0b0706_100%)] p-4 shadow-[inset_-1px_0_0_rgba(0,0,0,0.6)]">
+      <div className="hidden px-3 font-mono text-[10px] uppercase tracking-[0.18em] text-phosphor/70 md:block">{mode === 'library' ? 'Assemble Library' : 'AI Image Generation'}</div>
+      <nav aria-label="Sections" className="flex gap-0.5 overflow-x-auto md:flex-col">
+        {visible.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
-            to={to}
+            to={workspaceLink(to, mode)}
             className={({ isActive }) =>
-              `flex items-center gap-3 border-l-2 px-3 py-2 font-display text-[13px] tracking-wider no-underline transition-colors ${
+              `flex shrink-0 items-center whitespace-nowrap gap-3 border-l-2 px-3 py-2 font-display text-[13px] tracking-wider no-underline transition-colors ${
                 isActive
                   ? 'border-mars bg-gradient-to-r from-mars-700/60 to-transparent font-semibold text-accent-300'
                   : 'border-transparent text-ink/55 hover:border-accent/40 hover:text-ink/85'
@@ -51,7 +52,7 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="mt-auto flex flex-col gap-3 text-center">
+      <div className="mt-auto hidden flex-col md:flex gap-3 text-center">
         <div>
           <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.25em] text-phosphor/70">&gt; Litany of the day</div>
           <p className="m-0 font-display text-[12px] italic leading-snug text-ink/55">{litany}</p>

@@ -49,12 +49,18 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/factions/{id}/revisions", factions.Revisions)
 			r.Post("/factions/{id}/revisions/{revID}/restore", factions.Restore)
 
-			cards := &CardsHandler{Store: cardsStore, Factions: factionsStore}
+			cards := &CardsHandler{Store: cardsStore, Factions: factionsStore, DataDir: dataDir}
 			r.Get("/cards", cards.List)
 			r.Get("/cards/{id}", cards.Get)
 			r.Post("/cards", cards.Create)
 			r.Put("/cards/{id}", cards.Update)
 			r.Post("/cards/import", cards.Import)
+			r.Get("/assembly-layout", cards.GetAssemblyLayout)
+			r.Put("/assembly-layout", cards.SaveAssemblyLayout)
+			r.Get("/cards/{id}/assembly", cards.GetAssembly)
+			r.Put("/cards/{id}/assembly", cards.SaveAssembly)
+			r.Post("/cards/{id}/artwork", cards.UploadArtwork)
+			r.Get("/cards/{id}/artwork", cards.Artwork)
 
 			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}
 			r.Post("/factions/generate-description", jobsH.GenerateDescription)

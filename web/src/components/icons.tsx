@@ -2,8 +2,10 @@ type IconProps = { className?: string }
 
 export function FactionsIcon({ className }: IconProps) {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className}>
-      <rect x="2" y="2" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.5" />
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <path d="M4 2V16M4 3H14V10L9 8L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 4.5L9.6 5.7L11 6L9.6 6.3L9 7.5L8.4 6.3L7 6L8.4 5.7Z" fill="currentColor" />
+      <path d="M2.5 16H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   )
 }

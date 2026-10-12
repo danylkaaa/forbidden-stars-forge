@@ -36,7 +36,7 @@ test('sidebar renders all five section links', () => {
     ),
   )
   renderAt('/settings')
-  for (const label of ['Factions', 'Card Types', 'Faction Lab', 'Test Generation', 'Generations', 'Batch Processing', 'Settings']) {
+  for (const label of ['Factions', 'Card Types', 'Faction Lab', 'Generations', 'Batch Processing', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
 })
@@ -54,4 +54,16 @@ test('root redirects to factions', () => {
   server.use(http.get('/api/factions', () => HttpResponse.json([])))
   renderAt('/')
   expect(screen.getByRole('link', { name: 'Factions' })).toHaveAttribute('aria-current', 'page')
+})
+
+
+test('old Test Generation links redirect to Faction Lab', () => {
+  server.use(
+    http.get('/api/factions', () => HttpResponse.json([])),
+    http.get('/api/card-types', () => HttpResponse.json([])),
+    http.get('/api/generations', () => HttpResponse.json([])),
+  )
+  renderAt('/test-generation')
+  expect(screen.getByRole('link', { name: 'Faction Lab' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.queryByRole('link', { name: 'Test Generation' })).not.toBeInTheDocument()
 })

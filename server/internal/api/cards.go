@@ -16,6 +16,7 @@ import (
 type CardsHandler struct {
 	Store    *store.CardsStore
 	Factions *store.FactionsStore
+	DataDir  string
 }
 type cardIssue struct {
 	Index   *int   `json:"index,omitempty"`

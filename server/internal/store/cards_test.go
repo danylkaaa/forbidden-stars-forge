@@ -135,7 +135,7 @@ func TestCardsMigrationPreservesExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range names {
-		if strings.Contains(name, "0015_") {
+		if strings.Compare(filepath.Base(name), "0015_") >= 0 {
 			continue
 		}
 		data, _ := migrationsFS.ReadFile(name)

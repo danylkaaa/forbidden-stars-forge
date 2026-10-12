@@ -109,7 +109,7 @@ test('blank numeric input prevents Save; server failure preserves editable draft
 })
 test('no factions disables creation and offers the Factions link', async () => {
   server.use(http.get('/api/factions', () => HttpResponse.json([]))); renderPage()
-  expect(await screen.findByRole('link', { name: 'Open Factions' })).toHaveAttribute('href', '/factions')
+  expect(await screen.findByRole('link', { name: 'Open Factions' })).toHaveAttribute('href', '/factions?mode=library')
   expect(screen.getByRole('button', { name: 'New Card' })).toBeDisabled(); expect(screen.getByRole('button', { name: 'Import JSON' })).toBeDisabled()
 })
 test('dirty close cancellation preserves draft, discard closes, clean close needs no confirmation', async () => {

@@ -10,7 +10,7 @@ export function useDoneBatchItems() {
   return useQuery({ queryKey: ['batch-items'], queryFn: () => apiGet<GalleryBatchItem[]>('/api/batch-items') })
 }
 
-// One image on the Generations page, from either Test Generation or a batch.
+// One image on the Generations page, from either Faction Lab or a batch.
 export type GalleryEntry = {
   key: string
   name: string

@@ -102,7 +102,7 @@ export function generationImageUrl(g: Generation): string | null {
 
 export { formatCost, formatDuration } from '../../lib/format'
 
-// Claude edits the full image prompt (the Test Generation override),
+// Claude edits the full image prompt (the Faction Lab override),
 // following the whole conversation.
 export function startPromptAssist(currentPrompt: string, messages: ChatMessage[]): Promise<{ job_id: string; status: string }> {
   return apiSend('POST', '/api/generate/prompt-assist', { current_prompt: currentPrompt, messages })

@@ -41,7 +41,7 @@ export default function CardsPage() {
     </div>
     {factions.isLoading && <p>Loading factions…</p>}
     {factions.error && <p role="alert" className="text-danger">{factions.error.message}</p>}
-    {factions.data && !factions.data.length && <p>Create a faction before adding cards. <Link to="/factions" className="text-accent">Open Factions</Link></p>}
+    {factions.data && !factions.data.length && <p>Create a faction before adding cards. <Link to="/factions?mode=library" className="text-accent">Open Factions</Link></p>}
     <div className="flex flex-wrap gap-3">
       <label className="text-sm">Filter by faction<select aria-label="Filter by faction" className={`${inputClass} mt-1`} value={factionId} onChange={e => setFactionId(e.target.value)}><option value="">All factions</option>{factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
       <label className="text-sm">Filter by category<select aria-label="Filter by category" className={`${inputClass} mt-1`} value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{CATEGORIES.map(c => <option key={c} value={c}>{LABELS[c]}</option>)}</select></label>

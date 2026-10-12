@@ -16,7 +16,7 @@ import { filtersToParams, parseFilters, useDoneBatchItems, type GalleryEntry, ty
 
 const PER_PAGE_OPTIONS = [24, 48, 96]
 
-// Every finished image — Test Generation and batches — in one filterable
+// Every finished image — Faction Lab and batches — in one filterable
 // grid. Filters are kept in the URL so other pages can deep-link here.
 export default function GenerationsPage() {
   const [params, setParams] = useSearchParams()
@@ -97,7 +97,7 @@ export default function GenerationsPage() {
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Generations</h1>
-          <p className="m-0 text-sm text-ink/60">Every finished image from Test Generation and batches</p>
+          <p className="m-0 text-sm text-ink/60">Every finished image from Faction Lab and batches</p>
         </div>
         <span className="text-sm text-ink/60">{filtering ? 'Filtered total' : 'Total'}: {formatCost(total)}</span>
       </div>
@@ -121,7 +121,7 @@ export default function GenerationsPage() {
         <MultiSelect label="Card type" selected={cardTypeIds} onChange={(next) => setFilters({ cardTypeIds: next })}
           options={(cardTypes ?? []).map((c) => ({ value: c.id, label: c.name }))} />
         <MultiSelect label="Source" selected={sources} onChange={(next) => setFilters({ sources: next })}
-          options={[{ value: 'test' as const, label: 'Test Generation' }, { value: 'batch' as const, label: 'Batch' }]} />
+          options={[{ value: 'test' as const, label: 'Faction Lab' }, { value: 'batch' as const, label: 'Batch' }]} />
         <MultiSelect label="Mode" selected={modes} onChange={(next) => setFilters({ modes: next })}
           options={[{ value: 'draft' as const, label: 'Draft' }, { value: 'final' as const, label: 'Final' }]} />
         {filtering && (
@@ -166,7 +166,7 @@ export default function GenerationsPage() {
                   {e.source === 'batch' && e.batchId !== undefined ? (
                     <Link to={`/batches/${e.batchId}`} className="text-[11px] text-accent no-underline hover:underline">batch #{e.batchId}</Link>
                   ) : (
-                    <span className="text-[11px] text-ink/45">test</span>
+                    <span className="text-[11px] text-ink/45">lab</span>
                   )}
                   {e.model && <span className="truncate font-mono text-[10.5px] text-ink/45">{e.model}</span>}
                 </div>

@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { apiSend } from './api'
 
-// Which image a favorite toggle targets: a Test Generation or a batch item.
+// Which image a favorite toggle targets: a Faction Lab or a batch item.
 export type ImageRef = { kind: 'generation'; id: number } | { kind: 'batch-item'; batchId: number; itemId: number }
 
 function favoriteUrl(ref: ImageRef): string {
