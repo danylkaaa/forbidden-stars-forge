@@ -1,7 +1,8 @@
 import { usePreviewLayers } from '../lib/previewLayers'
 
-// UI for the preview layers (overlay + template-as-mask); state lives in
-// lib/previewLayers so every preview shares it.
+// UI for the template-as-mask preview layer; state lives in
+// lib/previewLayers so every preview shares it. Card frames are checked
+// with the card preview instead (pages/assemble/QuickCardPreview).
 
 const pill = (on: boolean) =>
   `cursor-pointer rounded-full border px-3 py-1 text-xs font-medium ${
@@ -9,16 +10,11 @@ const pill = (on: boolean) =>
   }`
 
 // Toggle buttons (+ mask opacity slider) for whichever layers exist.
-export function LayerControls({ overlaySrc, maskSrc }: { overlaySrc?: string | null; maskSrc?: string | null }) {
-  const { overlay, mask, maskOpacity, set } = usePreviewLayers()
-  if (!overlaySrc && !maskSrc) return null
+export function LayerControls({ maskSrc }: { maskSrc?: string | null }) {
+  const { mask, maskOpacity, set } = usePreviewLayers()
+  if (!maskSrc) return null
   return (
     <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-      {overlaySrc && (
-        <button type="button" aria-pressed={overlay} onClick={() => set({ overlay: !overlay })} className={pill(overlay)}>
-          Overlay {overlay ? 'on' : 'off'}
-        </button>
-      )}
       {maskSrc && (
         <button type="button" aria-pressed={mask} onClick={() => set({ mask: !mask })} className={pill(mask)}>
           Mask {mask ? 'on' : 'off'}
@@ -42,16 +38,15 @@ export function LayerControls({ overlaySrc, maskSrc }: { overlaySrc?: string | n
 // fit="contain": fills its parent box; every layer is object-contain'ed in
 // the same box, so same-aspect layers stay aligned at any size.
 export function LayeredImage({
-  src, alt, overlaySrc, maskSrc, fit, imgClassName = '',
+  src, alt, maskSrc, fit, imgClassName = '',
 }: {
   src: string
   alt: string
-  overlaySrc?: string | null
   maskSrc?: string | null
   fit: 'natural' | 'contain'
   imgClassName?: string
 }) {
-  const { overlay, mask, maskOpacity } = usePreviewLayers()
+  const { mask, maskOpacity } = usePreviewLayers()
   const layer = fit === 'contain'
     ? 'pointer-events-none absolute inset-0 h-full w-full object-contain'
     : 'pointer-events-none absolute inset-0 h-full w-full rounded-md'
@@ -62,7 +57,6 @@ export function LayeredImage({
       {maskSrc && mask && (
         <img src={maskSrc} alt="" data-testid="mask" className={layer} style={{ opacity: maskOpacity }} />
       )}
-      {overlaySrc && overlay && <img src={overlaySrc} alt="" data-testid="overlay" className={layer} />}
     </div>
   )
 }

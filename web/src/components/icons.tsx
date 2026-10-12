@@ -1,20 +1,35 @@
 type IconProps = { className?: string }
 
+// Heraldic shield with a chevron: a faction's banner.
 export function FactionsIcon({ className }: IconProps) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
-      <path d="M4 2V16M4 3H14V10L9 8L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9 4.5L9.6 5.7L11 6L9.6 6.3L9 7.5L8.4 6.3L7 6L8.4 5.7Z" fill="currentColor" />
-      <path d="M2.5 16H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M9 1.8L15 4V8.5C15 12.2 12.5 14.9 9 16.2C5.5 14.9 3 12.2 3 8.5V4L9 1.8Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M5.8 7.5L9 10L12.2 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
+// A card template: title band, art window and text box.
 export function CardTypesIcon({ className }: IconProps) {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className}>
-      <rect x="2" y="3" width="14" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="10" width="14" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <rect x="3.5" y="1.5" width="11" height="15" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6 4.5H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="6" y="7" width="6" height="3.5" rx=".5" fill="currentColor" opacity=".55" />
+      <path d="M6 13H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// A fanned hand of cards: the card library.
+export function LibraryIcon({ className }: IconProps) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <rect x="2.2" y="4.2" width="7" height="10" rx="1.2" transform="rotate(-14 5.7 9.2)" stroke="currentColor" strokeWidth="1.3" opacity=".6" />
+      <rect x="8.8" y="4.2" width="7" height="10" rx="1.2" transform="rotate(14 12.3 9.2)" stroke="currentColor" strokeWidth="1.3" opacity=".6" />
+      <rect x="5.5" y="2.5" width="7" height="12" rx="1.2" fill="var(--color-bg)" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M7.5 5.5H10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   )
 }
@@ -115,6 +130,38 @@ export function CogMechanicumIcon({ className }: IconProps) {
         <rect x="31.25" y="15" width="1.5" height="32" opacity="0.55" />
       </g>
       <circle cx="39.5" cy="30" r="2.2" fill="var(--color-phosphor)" />
+    </svg>
+  )
+}
+
+export function GearIcon({ className }: IconProps) {
+  const teeth = Array.from({ length: 8 }, (_, i) => i * 45)
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      {teeth.map((deg) => <rect key={deg} x="8" y="1.5" width="2" height="3" rx=".5" fill="currentColor" transform={`rotate(${deg} 9 9)`} />)}
+      <circle cx="9" cy="9" r="5" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="9" cy="9" r="1.8" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+// Stacked layers: a subtype's overlay stack.
+export function LayersIcon({ className }: IconProps) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <path d="M9 2L16 5.8L9 9.6L2 5.8L9 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M2 9L9 12.8L16 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12.2L9 16L16 12.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity=".6" />
+    </svg>
+  )
+}
+
+// An isometric cube: open a 3D preview.
+export function CubeIcon({ className }: IconProps) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <path d="M9 1.8L15.5 5.4V12.6L9 16.2L2.5 12.6V5.4L9 1.8Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M2.5 5.4L9 9L15.5 5.4M9 9V16.2" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
     </svg>
   )
 }

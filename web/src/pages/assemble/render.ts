@@ -6,7 +6,7 @@ import { combatPanels } from './combatPanels'
 import headline from '../../fonts/Headline.woff2?url'
 import event from '../../fonts/EventFont.woff2?url'
 import symbols from '../../fonts/ForbiddenStars.woff2?url'
-import { LAYERS, LAYER_LABELS, textRuns, resourceToken, type CombatCard, type Layout, type Placement, type Run } from './model'
+import { ART_WINDOW, LAYERS, LAYER_LABELS, defaultLayout, textRuns, type CombatCard, type Layout, type Placement, type Run } from './model'
 
 let fonts: Promise<unknown> | undefined
 export function loadFonts() {
@@ -96,8 +96,7 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
   // Centre visible glyph bounds, including inline icons, rather than the font's em box.
   const top = p.y * h / 100 + (p.verticalAlign === 'center' ? Math.max(0, (p.height * h / 100 - textHeight) / 2) : 0)
   for (const [i, line] of lines.entries()) {
-    const lineWidth = line.reduce((total, atom) => total + atom.width, 0)
-    let x = p.x * w / 100 + (p.align === 'center' ? (p.width * w / 100 - lineWidth) / 2 : p.align === 'right' ? p.width * w / 100 - lineWidth : 0)
+    let x = p.x * w / 100
     for (const atom of line) {
       ctx.font = font(atom, size, family)
       paintRun(ctx, atom, x, top + ascent + i * lineHeight, size)
@@ -109,36 +108,61 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
 // The outlined square variants contain positive gun/shield/eagle shapes.
 // Clip away their square frame to get the white resource strip in the reference.
 // The inset follows the supplied font's 2048-unit glyph bounds.
-function paintResources(ctx: CanvasRenderingContext2D, glyph: string, count: number, p: Placement, w: number, h: number) {
-  const size = p.size * h / 100
+// Rows of the 759 px wide parchment textures that are decoration, not
+// writing space: background.png's top border (0–20) and foreground.png's
+// transparent strip (0–5) plus divider bar (6–17).
+function textureInsets(scale: number) {
+  return { background: 21 * scale, dividerTop: 6 * scale, foreground: 18 * scale }
+}
+// The resource column stacks guns, then shields, then morale.
+const RESOURCES = ['guns', 'shields', 'eagles'] as const
+const PLAIN_GLYPHS = { guns: '}', shields: '{', eagles: '<' }
+function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Placement, w: number, h: number) {
+  const size = p.size * h / 100, count = glyphs.length
   const x = p.x * w / 100, y = p.y * h / 100
   ctx.font = `${size}px CardSymbols`; ctx.fillStyle = p.color
-  for (let i = 0; i < count; i++) {
+  for (const [i, glyph] of glyphs.entries()) {
     const top = y + i * size * p.lineHeight
     ctx.save(); ctx.beginPath(); ctx.rect(x + size * .08, top + size * .04, size * .82, size * .82); ctx.clip()
     ctx.fillText(glyph, x, top + size * .82); ctx.restore()
   }
-  return count > 0 && ((count - 1) * size * p.lineHeight + size > p.height * h / 100 || size * .9 > p.width * w / 100 || x < 0 || y < 0 || x + size > w || y + (count - 1) * size * p.lineHeight + size > h)
+  // The column sizes itself from icon size and spacing; only the card edge limits it.
+  return count > 0 && (x < 0 || y < 0 || x + size > w || y + (count - 1) * size * p.lineHeight + size > h)
 }
-export type RenderInput = { card: CombatCard; layout: Layout; imageUrl: string; overlayUrl: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
-export async function renderCard({ card, layout, imageUrl, overlayUrl, artwork = defaultArtwork(), outputSize }: RenderInput): Promise<{ canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }> {
-  const [art, overlay, background, foreground, bottom] = await Promise.all([loadImage(imageUrl), overlayUrl ? loadImage(overlayUrl) : null, loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), loadFonts()])
+// Layers, bottom first: the card's artwork (positioned by `artwork` inside
+// ART_WINDOW), the faction template (generated image), overlays, panels, text.
+// The artwork only shows where the template is transparent.
+export type RenderInput = { card: CombatCard; layout: Layout; imageUrl: string; overlayUrl: string | null; overlayUrls?: string[]; logoUrl?: string | null; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
+export async function renderCard({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput): Promise<{ canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }> {
+  // A subtype's overlay stack (bottom first) replaces the card type overlay.
+  const stack = overlayUrls?.length ? overlayUrls : overlayUrl ? [overlayUrl] : []
+  const [template, overlays, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.level === 0 && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
   // Overlay dimensions define the finished card when supplied.
-  const w = overlay?.naturalWidth ?? outputSize?.width ?? art.naturalWidth
-  const h = overlay?.naturalHeight ?? outputSize?.height ?? art.naturalHeight
+  const overlay = overlays[0]
+  const w = overlay?.naturalWidth ?? outputSize?.width ?? template.naturalWidth
+  const h = overlay?.naturalHeight ?? outputSize?.height ?? template.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
-  const scale = Math.max(w / art.naturalWidth, h / art.naturalHeight) * artwork.scale
-  ctx.drawImage(art, (w - art.naturalWidth * scale) / 2 + artwork.x * w / 100, (h - art.naturalHeight * scale) / 2 + artwork.y * h / 100, art.naturalWidth * scale, art.naturalHeight * scale)
-  if (overlay) ctx.drawImage(overlay, 0, 0, w, h)
-  const familyFor = (p: Placement, layer: string) => ({ rules: 'CardRules', event: 'CardEvent', headline: 'CardHeadline' }[p.font ?? (layer === 'name' || layer === 'level' || layer === 'resource_cost' ? 'headline' : 'rules')])
+  if (art) {
+    const wx = ART_WINDOW.x * w / 100, wy = ART_WINDOW.y * h / 100, ww = ART_WINDOW.width * w / 100, wh = ART_WINDOW.height * h / 100
+    const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
+    ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip()
+    ctx.drawImage(art, wx + (ww - art.naturalWidth * scale) / 2 + artwork.x * w / 100, wy + (wh - art.naturalHeight * scale) / 2 + artwork.y * h / 100, art.naturalWidth * scale, art.naturalHeight * scale)
+    ctx.restore()
+  }
+  const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
+  ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
+  for (const layer of overlays) ctx.drawImage(layer, 0, 0, w, h)
+  // Fonts are fixed: headline for the title and numbers, rules font for text.
+  const familyFor = (_p: Placement, layer: string) => layer === 'name' || layer === 'level' || layer === 'resource_cost' ? 'CardHeadline' : 'CardRules'
   const upperBlock = measureBlock(ctx, card.upper_text, layout.upper_text, familyFor(layout.upper_text, 'upper_text'), w, h)
   const lowerBlock = measureBlock(ctx, card.lower_text, layout.lower_text, familyFor(layout.lower_text, 'lower_text'), w, h)
   const bottomHeight = bottom.naturalHeight * w / bottom.naturalWidth
   const panels = combatPanels(w, h, bottomHeight,
     { text: card.upper_text, height: upperBlock.height, placement: layout.upper_text },
-    { text: card.lower_text, height: lowerBlock.height, placement: layout.lower_text })
+    { text: card.lower_text, height: lowerBlock.height, placement: layout.lower_text },
+    textureInsets(w / background.naturalWidth))
   // Preserve each texture's aspect ratio; extend it vertically only when text
   // needs more parchment than the source image supplies. The canvas crops it.
   if (panels.backgroundY !== null) ctx.drawImage(background, 0, panels.backgroundY, w, Math.max(background.naturalHeight * w / background.naturalWidth, h - panels.backgroundY))
@@ -147,23 +171,31 @@ export async function renderCard({ card, layout, imageUrl, overlayUrl, artwork =
     upper_text: { ...layout.upper_text, y: panels.upperY / h * 100, height: Math.max(layout.upper_text.height, upperBlock.height / h * 100) },
     lower_text: { ...layout.lower_text, y: panels.lowerY / h * 100, height: Math.max(layout.lower_text.height, lowerBlock.height / h * 100) },
   }
-  const paintLayout = { ...layout, ...textPositions }
-  const repeated = (token: string, n: number) => n <= 12 ? Array.from({ length: n }, () => token).join('\n') : `${token} × ${n}`
-  const texts = { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), costIcon: '⚙',
-    guns: repeated(`[${resourceToken('guns', layout.guns.iconStyle)}]`, card.guns), shields: repeated(`[${resourceToken('shields', layout.shields.iconStyle)}]`, card.shields), eagles: repeated(`[${resourceToken('eagles', layout.eagles.iconStyle)}]`, card.eagles), upper_text: card.upper_text, lower_text: card.lower_text }
+  // Colours are fixed per layer, whatever an older saved layout says.
+  const colors = defaultLayout()
+  const paintLayout = Object.fromEntries(LAYERS.map(key => [key, { ...layout, ...textPositions }[key]]).map(([key, p]) => [key, { ...(p as Placement), color: colors[key as typeof LAYERS[number]].color }])) as Layout
+  const texts = { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.upper_text, lower_text: card.lower_text }
   const warnings: string[] = []
   if (panels.overflow) warnings.push('Rules text extends beyond the parchment area. Reduce its size or adjust its position.')
   if (panels.overlap) warnings.push('Upper text overlaps the lower panel. Adjust the manual text positions.')
   for (const layer of LAYERS) {
+    // Level 0 cards have no level requirement and no resource price; the
+    // faction logo takes the level badge.
+    if (layer === 'logo' || (card.level === 0 && (layer === 'level' || layer === 'resource_cost'))) continue
     const p = paintLayout[layer]
     const family = familyFor(p, layer)
-    const resource = layer === 'guns' || layer === 'shields' || layer === 'eagles' ? layer : null
-    const overflow = resource && p.iconStyle === 'plain' && card[resource] <= 12
-      ? paintResources(ctx, { guns: '}', shields: '{', eagles: '<' }[resource], card[resource], p, w, h)
+    const stack = RESOURCES.flatMap(r => Array.from({ length: card[r] }, () => PLAIN_GLYPHS[r]))
+    const overflow = layer === 'resources'
+      ? paintResources(ctx, stack, p, w, h)
       : paintText(ctx, texts[layer], p, family, w, h)
     if (overflow) warnings.push(`${LAYER_LABELS[layer]} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
   ctx.drawImage(bottom, 0, panels.bottomY, w, bottomHeight)
+  if (logo) {
+    const box = layout.logo, bw = box.width * w / 100, bh = box.height * h / 100
+    const fit = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight)
+    ctx.drawImage(logo, box.x * w / 100 + (bw - logo.naturalWidth * fit) / 2, box.y * h / 100 + (bh - logo.naturalHeight * fit) / 2, logo.naturalWidth * fit, logo.naturalHeight * fit)
+  }
   return { canvas, warnings, textPositions }
 }
 export function pngBlob(canvas: HTMLCanvasElement): Promise<Blob> {

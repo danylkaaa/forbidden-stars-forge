@@ -2,7 +2,7 @@ export type WorkspaceMode = 'generation' | 'library'
 
 // Shared management pages carry the mode in the URL so reload and Back retain it.
 export function workspaceMode(pathname: string, search: string): WorkspaceMode {
-  if (pathname === '/assemble' || pathname === '/cards') return 'library'
+  if (pathname === '/assemble' || pathname.startsWith('/assemble/') || pathname === '/cards' || pathname === '/subtypes') return 'library'
   if (['/factions', '/card-types'].includes(pathname) && new URLSearchParams(search).get('mode') === 'library') return 'library'
   return 'generation'
 }

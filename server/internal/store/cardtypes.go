@@ -34,7 +34,7 @@ func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 }
 
 func (s *CardTypesStore) List() ([]CardType, error) {
-	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY name ASC")
+	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY CASE name WHEN 'combat' THEN 0 WHEN 'events' THEN 1 WHEN 'upgrade' THEN 2 WHEN 'combat back' THEN 3 WHEN 'events back' THEN 4 WHEN 'upgrade back' THEN 5 ELSE 6 END, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -139,4 +139,49 @@ func (s *CardTypesStore) Delete(id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// BuiltinCardTypes always exist: one per card category (combat, events,
+// upgrades). They are created on startup and cannot be deleted or renamed.
+var BuiltinCardTypes = []string{"combat", "events", "upgrade", "combat back", "events back", "upgrade back"}
+
+// Back card types start with a prompt prefilled for a deck's card back; the
+// server also gives them a plain chroma template (see api.EnsureBackTemplates).
+var backDecks = map[string]string{"combat back": "combat", "events back": "event", "upgrade back": "upgrade"}
+
+const backConstraints = "The whole green canvas is the card back: replace all of it. Keep the exact canvas dimensions and aspect ratio. No text, letters or numbers. Keep a clean, even margin so the design survives card trimming."
+
+func backDescription(deck string) string {
+	return "Create the back of a Warhammer 40K board-game " + deck + " card for this faction. A symmetrical, ornate design that fills the whole card: a central faction emblem framed by an ornamental border, in the faction's colours and materials. It must read clearly at small size and be identical on every " + deck + " card of the deck. Do not reuse elements of the card front (no title bar, resource column or text panels)."
+}
+
+// IsBackCardType reports whether a card type is one of the built-in backs.
+func IsBackCardType(name string) bool { _, ok := backDecks[name]; return ok }
+
+func IsBuiltinCardType(name string) bool {
+	for _, b := range BuiltinCardTypes {
+		if b == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *CardTypesStore) EnsureBuiltins() error {
+	for _, name := range BuiltinCardTypes {
+		description, constraints := "", ""
+		if deck, ok := backDecks[name]; ok {
+			description, constraints = backDescription(deck), backConstraints
+		}
+		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints) VALUES(?,?,?)`, name, description, constraints); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetTemplatePath gives a card type a template without touching its text.
+func (s *CardTypesStore) SetTemplatePath(id int64, path string) error {
+	_, err := s.db.Exec(`UPDATE card_types SET template_path=?, openai_file_id=NULL, updated_at=datetime('now') WHERE id=?`, path, id)
+	return err
 }

@@ -58,6 +58,7 @@ func (h *CardsHandler) SaveAssembly(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		ImageKey  string                 `json:"image_key"`
 		OverlayID string                 `json:"overlay_id"`
+		SubtypeID int64                  `json:"subtype_id"`
 		Transform store.ArtworkTransform `json:"transform"`
 		Layout    json.RawMessage        `json:"layout"`
 	}
@@ -70,7 +71,7 @@ func (h *CardsHandler) SaveAssembly(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "expected one JSON value")
 		return
 	}
-	a = store.CardAssembly{CardID: id, ImageKey: in.ImageKey, OverlayID: in.OverlayID, Transform: in.Transform, Layout: in.Layout}
+	a = store.CardAssembly{CardID: id, ImageKey: in.ImageKey, OverlayID: in.OverlayID, SubtypeID: in.SubtypeID, Transform: in.Transform, Layout: in.Layout}
 	if err := store.ValidateAssembly(a); err != nil {
 		writeError(w, 400, err.Error())
 		return

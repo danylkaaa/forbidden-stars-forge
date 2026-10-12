@@ -7,6 +7,8 @@ import { server } from '../../test/msw'
 import { useFactionLab } from './store'
 import { usePreviewLayers } from '../../lib/previewLayers'
 import FactionLabPage from './FactionLabPage'
+import { renderCard } from '../assemble/render'
+vi.mock('../assemble/render', () => ({ renderCard: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
 
 const faction = {
   id: 1, name: 'Sisters', dlc: 'Symphony of War', primary_color: 'black', texture: 'ceramite',
@@ -38,7 +40,7 @@ beforeEach(() => {
   generated = []
   gens = []
   ctSaved = false
-  usePreviewLayers.setState({ overlay: true, mask: false, maskOpacity: 0.5 })
+  usePreviewLayers.setState({ mask: false, maskOpacity: 0.5 })
   useFactionLab.setState({ factionId: null, cardTypeId: 1, mode: 'draft', model: '', drafts: {}, snapshots: {}, ctDrafts: {}, ctSnapshots: {} })
   server.use(
     http.get('/api/factions', () => HttpResponse.json([faction])),
@@ -136,13 +138,11 @@ test('a new generation becomes the shown run', async () => {
   expect(await screen.findByText('generating…')).toBeInTheDocument()
 })
 
-test('result preview has inline overlay and mask controls', async () => {
+test('result preview has an inline mask control and no overlay layer', async () => {
   gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
   renderAt()
   await screen.findByRole('button', { name: 'Open Sisters × combat #41' })
-  expect(screen.getByTestId('overlay')).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Overlay on' }))
-  expect(screen.queryByTestId('overlay')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Overlay/ })).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Mask off' }))
   expect(screen.getByTestId('mask').getAttribute('src')).toMatch(/^\/api\/card-types\/1\/template/)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // toggles don't open the lightbox
@@ -165,4 +165,22 @@ test('card type tab: unsaved constraints feed the prompt and the snapshot; save 
 
   await userEvent.click(screen.getByRole('button', { name: 'Save to card type' }))
   await waitFor(() => expect(ctSaved).toBe(true))
+})
+
+test('a finished run can be previewed as a card with an existing card of the faction', async () => {
+  vi.mocked(renderCard).mockReset().mockImplementation(async () => ({ canvas: document.createElement('canvas'), warnings: [], textPositions: {} as never }))
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null)
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  server.use(
+    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', lower_text: '', created_at: '', updated_at: '' }])),
+    http.get('/api/cards/7/assembly', () => HttpResponse.json({ image_key: 'upload', image_url: '/api/cards/7/artwork?v=a', overlay_id: 'auto', subtype_id: 0, transform: { scale: 1.5, x: 3, y: 0 }, layout: {} })),
+    http.get('/api/card-type-layouts', () => HttpResponse.json([])),
+    http.get('/api/subtypes', () => HttpResponse.json([])),
+    http.get('/api/faction-logos', () => HttpResponse.json([])),
+  )
+  renderAt()
+  await userEvent.click(await screen.findByRole('tab', { name: 'Card preview' }))
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ imageUrl: '/api/generations/41/image', card: expect.objectContaining({ name: 'Righteous Fury' }) })))
+  await userEvent.selectOptions(screen.getByLabelText('Preview with card'), '7')
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Purge' }), artworkUrl: '/api/cards/7/artwork?v=a', artwork: { scale: 1.5, x: 3, y: 0 } })))
 })

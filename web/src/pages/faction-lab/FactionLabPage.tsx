@@ -11,6 +11,7 @@ import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
+import { QuickCardPreview } from '../assemble/QuickCardPreview'
 import { Tag } from '../../components/Tag'
 import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
@@ -53,11 +54,16 @@ export default function FactionLabPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // ?faction=<id> (from the Factions page) picks the faction.
+  // ?faction=<id> (from the Factions page) picks the faction; the Assemble
+  // library also passes ?card_type=<id>&generation=<id> to open its template.
   const paramFaction = Number(params.get('faction'))
+  const paramCardType = Number(params.get('card_type'))
+  const paramGeneration = Number(params.get('generation'))
   useEffect(() => {
     if (paramFaction > 0) useFactionLab.getState().set({ factionId: paramFaction })
-  }, [paramFaction])
+    if (paramCardType > 0) useFactionLab.getState().set({ cardTypeId: paramCardType })
+    if (paramGeneration > 0) setSelectedId(paramGeneration)
+  }, [paramFaction, paramCardType, paramGeneration])
 
   const faction = factions?.find((f) => f.id === lab.factionId) ?? null
   const cardType = cardTypes?.find((c) => c.id === lab.cardTypeId) ?? null
@@ -388,21 +394,32 @@ export default function FactionLabPage() {
 }
 
 // The selected run, as large as the column allows.
-function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields, onEdited }: {
-  gen: Generation; alt: string; overlaySrc: string | null; maskSrc: string | null; label: string | null
+function ResultView({ gen, alt, maskSrc, label, onUseFields, onEdited }: {
+  gen: Generation; alt: string; maskSrc: string | null; label: string | null
   onUseFields?: () => void; onEdited: (g: Generation) => void
 }) {
   const pending = gen.status === 'pending'
   const elapsed = useElapsedMs(gen.created_at, pending)
   const imageUrl = gen.status === 'done' ? `/api/generations/${gen.id}/image` : null
+  // Quick check of the image as a finished card, with an existing card's
+  // text and artwork (or the demo card).
+  const [asCard, setAsCard] = useState(false)
+  const [previewCardId, setPreviewCardId] = useState(0)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {imageUrl && <LayerControls overlaySrc={overlaySrc} maskSrc={maskSrc} />}
+      {imageUrl && <div className="flex flex-wrap items-center gap-2">
+        <div role="tablist" aria-label="Result view" className="inline-flex overflow-hidden rounded-md border border-divider text-xs">
+          {([['Image', false], ['Card preview', true]] as const).map(([name, value]) => <button key={name} type="button" role="tab" aria-selected={asCard === value} onClick={() => setAsCard(value)}
+            className={`cursor-pointer border-0 px-2.5 py-1 ${asCard === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
+        </div>
+        {!asCard && <LayerControls maskSrc={maskSrc} />}
+      </div>}
+      {imageUrl && asCard ? <QuickCardPreview imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={gen.faction_id} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            <LayeredImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} fit="contain" />
+            <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>
@@ -415,7 +432,7 @@ function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields, onEdite
             ) : gen.error || 'failed'}
           </div>
         )}
-      </div>
+      </div>}
       <div className="flex items-center gap-1.5">
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink/80" title={gen.name}>
           {gen.name}{gen.parent_name && <EditOf gen={gen} />}

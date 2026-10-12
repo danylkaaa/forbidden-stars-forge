@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { ZoomableImage } from './ImageLightbox'
 import { usePreviewLayers } from '../lib/previewLayers'
 
-beforeEach(() => usePreviewLayers.setState({ overlay: true, mask: false, maskOpacity: 0.5 }))
+beforeEach(() => usePreviewLayers.setState({ mask: false, maskOpacity: 0.5 }))
 
 function renderThumb() {
   render(
@@ -35,32 +35,13 @@ test('backdrop and close button close the popup, clicking the image does not', a
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
-test('overlay toggle lays the overlay over the image and is remembered', async () => {
-  render(
-    <ZoomableImage src="/img.png" alt="Card" overlaySrc="/overlay.png">
-      <img src="/img.png" alt="thumb" />
-    </ZoomableImage>,
-  )
-  await userEvent.click(screen.getByRole('button', { name: 'Open Card' }))
-  expect(screen.getByTestId('overlay')).toHaveAttribute('src', '/overlay.png')
-
-  await userEvent.click(screen.getByRole('button', { name: 'Overlay on' }))
-  expect(screen.queryByTestId('overlay')).not.toBeInTheDocument()
-  expect(screen.getByRole('dialog')).toBeInTheDocument() // toggling doesn't close
-
-  await userEvent.keyboard('{Escape}')
-  await userEvent.click(screen.getByRole('button', { name: 'Open Card' }))
-  expect(screen.getByRole('button', { name: 'Overlay off' })).toBeInTheDocument()
-  expect(screen.queryByTestId('overlay')).not.toBeInTheDocument()
-})
-
-test('no overlay toggle without an overlay', async () => {
+test('there is no overlay layer any more; card preview replaces it', async () => {
   renderThumb()
   await userEvent.click(screen.getByRole('button', { name: 'Open Tau × combat' }))
   expect(screen.queryByRole('button', { name: /Overlay/ })).not.toBeInTheDocument()
 })
 
-test('download saves the raw image; with the overlay on, the label says it includes the overlay', async () => {
+test('download saves the raw image', async () => {
   server.use(http.get('/img.png', () => new HttpResponse(new Uint8Array([137, 80, 78, 71]), { headers: { 'Content-Type': 'image/png' } })))
   const created: Blob[] = []
   const origCreate = URL.createObjectURL
@@ -84,21 +65,9 @@ test('download saves the raw image; with the overlay on, the label says it inclu
   }
 })
 
-test('download label reflects the overlay toggle', async () => {
-  render(
-    <ZoomableImage src="/img.png" alt="Card" overlaySrc="/overlay.png">
-      <img src="/img.png" alt="thumb" />
-    </ZoomableImage>,
-  )
-  await userEvent.click(screen.getByRole('button', { name: 'Open Card' }))
-  expect(screen.getByRole('button', { name: 'Download (with overlay)' })).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Overlay on' }))
-  expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
-})
-
 test('mask layer shows the template at adjustable opacity', async () => {
   render(
-    <ZoomableImage src="/img.png" alt="Card" overlaySrc="/overlay.png" maskSrc="/template.png">
+    <ZoomableImage src="/img.png" alt="Card" maskSrc="/template.png">
       <img src="/img.png" alt="thumb" />
     </ZoomableImage>,
   )

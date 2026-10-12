@@ -14,6 +14,11 @@ export type CardType = {
   updated_at: string
 }
 
+// One per card category; the server creates them on startup and refuses to
+// delete or rename them.
+export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'combat back', 'events back', 'upgrade back'] as const
+export const isBuiltinCardType = (name: string) => (BUILTIN_CARD_TYPES as readonly string[]).includes(name)
+
 export function useCardTypes() {
   return useQuery({ queryKey: ['card-types'], queryFn: () => apiGet<CardType[]>('/api/card-types') })
 }
@@ -63,24 +68,7 @@ export function startCardTypeAssist(body: {
   return apiSend('POST', '/api/card-types/assist', body)
 }
 
-export function uploadOverlay(id: number, file: File): Promise<CardType> {
-  const form = new FormData()
-  form.append('overlay', file)
-  return apiSendForm<CardType>('PUT', `/api/card-types/${id}/overlay`, form)
-}
-
-export function deleteOverlay(id: number): Promise<CardType> {
-  return apiSend<CardType>('DELETE', `/api/card-types/${id}/overlay`, undefined)
-}
-
-// The path changes on every upload, so it doubles as a cache-buster.
-export function overlayUrl(ct: CardType | undefined | null): string | null {
-  if (!ct?.overlay_path) return null
-  return `/api/card-types/${ct.id}/overlay?v=${encodeURIComponent(ct.overlay_path)}`
-}
-
-// Preview layers for images of this card type: the overlay (final frame)
-// and the template as a "mask" guide.
-export function previewLayers(ct: CardType | undefined | null): { overlaySrc: string | null; maskSrc: string | null } {
-  return { overlaySrc: overlayUrl(ct), maskSrc: ct ? templateUrl(ct) : null }
+// Preview layer for images of this card type: the template as a "mask" guide.
+export function previewLayers(ct: CardType | undefined | null): { maskSrc: string | null } {
+  return { maskSrc: ct ? templateUrl(ct) : null }
 }

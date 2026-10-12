@@ -150,7 +150,7 @@ export default function GenerationsPage() {
           const alt = `${faction} × ${ct?.name ?? '—'}`
           return (
             <div key={e.key} className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
-              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
+              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} cardPreviewFactionId={e.factionId} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
                 editTarget={e.ref} compareSrc={e.compareSrc} className="block w-full">
                 <img src={e.imageUrl} alt={alt} loading="lazy" className="block aspect-[3/4] w-full object-cover" />
               </ZoomableImage>

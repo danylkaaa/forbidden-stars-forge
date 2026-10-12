@@ -167,6 +167,10 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		h.cardTypeErr(w, err)
 		return
 	}
+	if store.IsBuiltinCardType(prev.Name) && fields.Name != prev.Name {
+		writeError(w, http.StatusBadRequest, "built-in card types cannot be renamed")
+		return
+	}
 	templatePath, err := h.saveTemplate(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -206,6 +210,10 @@ func (h *CardTypesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ct, err := h.Store.Get(id)
 	if err != nil {
 		h.cardTypeErr(w, err)
+		return
+	}
+	if store.IsBuiltinCardType(ct.Name) {
+		writeError(w, http.StatusConflict, "built-in card type — cannot delete")
 		return
 	}
 	if err := h.Store.Delete(id); err != nil {

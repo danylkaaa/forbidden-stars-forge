@@ -43,3 +43,12 @@ test('manual starts are retained and paper follows them; overlaps are reported',
 test('oversized text reports lack of space instead of silently shrinking fonts', () => {
   expect(calculate({ ...upper, height: 1500 }).overflow).toBe(true)
 })
+test('auto text is centred in the visible parchment between borders, divider bar and bottom edge', () => {
+  const insets = { background: 28, dividerTop: 8, foreground: 24 }
+  const p = combatPanels(1000, 1400, 40, upper, lower, insets)
+  const upperAbove = p.upperY - (p.backgroundY! + insets.background), upperBelow = (p.foregroundY! + insets.dividerTop) - (p.upperY + upper.height)
+  const lowerAbove = p.lowerY - (p.foregroundY! + insets.foreground), lowerBelow = p.bottomY - (p.lowerY + lower.height)
+  expect(upperAbove).toBeCloseTo(upperBelow)
+  expect(lowerAbove).toBeCloseTo(lowerBelow)
+  expect(upperAbove).toBeCloseTo(40)
+})

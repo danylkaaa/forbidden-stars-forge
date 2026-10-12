@@ -5,13 +5,13 @@ import { formatCost } from '../../lib/format'
 import { batchItemImageUrl, type BatchItem } from './api'
 
 export function ItemCard({
-  item, batchId, factionName, cardTypeName, overlaySrc, maskSrc,
-}: { item: BatchItem; batchId: number; factionName: string; cardTypeName: string; overlaySrc?: string | null; maskSrc?: string | null }) {
+  item, batchId, factionName, cardTypeName, maskSrc,
+}: { item: BatchItem; batchId: number; factionName: string; cardTypeName: string; maskSrc?: string | null }) {
   const imageUrl = batchItemImageUrl(batchId, item)
   return (
     <div className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
       {imageUrl ? (
-        <ZoomableImage src={imageUrl} alt={`${factionName} ${cardTypeName}`} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={item.name} favorite={{ target: { kind: 'batch-item', batchId, itemId: item.id }, value: item.favorite }}
+        <ZoomableImage src={imageUrl} alt={`${factionName} ${cardTypeName}`} maskSrc={maskSrc} cardPreviewFactionId={item.faction_id} downloadName={item.name} favorite={{ target: { kind: 'batch-item', batchId, itemId: item.id }, value: item.favorite }}
           editTarget={{ kind: 'batch-item', batchId, itemId: item.id }} className="block w-full">
           <img src={imageUrl} alt={`${factionName} ${cardTypeName}`} className="block aspect-[3/4] w-full object-cover" />
         </ZoomableImage>

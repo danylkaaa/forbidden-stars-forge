@@ -21,3 +21,5 @@ export async function importCards(cards: CardInput[]): Promise<{ cards: Card[]; 
   if (!res.ok) throw new ImportError(body.error ?? `HTTP ${res.status}`, body.errors ?? [])
   return body
 }
+// Deletes all the cards or none of them.
+export const deleteCards = (ids: number[]) => apiSend<{ deleted: number }>('POST', '/api/cards/delete', { ids })

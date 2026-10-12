@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -10,7 +10,7 @@ import CardTypesPage from './CardTypesPage'
 
 const cardTypes: CardType[] = [
   { id: 1, name: 'combat', description: 'frontline warriors', constraints: 'fill crimson zone', template_path: 'templates/a.png', openai_file_id: 'file-8a2f91cd', overlay_path: '', created_at: 'a', updated_at: 'u1' },
-  { id: 2, name: 'upgrade', description: 'insignia art', constraints: '', template_path: '', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'u2' },
+  { id: 2, name: 'relic', description: 'insignia art', constraints: '', template_path: '', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'u2' },
 ]
 
 // jsdom can't load images: stub Image so onFileSelect gets fixed dimensions.
@@ -51,11 +51,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-test('renders table with file-id tag and not-uploaded state', async () => {
+test('renders the card types table', async () => {
   renderPage()
   expect(await screen.findByText('combat')).toBeInTheDocument()
-  expect(screen.getByText('file-8a2f91cd')).toBeInTheDocument()
-  expect(screen.getByText('not uploaded')).toBeInTheDocument()
 })
 
 test('create flow posts multipart with staged file', async () => {
@@ -134,8 +132,8 @@ test('upload-to-openai failure shows alert', async () => {
 test('delete failure shows alert in confirm dialog', async () => {
   server.use(http.delete('/api/card-types/2', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
   renderPage()
-  await screen.findByText('upgrade')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1])
+  await screen.findByText('relic')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0])
   await userEvent.click(screen.getByRole('button', { name: 'Delete card type' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('boom')
 })
@@ -191,25 +189,6 @@ test('edit constraints with Claude: sends draft fields + conversation, accept up
   expect(screen.queryByRole('region', { name: /Claude assistant/ })).not.toBeInTheDocument()
 })
 
-test('overlay upload saves immediately via its own endpoint', async () => {
-  let uploaded: string | null = null
-  server.use(
-    // jsdom mangles File parts in intercepted FormData (see the create-flow
-    // test), so only assert the endpoint is hit.
-    http.put('/api/card-types/1/overlay', () => {
-      uploaded = 'yes'
-      return HttpResponse.json({ ...cardTypes[0], overlay_path: 'overlays/o.png' })
-    }),
-  )
-  renderPage()
-  await screen.findByText('combat')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
-  const dialog = screen.getByRole('dialog', { name: 'Edit Card Type' })
-  expect(within(dialog).getByText(/Never sent to OpenAI/)).toBeInTheDocument()
-  await userEvent.upload(within(dialog).getByLabelText('Overlay file'), new File(['png'], 'o.png', { type: 'image/png' }))
-  await waitFor(() => expect(uploaded).toBe('yes'))
-})
-
 test('card type name links to its generations', async () => {
   renderPage()
   expect(await screen.findByRole('link', { name: 'combat' })).toHaveAttribute('href', '/generations?card_type=1')
@@ -219,5 +198,12 @@ test('rows show a small template thumbnail; rows without a template show none', 
   renderPage()
   await screen.findByText('combat')
   expect(screen.getByRole('button', { name: 'Open combat template' })).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Open upgrade template' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Open relic template' })).not.toBeInTheDocument()
+})
+
+test('built-in card types cannot be deleted', async () => {
+  renderPage()
+  await screen.findByText('relic')
+  expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1)
+  expect(screen.getByText('built-in')).toBeInTheDocument()
 })

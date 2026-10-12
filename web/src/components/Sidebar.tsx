@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 import type { ComponentType } from 'react'
-import { FactionsIcon, CardTypesIcon, LabIcon, GalleryIcon, BatchIcon, SettingsIcon } from './icons'
+import { FactionsIcon, CardTypesIcon, LibraryIcon, LayersIcon, LabIcon, GalleryIcon, BatchIcon, SettingsIcon } from './icons'
 
 import { workspaceLink, type WorkspaceMode } from './workspaceMode'
 
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
-  { to: '/assemble', label: 'Assemble', Icon: CardTypesIcon },
-  { to: '/cards', label: 'Cards', Icon: CardTypesIcon },
+  { to: '/assemble', label: 'Library', Icon: LibraryIcon },
   { to: '/factions', label: 'Factions', Icon: FactionsIcon },
+  { to: '/subtypes', label: 'Card Types', Icon: LayersIcon },
   { to: '/card-types', label: 'Card Types', Icon: CardTypesIcon },
   { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
   { to: '/generations', label: 'Generations', Icon: GalleryIcon },
@@ -28,12 +28,12 @@ const LITANIES = [
 
 export function Sidebar({ mode }: { mode: WorkspaceMode }) {
   const visible = items.filter(item => mode === 'library'
-    ? ['/assemble', '/cards', '/factions', '/card-types'].includes(item.to)
-    : !['/assemble', '/cards'].includes(item.to))
+    ? ['/assemble', '/factions', '/subtypes'].includes(item.to)
+    : !['/assemble', '/subtypes'].includes(item.to))
   const [litany] = useState(() => LITANIES[Math.floor(Math.random() * LITANIES.length)])
   return (
     <aside className="relative flex w-full flex-none flex-col gap-3 border-b md:w-60 md:gap-5 md:border-r md:border-b-0 border-accent/30 bg-[linear-gradient(180deg,#2a0f0b_0%,#140a08_35%,#0b0706_100%)] p-4 shadow-[inset_-1px_0_0_rgba(0,0,0,0.6)]">
-      <div className="hidden px-3 font-mono text-[10px] uppercase tracking-[0.18em] text-phosphor/70 md:block">{mode === 'library' ? 'Assemble Library' : 'AI Image Generation'}</div>
+      <div className="hidden px-3 font-mono text-[10px] uppercase tracking-[0.18em] text-phosphor/70 md:block">{mode === 'library' ? 'Library' : 'AI Image Generation'}</div>
       <nav aria-label="Sections" className="flex gap-0.5 overflow-x-auto md:flex-col">
         {visible.map(({ to, label, Icon }) => (
           <NavLink

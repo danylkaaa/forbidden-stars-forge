@@ -1,4 +1,4 @@
-import { textRuns, defaultLayout, downloadName, NATIVE_SYMBOL_CATALOG, resourceToken } from './model'
+import { textRuns, assemblyLayout, downloadName, NATIVE_SYMBOL_CATALOG, resourceToken } from './model'
 import { wrapText } from './render'
 import { useAssembly } from './state'
 
@@ -26,15 +26,10 @@ test('long unbroken words wrap without shrinking text or dropping characters', (
   const lines = wrapText(textRuns('abcdefghij'), 3, r => r.text.length)
   expect(lines.map(line => line.map(a => a.text).join(''))).toEqual(['abc', 'def', 'ghi', 'j'])
 })
-test('position adjustments and drafts stay independent for each card; reset preserves text', () => {
-  useAssembly.setState({ edits: {}, layouts: {} })
+test('drafts stay independent for each card', () => {
+  useAssembly.setState({ edits: {} })
   useAssembly.getState().edit('1', 'upper_text', 'New [GUN]')
-  useAssembly.getState().position('1', 'upper_text', { x: 20, y: 70 })
-  useAssembly.getState().position('2', 'lower_text', { y: 85 })
-  expect(useAssembly.getState().layouts['1'].upper_text.x).toBe(20)
-  expect(useAssembly.getState().layouts['2'].upper_text).toEqual(defaultLayout().upper_text)
-  useAssembly.getState().resetLayout('1')
-  expect(useAssembly.getState().layouts['1']).toEqual(defaultLayout())
+  expect(useAssembly.getState().edits['2']).toBeUndefined()
   expect(useAssembly.getState().edits['1'].upper_text).toBe('New [GUN]')
   useAssembly.getState().clearEdits('1')
   expect(useAssembly.getState().edits['1']).toBeUndefined()
@@ -66,7 +61,7 @@ test('resource variants select native glyph tokens and preserve legacy layouts',
 
 test('short boxed and non-boxed notation maps each resource independently', () => {
   const cases = [
-    ['(B)', '#', false], ['[B]', '}', false], ['(S)', '@', false], ['[S]', '{', false], ['(M)', '<', true], ['[M]', '<', false],
+    ['(B)', '#', false], ['[B]', '}', false], ['(S)', '@', false], ['[S]', '{', false], ['(M)', '<', true], ['[M]', '<', true],
   ] as const
   for (const [token, glyph, unframed] of cases) expect(textRuns(token)).toEqual([
     { text: glyph, icon: true, italic: false, ...(unframed ? { unframed: true } : {}) },
@@ -91,4 +86,8 @@ test('double asterisks italicize text and icons without leaving visible markers'
     { text: ' / ', icon: false, italic: false },
     { text: 'Second', icon: false, italic: true },
   ])
+})
+test('layouts saved with a separate gun column keep it as the resource stack', () => {
+  expect(assemblyLayout({ guns: { x: 14, y: 30 } } as never).resources).toMatchObject({ x: 14, y: 30, iconStyle: 'plain' })
+  expect(assemblyLayout({ guns: { x: 14 }, resources: { x: 20 } } as never).resources.x).toBe(20)
 })

@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { usePreviewLayers } from '../lib/previewLayers'
 import { LayerControls, LayeredImage } from './PreviewLayers'
 import { FavoriteButton } from './FavoriteButton'
 import type { ImageRef } from '../lib/favorites'
@@ -7,15 +6,7 @@ import { useStartImageEdit } from '../lib/imageEdits'
 import type { Generation } from '../pages/test-generation/api'
 import { MaskEditor } from './MaskEditor'
 import { exportMask, type Stroke } from '../lib/mask'
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error(`failed to load ${src}`))
-    img.src = src
-  })
-}
+import { QuickCardPreview } from '../pages/assemble/QuickCardPreview'
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -26,24 +17,8 @@ function saveBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-// Downloads what the preview shows: the raw image, or — with the overlay
-// on — the image with the overlay composited at the image's native size.
-async function downloadImage(src: string, overlaySrc: string | null, filename: string) {
-  if (!overlaySrc) {
-    saveBlob(await (await fetch(src)).blob(), filename)
-    return
-  }
-  const [base, overlay] = await Promise.all([loadImage(src), loadImage(overlaySrc)])
-  const canvas = document.createElement('canvas')
-  canvas.width = base.naturalWidth
-  canvas.height = base.naturalHeight
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas unavailable')
-  ctx.drawImage(base, 0, 0)
-  ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height) // stretched, like the preview
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-  if (!blob) throw new Error('could not encode PNG')
-  saveBlob(blob, filename)
+async function downloadImage(src: string, filename: string) {
+  saveBlob(await (await fetch(src)).blob(), filename)
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'image'
@@ -54,8 +29,9 @@ export type FavoriteProp = { target: ImageRef; value: boolean }
 // Full-size image popup. Closes on backdrop click, the × button, or Escape.
 // The gold checkerboard behind the image shows real alpha transparency;
 // a grey/white checkerboard means the model painted one into the pixels.
-// Overlay/mask layers and their toggles come from PreviewLayers; Download
-// includes the overlay when it's on (never the mask, a diagnostic aid).
+// The mask layer and its toggle come from PreviewLayers; Download saves the
+// raw image. With `cardPreviewFactionId`, Card preview shows the image
+// assembled as a card of that faction instead.
 // Area-edit support: editTarget makes "Edit area" available; compareSrc
 // (the image this one was edited from) enables the Original toggle.
 export type EditProps = {
@@ -65,27 +41,27 @@ export type EditProps = {
 }
 
 export function ImageLightbox({
-  src, alt, overlaySrc, maskSrc, downloadName, favorite, editTarget, compareSrc, onEdited, onClose,
+  src, alt, maskSrc, cardPreviewFactionId, downloadName, favorite, editTarget, compareSrc, onEdited, onClose,
 }: {
-  src: string; alt: string; overlaySrc?: string | null; maskSrc?: string | null
+  src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number
   downloadName?: string // file name without extension; defaults to a slug of alt
   favorite?: FavoriteProp
   onClose: () => void
 } & EditProps) {
-  const showOverlay = usePreviewLayers((s) => s.overlay)
+  const [asCard, setAsCard] = useState(false)
+  const [previewCardId, setPreviewCardId] = useState(0)
   const [editing, setEditing] = useState(false)
   const [showOriginal, setShowOriginal] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const shownSrc = showOriginal && compareSrc ? compareSrc : src
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
-  const overlayOn = Boolean(overlaySrc) && showOverlay
 
   async function onDownload() {
     setDownloading(true)
     setDownloadError(null)
     try {
-      await downloadImage(src, overlayOn ? overlaySrc! : null, `${downloadName || slug(alt)}${overlayOn ? '_overlay' : ''}.png`)
+      await downloadImage(src, `${downloadName || slug(alt)}.png`)
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : 'download failed')
     } finally {
@@ -116,13 +92,19 @@ export function ImageLightbox({
         <button
           type="button"
           disabled={downloading}
-          title={overlayOn ? 'Download with overlay' : 'Download image'}
+          title="Download image"
           onClick={onDownload}
           className="cursor-pointer rounded-full border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-neutral-800 disabled:cursor-wait disabled:opacity-60"
         >
-          {downloading ? 'Preparing…' : overlayOn ? 'Download (with overlay)' : 'Download'}
+          {downloading ? 'Preparing…' : 'Download'}
         </button>
-        {!editing && <LayerControls overlaySrc={overlaySrc} maskSrc={maskSrc} />}
+        {cardPreviewFactionId !== undefined && !editing && (
+          <button type="button" aria-pressed={asCard} onClick={() => setAsCard((v) => !v)}
+            className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium ${asCard ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink hover:bg-neutral-800'}`}>
+            Card preview
+          </button>
+        )}
+        {!editing && !asCard && <LayerControls maskSrc={maskSrc} />}
         {compareSrc && !editing && (
           <button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}
             title="Compare with the image this was edited from"
@@ -156,9 +138,13 @@ export function ImageLightbox({
         <AreaEditor src={src} alt={alt} target={editTarget}
           onCancel={() => setEditing(false)}
           onStarted={(g) => { setEditing(false); setNotice(`Edit started: ${g.name} — it appears with your other generations`); onEdited?.(g) }} />
+      ) : asCard && cardPreviewFactionId !== undefined ? (
+        <div onClick={(e) => e.stopPropagation()} className="flex h-[88vh] w-[min(92vw,calc(88vh*0.739))] flex-col">
+          <QuickCardPreview imageUrl={src} factionId={cardPreviewFactionId} cardId={previewCardId} onCardChange={setPreviewCardId} />
+        </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          <LayeredImage src={shownSrc} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} fit="natural"
+          <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
             imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />
         </div>
       )}
@@ -247,9 +233,9 @@ function AreaEditor({ src, alt, target, onCancel, onStarted }: {
 
 // Wraps a thumbnail in a button that opens the image in an ImageLightbox.
 export function ZoomableImage({
-  src, alt, overlaySrc, maskSrc, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
+  src, alt, maskSrc, cardPreviewFactionId, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
 }: {
-  src: string; alt: string; overlaySrc?: string | null; maskSrc?: string | null; downloadName?: string
+  src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number; downloadName?: string
   favorite?: FavoriteProp; className?: string; children: ReactNode
 } & EditProps) {
   const [open, setOpen] = useState(false)
@@ -263,7 +249,7 @@ export function ZoomableImage({
       >
         {children}
       </button>
-      {open && <ImageLightbox src={src} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={downloadName} favorite={favorite}
+      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} downloadName={downloadName} favorite={favorite}
         editTarget={editTarget} compareSrc={compareSrc} onEdited={onEdited} onClose={() => setOpen(false)} />}
     </>
   )

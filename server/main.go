@@ -24,6 +24,12 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
+	if err := store.NewCardTypesStore(db).EnsureBuiltins(); err != nil {
+		log.Fatalf("seed card types: %v", err)
+	}
+	if err := store.NewSubtypesStore(db).EnsureBuiltins(); err != nil {
+		log.Fatalf("seed subtypes: %v", err)
+	}
 
 	dist, err := fs.Sub(webFS, "webdist")
 	if err != nil {
@@ -33,6 +39,9 @@ func main() {
 	dataDir := os.Getenv("CARDFORGE_DATA")
 	if dataDir == "" {
 		dataDir = "./data"
+	}
+	if err := api.EnsureBackTemplates(db, dataDir); err != nil {
+		log.Fatalf("seed card back templates: %v", err)
 	}
 	r := api.NewRouter(db, dist, dataDir)
 	log.Println("cardforge listening on :8080")

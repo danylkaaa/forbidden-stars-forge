@@ -8,7 +8,8 @@ beforeEach(() => {
   vi.stubGlobal('Image', class {
     naturalWidth = 816; naturalHeight = 1104
     onload?: () => void
-    set src(value: string) { if (value.includes('background')) { this.naturalWidth = 759; this.naturalHeight = 379 } else if (value.includes('foreground')) { this.naturalWidth = 759; this.naturalHeight = 300 } else if (value.includes('bottom')) { this.naturalWidth = 454; this.naturalHeight = 18 }; queueMicrotask(() => this.onload?.()) }
+    url = ''
+    set src(value: string) { this.url = value; if (value.includes('background')) { this.naturalWidth = 759; this.naturalHeight = 379 } else if (value.includes('foreground')) { this.naturalWidth = 759; this.naturalHeight = 300 } else if (value.includes('bottom')) { this.naturalWidth = 454; this.naturalHeight = 18 }; queueMicrotask(() => this.onload?.()) }
   })
   vi.stubGlobal('FontFace', class { async load() { return this } })
   Object.defineProperty(document, 'fonts', { configurable: true, value: { add: vi.fn() } })
@@ -22,33 +23,57 @@ test('all combat textures cover the full output width', async () => {
   expect(textures).toHaveLength(3)
   for (const call of textures) { expect(call[1]).toBe(0); expect(call[3]).toBe(816) }
 })
-test('optional centered alignment measures the complete line including icons', async () => {
+test('alignment, fonts and colours are fixed even when an old layout overrides them', async () => {
   const layout = defaultLayout()
-  layout.upper_text.align = 'center'; layout.lower_text.align = 'center'
+  layout.upper_text = { ...layout.upper_text, align: 'center', font: 'headline', color: '#ff0000' }
   await renderCard({ card, layout, imageUrl: 'art', overlayUrl: 'frame' })
   const upper = ctx.fillText.mock.calls.find(call => call[0] === 'upper')!
-  const lower = ctx.fillText.mock.calls.find(call => call[0] === 'lower')!
-  // Each rendered line is 70 px, including a space and its one-glyph icon.
-  expect(upper[1]).toBeCloseTo((layout.upper_text.x + layout.upper_text.width / 2) * 816 / 100 - 35)
-  expect(lower[1]).toBeCloseTo((layout.lower_text.x + layout.lower_text.width / 2) * 816 / 100 - 35)
+  expect(upper[1]).toBeCloseTo(layout.upper_text.x * 816 / 100)
+  expect(ctx.font).not.toContain('CardHeadline, CardEvent, serif') // last painted text is rules text
+  expect(ctx.fillStyle).not.toBe('#ff0000')
 })
-test('visible lower text is vertically centered between divider and bottom edge', async () => {
-  await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
-  const textures = ctx.drawImage.mock.calls.slice(2)
-  const dividerY = textures[1][2] as number, bottomY = textures[2][2] as number
-  const baseline = ctx.fillText.mock.calls.find(call => call[0] === 'lower')![2] as number
-  expect(baseline - 20 - dividerY).toBeCloseTo(bottomY - (baseline + 5))
-})
-
-
-test('rules text defaults to left alignment while remaining vertically centered', async () => {
+// Texture decoration (759 px wide textures scaled to the 816 px card).
+const scale = 816 / 759, bgBorder = 21 * scale, barTop = 6 * scale, barBottom = 18 * scale
+test('rules text is left aligned and centred in the visible parchment of each panel', async () => {
   const layout = defaultLayout()
   await renderCard({ card, layout, imageUrl: 'art', overlayUrl: 'frame' })
   expect(ctx.fillText.mock.calls.find(call => call[0] === 'upper')![1]).toBeCloseTo(layout.upper_text.x * 816 / 100)
   expect(ctx.fillText.mock.calls.find(call => call[0] === 'lower')![1]).toBeCloseTo(layout.lower_text.x * 816 / 100)
   const textures = ctx.drawImage.mock.calls.slice(2)
+  const backgroundY = textures[0][2] as number, foregroundY = textures[1][2] as number, bottomY = textures[2][2] as number
+  // Mocked glyph bounds: ascent 20, descent 5 around each baseline.
   const upperBaseline = ctx.fillText.mock.calls.find(call => call[0] === 'upper')![2] as number
   const lowerBaseline = ctx.fillText.mock.calls.find(call => call[0] === 'lower')![2] as number
-  expect(upperBaseline - 20 - (textures[0][2] as number)).toBeCloseTo((textures[1][2] as number) - upperBaseline - 5)
-  expect(lowerBaseline - 20 - (textures[1][2] as number)).toBeCloseTo((textures[2][2] as number) - lowerBaseline - 5)
+  expect(upperBaseline - 20 - (backgroundY + bgBorder)).toBeCloseTo(foregroundY + barTop - (upperBaseline + 5))
+  expect(lowerBaseline - 20 - (foregroundY + barBottom)).toBeCloseTo(bottomY - (lowerBaseline + 5))
+})
+test('card artwork is the bottom layer, under the template and the overlay stack', async () => {
+  await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame', overlayUrls: ['sub-a', 'sub-b'], artworkUrl: 'illustration' })
+  const sources = ctx.drawImage.mock.calls.slice(0, 4).map(call => (call[0] as { url?: string }).url)
+  expect(sources).toEqual(['illustration', 'art', 'sub-a', 'sub-b'])
+})
+test('level 0 cards draw the faction logo last, in place of the level number', async () => {
+  await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo' })
+  expect((ctx.drawImage.mock.calls.at(-1)![0] as { url?: string }).url).toBe('logo')
+  expect(ctx.fillText.mock.calls.some(call => call[0] === '0')).toBe(false)
+  vi.clearAllMocks()
+  await renderCard({ card: { ...card, level: 2 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo' })
+  expect(ctx.drawImage.mock.calls.some(call => (call[0] as { url?: string }).url === 'logo')).toBe(false)
+  expect(ctx.fillText.mock.calls.some(call => call[0] === '2')).toBe(true)
+})
+test('guns, shields and morale share one stacked column in that order', async () => {
+  const layout = defaultLayout()
+  await renderCard({ card: { ...card, guns: 2, shields: 1, eagles: 1 }, layout, imageUrl: 'art', overlayUrl: 'frame' })
+  const icons = ctx.fillText.mock.calls.filter(call => ['}', '{', '<'].includes(call[0] as string) && call[1] === layout.resources.x * 816 / 100)
+  expect(icons.map(call => call[0])).toEqual(['}', '}', '{', '<'])
+  const step = layout.resources.size * 1104 / 100 * layout.resources.lineHeight
+  const ys = icons.map(call => call[2] as number)
+  for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeCloseTo(step)
+})
+test('level 0 cards have no level or resource price, even without a logo', async () => {
+  await renderCard({ card: { ...card, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
+  expect(ctx.fillText.mock.calls.some(call => call[0] === '7' || call[0] === '0')).toBe(false)
+  vi.clearAllMocks()
+  await renderCard({ card: { ...card, level: 1, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
+  expect(ctx.fillText.mock.calls.some(call => call[0] === '7')).toBe(true)
 })

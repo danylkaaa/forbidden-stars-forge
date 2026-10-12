@@ -235,3 +235,29 @@ func (s *CardsStore) FactionReferenced(id int64) (bool, error) {
 	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM cards WHERE faction_id=?)", id).Scan(&yes)
 	return yes, err
 }
+
+// DeleteMany removes the cards (and their assemblies) in one transaction and
+// returns the artwork files the caller should remove. Unknown ids fail the
+// whole delete.
+func (s *CardsStore) DeleteMany(ids []int64) ([]string, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	files := []string{}
+	for _, id := range ids {
+		var path sql.NullString
+		if err := tx.QueryRow(`SELECT artwork_path FROM card_assemblies WHERE card_id=?`, id).Scan(&path); err == nil && path.String != "" {
+			files = append(files, path.String)
+		}
+		res, err := tx.Exec(`DELETE FROM cards WHERE id=?`, id)
+		if err != nil {
+			return nil, err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil, ErrNotFound
+		}
+	}
+	return files, tx.Commit()
+}

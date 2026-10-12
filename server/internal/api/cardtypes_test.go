@@ -144,7 +144,7 @@ func TestCardTypeUpdateReplacingTemplateClearsFileID(t *testing.T) {
 func TestCardTypeDelete(t *testing.T) {
 	h := newTestRouter(t)
 	_, created := doMultipart(t, h, http.MethodPost, "/api/card-types",
-		map[string]string{"name": "combat", "description": "", "constraints": ""}, "", nil)
+		map[string]string{"name": "relic", "description": "", "constraints": ""}, "", nil)
 	id := int64(created["id"].(float64))
 	rec, _ := doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/card-types/%d", id), "")
 	if rec.Code != http.StatusNoContent {
@@ -293,5 +293,25 @@ func TestCardTypeOverlayUploadServeReplaceDelete(t *testing.T) {
 	}
 	if rec, _ := doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/card-types/%d/overlay", id), ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("serve after delete: %d", rec.Code)
+	}
+}
+
+func TestBuiltinCardTypesCannotBeDeletedOrRenamed(t *testing.T) {
+	h := newTestRouter(t)
+	_, created := doMultipart(t, h, http.MethodPost, "/api/card-types",
+		map[string]string{"name": "events", "description": "", "constraints": ""}, "", nil)
+	id := int64(created["id"].(float64))
+	if rec, _ := doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/card-types/%d", id), ""); rec.Code != http.StatusConflict {
+		t.Fatalf("delete builtin: %d", rec.Code)
+	}
+	rec, _ := doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id),
+		map[string]string{"name": "event", "description": "", "constraints": ""}, "", nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("rename builtin: %d", rec.Code)
+	}
+	rec, _ = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id),
+		map[string]string{"name": "events", "description": "new", "constraints": ""}, "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit builtin: %d", rec.Code)
 	}
 }

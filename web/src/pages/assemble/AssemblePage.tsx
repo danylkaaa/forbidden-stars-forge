@@ -1,236 +1,217 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { DiffPanel } from '../../components/DiffPanel'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
-import { Field, inputClass, selectClass } from '../../components/Field'
-import { useCards, updateCard } from '../cards/api'
-import { cardDraft, type Card } from '../cards/model'
-import { draftInput, validateCard } from '../cards/validation'
+import { buttonClass } from '../../components/buttonStyles'
+import { selectClass } from '../../components/Field'
+import { GearIcon } from '../../components/icons'
+import { useQueryClient } from '@tanstack/react-query'
+import { deleteCards, useCards } from '../cards/api'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { ImportCardsDialog } from '../cards/ImportCardsDialog'
+import { zip } from '../../lib/zip'
+import { downloadName } from './model'
+import { pngBlob } from './render'
+import { ACTION_LABELS, type Card } from '../cards/model'
 import { useFactions } from '../factions/api'
-import { useCardTypes, overlayUrl } from '../card-types/api'
-import { useGenerations, generationImageUrl } from '../test-generation/api'
-import { useDoneBatchItems } from '../generations/api'
-import { batchItemImageUrl } from '../batches/api'
-import { defaultLayout, assemblyLayout, downloadName, LAYERS, LAYER_LABELS, RESOURCE_TOKENS, ICON_STYLE_LABELS, type CombatCard, type Layer, type Placement, type IconStyle, type ResourceLayer } from './model'
-import { pngBlob, renderCard } from './render'
+import { LIBRARY_TABS } from './model'
+import { backTypeName, labLink, useTemplate, useTemplateLayout, type LibraryImage } from './library'
+import { useCardTypes } from '../card-types/api'
+import type { Side } from './api'
+import { Preview3DButton } from './Card3DViewer'
 import { useAssembly } from './state'
-import { SymbolPicker } from './SymbolPicker'
-import { useCardAssembly, saveAssembly, uploadArtwork, layoutScopeKey, useSharedLayout, saveSharedLayout, type LayoutScope, emptyAssembly, type Assembly } from './api'
-import { defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
+import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
+import { CardCanvas } from './CardCanvas'
+import { CategoryTabs } from './CategoryTabs'
+import { DemoText, TemplateSettingsDialog } from './TemplateSettingsDialog'
 
-function PositionNumber({ id, value, min, max, onChange }: { id: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
-  const [text, setText] = useState(String(value))
-  useEffect(() => setText(String(value)), [value])
-  const number = Number(text.replace(',', '.'))
-  const valid = text.trim() !== '' && Number.isFinite(number) && number >= min && number <= max
-  return <input id={id} inputMode="decimal" className={inputClass} value={text} aria-invalid={!valid}
-    onChange={e => {
-      const next = e.target.value; setText(next)
-      const n = Number(next.replace(',', '.'))
-      if (next.trim() && Number.isFinite(n) && n >= min && n <= max) onChange(n)
-    }} onBlur={() => setText(String(valid ? number : value))} />
+// Selection checkbox in a tile's top-left corner; always visible once
+// anything is selected, otherwise on hover.
+function SelectBox({ name, selected, anySelected, onToggle }: { name: string; selected: boolean; anySelected: boolean; onToggle: () => void }) {
+  return <label className={`absolute left-2 top-2 z-10 grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-white/20 bg-black/60 backdrop-blur-sm ${selected || anySelected ? '' : 'opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100'}`}>
+    <input type="checkbox" aria-label={`Select ${name}`} checked={selected} onChange={onToggle} className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]" />
+  </label>
+}
+type Selectable = { selected: boolean; anySelected: boolean; onToggle: () => void }
+
+// The rendered card is the tile; its name sits underneath as a plain caption.
+const tile = 'group block min-w-0 text-left no-underline'
+const frame = 'overflow-hidden rounded-md shadow-[0_6px_18px_rgba(0,0,0,0.55)] ring-1 ring-divider transition-shadow'
+const caption = 'mt-2 flex items-baseline justify-between gap-2 px-0.5 text-sm text-ink/80'
+
+function CombatTile({ card, image, template, back, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
+  const { input } = useCardRenderInput(card, image, template)
+  const { issues, dirty } = useCardDraft(card)
+  const { result, error } = useRenderedCard(input)
+  useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
+  return <div className="group/tile relative min-w-0">
+  <SelectBox name={card.name} {...select} />
+  {result && <Preview3DButton title={card.name} canvas={result.canvas} back={back} className="absolute right-2 top-2 z-10" />}
+  <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
+    <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : 'group-hover:ring-2 group-hover:ring-accent'}`}>
+      {result
+        ? <CardCanvas result={result} aria-hidden="true" className="block h-auto w-full" />
+        : <div className="grid aspect-[816/1104] place-items-center bg-black/30 p-3 text-center text-xs text-ink/50">
+          {error || (!image ? 'Choose a combat template (top-left settings) to preview.' : issues.length ? 'Fix this card’s fields in the editor.' : 'Rendering…')}
+        </div>}
+    </div>
+    <span className={`${caption} group-hover:text-accent`}>
+      <span className="truncate">{card.name}</span>{dirty && <span className="shrink-0 text-[10px] uppercase tracking-wider text-warn">Draft</span>}
+    </span>
+  </Link>
+  </div>
+}
+
+// The deck's shared back, first in the grid.
+function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImage | undefined; label: string; onChoose: () => void; generateLink: string | null }) {
+  return <div className="min-w-0">
+    <button type="button" aria-label={`Choose ${label}`} onClick={onChoose} className={`${frame} block w-full cursor-pointer bg-transparent p-0 hover:ring-2 hover:ring-accent`}>
+      {image
+        ? <img src={image.url} alt={label} className="block aspect-[816/1104] w-full object-cover" />
+        : <span className="grid aspect-[816/1104] place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-3 text-center text-xs text-ink/55">No card back chosen. Click to choose one.</span>}
+    </button>
+    <span className={caption}><span className="truncate">{label}</span>{generateLink && <Link to={generateLink} className="shrink-0 text-xs text-accent no-underline hover:underline">Generate</Link>}</span>
+  </div>
+}
+
+function TextTile({ card, image, ...select }: { card: Card; image: LibraryImage | undefined } & Selectable) {
+  const text = card.category === 'combat' ? '' : card.text
+  const subtitle = card.category === 'schema' ? `${card.subtype} · ${ACTION_LABELS[card.action] ?? card.action}` : card.category === 'upgrade' ? card.upgrade_type : ''
+  return <div className={`${tile} group/tile relative`}>
+    <SelectBox name={card.name} {...select} />
+    <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : ''}`}><DemoText image={image} title={card.name} text={text || '—'} /></div>
+    <span className={caption}><span className="truncate">{card.name}</span></span>
+    <span className="block px-0.5 text-[11px] text-ink/45">{subtitle} · full rendering coming soon</span>
+  </div>
 }
 
 export default function AssemblePage() {
-  const cards = useCards('', 'combat'), factions = useFactions(), types = useCardTypes(), generations = useGenerations(), batches = useDoneBatchItems()
+  const factions = useFactions()
   const state = useAssembly()
-  const assemblyQuery = useCardAssembly(state.cardId)
-  const config = useMemo(() => state.assemblies[state.cardId] ?? assemblyQuery.data ?? emptyAssembly(), [state.assemblies, state.cardId, assemblyQuery.data])
+  // ?faction=<id>&tab=<slug> (from the library Factions page) selects both.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const faction = Number(params.get('faction')), tab = LIBRARY_TABS.find(t => t.slug === params.get('tab'))
+    if (!(faction > 0) && !tab) return
+    useAssembly.getState().select({ ...(faction > 0 ? { factionId: faction } : {}), ...(tab ? { category: tab.category } : {}) })
+    setParams({}, { replace: true })
+  }, [params, setParams])
+  const factionId = (factions.data?.some(f => f.id === state.factionId) ? state.factionId : null) ?? factions.data?.[0]?.id ?? null
+  const category = state.category
+  const [settingsOpen, setSettingsOpen] = useState<Side | null>(null)
+  const cards = useCards(factionId ? String(factionId) : '', '')
+  const template = useTemplate(factionId, category)
+  const layout = useTemplateLayout()
+  const back = useTemplate(factionId, category, 'back')
+  const backType = useCardTypes().data?.find(t => t.name === backTypeName(category))
+  const faction = factions.data?.find(f => f.id === factionId)
+  const tab = LIBRARY_TABS.find(t => t.category === category)!, tabLabel = tab.label
+  const newCardLink = `/assemble/cards/new?faction=${factionId}&tab=${tab.slug}`
+  const shown = factionId ? cards.data?.filter(c => c.category === category && c.faction_id === factionId) ?? [] : []
+  const counts = Object.fromEntries(LIBRARY_TABS.map(t => [t.category, cards.data?.filter(c => c.category === t.category && c.faction_id === factionId).length ?? 0]))
+  const queryError = [factions, cards, ...template.queries].find(q => q.isError)?.error ?? layout.error
+
+  // Multiselect within the shown faction and tab.
   const queryClient = useQueryClient()
-  const [factionFilter, setFactionFilter] = useState('')
-  const [search, setSearch] = useState('')
-  const [layer, setLayer] = useState<Layer>('upper_text')
-  const [result, setResult] = useState<Awaited<ReturnType<typeof renderCard>> | null>(null)
-  const [renderError, setRenderError] = useState('')
-  const [downloadError, setDownloadError] = useState('')
-  const [downloading, setDownloading] = useState(false)
-  const [retry, setRetry] = useState(0)
-  const [rendering, setRendering] = useState(false)
-  const [editingArtwork, setEditingArtwork] = useState(false)
-  const drag = useRef<{ id: string; x: number; y: number; transform: ArtworkTransform } | null>(null)
-  const preview = useRef<HTMLCanvasElement>(null)
-  const textTarget = useRef<{ key: string; element: HTMLInputElement | HTMLTextAreaElement } | null>(null)
-  const upperText = useRef<HTMLTextAreaElement>(null)
-  const sourceCard = cards.data?.find(c => String(c.id) === state.cardId && c.category === 'combat') as CombatCard | undefined
-  const draft = useMemo(() => sourceCard ? { ...cardDraft(sourceCard), ...state.edits[state.cardId] } : null, [sourceCard, state.edits, state.cardId])
-  const issues = useMemo(() => draft ? validateCard(draftInput(draft), factions.data?.map(f => f.id) ?? []) : [], [draft, factions.data])
-  const card = useMemo(() => draft && !issues.length ? draftInput(draft) as CombatCard : null, [draft, issues])
-  const dirty = !!sourceCard && !!draft && Object.entries(cardDraft(sourceCard)).some(([key, value]) => draft[key] !== value)
-  const images = useMemo(() => [
-    ...(generations.data ?? []).flatMap(g => { const url = generationImageUrl(g); return url ? [{ key: `test-${g.id}`, name: g.name || `Generation #${g.id}`, factionId: g.faction_id, cardTypeId: g.card_type_id, url, createdAt: g.created_at, source: 'Lab' }] : [] }),
-    ...(batches.data ?? []).flatMap(b => { const url = batchItemImageUrl(b.batch_id, b); return url ? [{ key: `batch-${b.id}`, name: b.name || `Batch image #${b.id}`, factionId: b.faction_id, cardTypeId: b.card_type_id, url, createdAt: b.completed_at, source: 'Batch' }] : [] }),
-  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [generations.data, batches.data])
-  const selectedImage = images.find(i => i.key === config.image_key)
-  const overlayType = types.data?.find(t => String(t.id) === (config.overlay_id === 'auto' ? String(selectedImage?.cardTypeId) : config.overlay_id))
-  const overlay = overlayType ? overlayUrl(overlayType) : null
-  const scope: LayoutScope | null = sourceCard && config.image_key ? { template_key: config.image_key === 'upload' ? `upload:${new URLSearchParams(config.image_url.split('?')[1]).get('v') ?? ''}` : config.image_key, faction_id: sourceCard.faction_id, card_type_id: overlayType?.id ?? selectedImage?.cardTypeId ?? 0 } : null
-  const scopeKey = layoutScopeKey(scope)
-  const sharedLayout = useSharedLayout(scope)
-  const layout = useMemo(() => state.layouts[scopeKey] ?? assemblyLayout(sharedLayout.data?.layout ?? {}), [state.layouts, scopeKey, sharedLayout.data])
-  const filteredImages = images.filter(i => (!factionFilter || String(i.factionId) === factionFilter) && i.name.toLowerCase().includes(search.toLowerCase()))
-  const selectedCards = cards.data?.filter(c => !factionFilter || String(c.faction_id) === factionFilter) ?? []
-  const imageUrl = config.image_url || selectedImage?.url
-  const outputSize = useMemo(() => config.image_key === 'upload' ? { width: 1140, height: 1480 } : undefined, [config.image_key])
-  const ready = !types.isPending && !types.isError && !cards.isError && !factions.isError && !assemblyQuery.isPending && !assemblyQuery.isError && !!scope && !sharedLayout.isPending && !sharedLayout.isError
-  useEffect(() => {
-    let cancelled = false
-    setRenderError(''); setRendering(!!card && !!imageUrl && ready)
-    if (!card || !imageUrl) setResult(null)
-    if (card && imageUrl && ready) renderCard({ card, layout, imageUrl, overlayUrl: overlay, artwork: config.transform, outputSize }).then(value => {
-      if (!cancelled) { setResult(value); setRendering(false) }
-    }).catch(error => { if (!cancelled) { setResult(null); setRendering(false); setRenderError(error instanceof Error ? error.message : 'Could not render card.') } })
-    return () => { cancelled = true }
-  }, [card, layout, imageUrl, overlay, ready, retry, config.transform, outputSize])
-  useEffect(() => {
-    if (!result || !preview.current) return
-    preview.current.width = result.canvas.width; preview.current.height = result.canvas.height
-    preview.current.getContext('2d')?.drawImage(result.canvas, 0, 0)
-  }, [result])
-  const save = useMutation({
-    mutationFn: ({ id, value }: { id: number; value: CombatCard }) => updateCard(id, value),
-    onSuccess: saved => {
-      state.clearEdits(String(saved.id))
-      queryClient.setQueriesData<Card[]>({ queryKey: ['cards'] }, old => old?.map(c => c.id === saved.id ? saved : c))
-      void queryClient.invalidateQueries({ queryKey: ['cards'] })
-    },
-  })
-  const assemblySave = useMutation({
-    mutationFn: async ({ id, value, scope }: { id: string; value: Assembly; scope: LayoutScope; draftRef?: Assembly; layoutRef?: typeof layout }) => { const saved = await saveAssembly(id, { ...value, layout: {} }); const shared = await saveSharedLayout(scope, value.layout as typeof layout); return { saved, shared } },
-    onSuccess: ({ saved, shared }, vars) => {
-      queryClient.setQueryData(['card-assembly', vars.id], saved)
-      queryClient.setQueryData(['assembly-layout', layoutScopeKey(vars.scope)], shared)
-      const current = useAssembly.getState()
-      if (current.assemblies[vars.id] === vars.draftRef) current.clearAssembly(vars.id)
-      if (current.layouts[layoutScopeKey(vars.scope)] === vars.layoutRef) current.clearLayout(layoutScopeKey(vars.scope))
-    },
-  })
-  const upload = useMutation({
-    mutationFn: ({ id, file }: { id: string; file: File; config: Assembly }) => uploadArtwork(id, file),
-    onSuccess: (saved, vars) => {
-      queryClient.setQueryData(['card-assembly', vars.id], saved)
-      state.assembly(vars.id, { ...vars.config, ...saved, overlay_id: vars.config.overlay_id, layout: vars.config.layout })
-    },
-  })
-  function changeAssembly(patch: Partial<Assembly>) { assemblySave.reset(); state.assembly(state.cardId, { ...config, ...patch }) }
-  useEffect(() => { setEditingArtwork(false); setResult(null); drag.current = null }, [state.cardId])
-  useEffect(() => {
-    const canvas = preview.current
-    if (!canvas || !editingArtwork) return
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const rect = canvas.getBoundingClientRect(); if (!rect.width || !rect.height) return
-      const transform = zoomArtwork(config.transform, config.transform.scale * Math.exp(-e.deltaY * .001), (e.clientX - rect.left) / rect.width * 100 - 50, (e.clientY - rect.top) / rect.height * 100 - 50)
-      state.assembly(state.cardId, { ...config, transform }); assemblySave.reset()
-    }
-    canvas.addEventListener('wheel', wheel, { passive: false })
-    return () => canvas.removeEventListener('wheel', wheel)
-  }, [editingArtwork, config, state, assemblySave])
-  function edit(field: string, value: string) { save.reset(); state.edit(state.cardId, field, value) }
-  function insertSymbol(token: string) {
-    if (!draft) return
-    const target = textTarget.current?.element.isConnected ? textTarget.current : upperText.current ? { key: 'upper_text', element: upperText.current } : null
-    if (!target) return
-    const text = draft[target.key]
-    const start = target.element.selectionStart ?? text.length, end = target.element.selectionEnd ?? start
-    const inserted = token
-    edit(target.key, text.slice(0, start) + inserted + text.slice(end))
-    requestAnimationFrame(() => { target.element.focus(); target.element.setSelectionRange(start + inserted.length, start + inserted.length) })
-  }
-  async function download() {
-    if (!result || !card) return
-    setDownloading(true); setDownloadError('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  useEffect(() => setSelected(new Set()), [factionId, category])
+  const toggle = (id: number) => setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  const chosen = shown.filter(c => selected.has(c.id))
+  const canvases = useRef(new Map<number, HTMLCanvasElement>())
+  const onRendered = useRef((id: number, canvas: HTMLCanvasElement | null) => { if (canvas) canvases.current.set(id, canvas); else canvases.current.delete(id) }).current
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'delete' | 'download' | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  async function removeSelected() {
+    setBusy('delete'); setActionError(null)
     try {
-      const url = URL.createObjectURL(await pngBlob(result.canvas))
-      const link = document.createElement('a'); link.href = url; link.download = downloadName(card.name)
+      await deleteCards(chosen.map(c => c.id))
+      chosen.forEach(c => { useAssembly.getState().clearEdits(String(c.id)); useAssembly.getState().clearTransform(String(c.id)) })
+      setSelected(new Set()); setConfirmDelete(false); setNotice(`Deleted ${chosen.length} card${chosen.length === 1 ? '' : 's'}.`)
+      await queryClient.invalidateQueries({ queryKey: ['cards'] })
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Delete failed') }
+    finally { setBusy(null) }
+  }
+  // Rendered combat cards as PNGs, zipped. Cards without a render are skipped.
+  async function downloadSelected() {
+    setBusy('download'); setActionError(null); setNotice(null)
+    try {
+      const used = new Set<string>(), entries = []
+      for (const card of chosen) {
+        const canvas = canvases.current.get(card.id)
+        if (!canvas) continue
+        let name = downloadName(card.name)
+        for (let n = 2; used.has(name); n++) name = downloadName(`${card.name} (${n})`)
+        used.add(name)
+        entries.push({ name, data: new Uint8Array(await (await pngBlob(canvas)).arrayBuffer()) })
+      }
+      if (!entries.length) throw new Error('None of the selected cards has a rendered image to download yet.')
+      const url = URL.createObjectURL(zip(entries))
+      const link = document.createElement('a'); link.href = url; link.download = `${faction?.name ?? 'cards'} ${tabLabel}.zip`.replace(/[\\/:*?"<>|]/g, '-')
       document.body.append(link); link.click(); link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch (error) { setDownloadError(error instanceof Error ? error.message : 'Download failed.') }
-    finally { setDownloading(false) }
+      if (entries.length < chosen.length) setNotice(`Downloaded ${entries.length} of ${chosen.length}; the others have no rendered image (only combat cards render for now).`)
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'Download failed') }
+    finally { setBusy(null) }
   }
-  const queries = [cards, factions, types, generations, batches, assemblyQuery, ...(scope ? [sharedLayout] : [])]
-  const queryError = queries.find(q => q.isError)?.error
-  const rulesLayer = layer === 'upper_text' || layer === 'lower_text' ? layer : null
-  const p = rulesLayer ? result?.textPositions[rulesLayer] ?? layout[layer] : layout[layer]
-  const move = (patch: Partial<Placement>) => { if (!scope || sharedLayout.isPending) return; assemblySave.reset(); state.position(scopeKey, layer, patch, layout) }
+  const selectProps = (card: Card) => ({ selected: selected.has(card.id), anySelected: selected.size > 0, onToggle: () => toggle(card.id) })
   return <div className="space-y-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="font-display text-2xl text-accent-300">Assemble</h1><p className="text-sm text-ink/60">Build a battle card from artwork, an overlay, and your card text.</p></div>
-      <div className="flex flex-wrap gap-2"><Button disabled={!sourceCard || !config.image_key || !scope || sharedLayout.isPending || assemblySave.isPending || upload.isPending || assemblyQuery.isPending} onClick={() => scope && assemblySave.mutate({ id: state.cardId, scope, value: { ...config, layout, overlay_id: config.overlay_id === 'auto' ? String(overlayType?.id ?? 'none') : config.overlay_id }, draftRef: state.assemblies[state.cardId], layoutRef: state.layouts[scopeKey] })}>{assemblySave.isPending ? 'Saving…' : 'Save assembly'}</Button>
-      <Button variant="primary" disabled={!result || rendering || !ready || !card || !imageUrl || downloading} onClick={() => void download()}>{downloading ? 'Exporting…' : 'Download PNG'}</Button></div>
+    <div className="flex flex-wrap items-center gap-3">
+      <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen('front')} className="px-2!"><GearIcon /></Button>
+      <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
+      <select aria-label="Faction" className={`${selectClass} w-60!`} value={factionId ?? ''} onChange={e => state.select({ factionId: Number(e.target.value) || null })}>
+        {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
+      <Link to="/cards" className={buttonClass('secondary')}>Cards / JSON import</Link>
+      {factionId && <div className="ml-auto flex gap-2">
+        <Button onClick={() => setImportOpen(true)}>Import JSON</Button>
+        <Link to={newCardLink} className={buttonClass('primary')}>New {tabLabel.replace(/s$/, '').toLowerCase()} card</Link>
+      </div>}
     </div>
-    {queryError && <div role="alert" className="text-danger">{queryError.message} <Button onClick={() => { queries.forEach(q => void q.refetch()) }}>Retry loading</Button></div>}
-    {assemblySave.isSuccess && <p role="status" className="text-success">Assembly saved to database.</p>}
-    {(assemblySave.isError || upload.isError) && <p role="alert" className="text-danger">{assemblySave.error?.message ?? upload.error?.message}</p>}
-    {downloadError && <p role="alert" className="text-danger">{downloadError}</p>}
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(200px,.85fr)_minmax(240px,1.1fr)_minmax(240px,1fr)]">
-      <section aria-label="Artwork and overlay" className="space-y-4 rounded-lg border border-divider bg-surface p-4">
-        <h2 className="font-display text-accent-300">1. Choose artwork</h2>
-        <Field label="Faction filter">{id => <select id={id} className={selectClass} value={factionFilter} onChange={e => setFactionFilter(e.target.value)}><option value="">All factions</option>{factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select>}</Field>
-        <Field label="Combat card">{id => <select id={id} className={selectClass} value={state.cardId} onChange={e => { save.reset(); state.select({ cardId: e.target.value }) }}><option value="">Choose a card…</option>{(sourceCard && !selectedCards.includes(sourceCard) ? [sourceCard, ...selectedCards] : selectedCards).map(c => <option key={c.id} value={c.id}>{c.name} — {factions.data?.find(f => f.id === c.faction_id)?.name ?? 'Faction'}</option>)}</select>}</Field>
-        {!cards.isPending && !cards.data?.length && <p className="text-sm text-ink/60"><Link className="text-accent underline" to="/cards">Create a combat card</Link> to add text and resources.</p>}
-        <Field label="Overlay">{id => <select id={id} className={selectClass} value={config.overlay_id} disabled={!sourceCard || assemblyQuery.isPending} onChange={e => changeAssembly({ overlay_id: e.target.value })}><option value="auto">From selected image's card type</option><option value="none">No overlay</option>{types.data?.filter(t => t.overlay_path).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}</Field>
-        {selectedImage && !overlay && config.overlay_id !== 'none' && <p className="text-sm text-warn">No overlay available. Upload one under <Link to="/card-types?mode=library" className="underline">Card Types</Link> or choose another overlay.</p>}
-        <Field label="Upload artwork (PNG / JPEG)">{id => <input id={id} type="file" accept="image/png,image/jpeg" disabled={!sourceCard || assemblyQuery.isPending || upload.isPending} className={inputClass} onChange={e => { const file = e.target.files?.[0]; if (file && sourceCard) upload.mutate({ id: state.cardId, file, config: { ...config, layout } }); e.target.value = '' }} />}</Field>
-        {upload.isPending && <p role="status" className="text-xs">Uploading artwork…</p>}
-        {config.image_key === 'upload' && <p className="text-xs text-ink/60">Using this card's uploaded artwork.</p>}
-        <Field label="Find generated image">{id => <input id={id} className={inputClass} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search image names" />}</Field>
-        {selectedImage && <p className="text-xs text-ink/60">Selected: {selectedImage.name}</p>}
-        {sourceCard && selectedImage && sourceCard.faction_id !== selectedImage.factionId && <p className="text-sm text-warn">Artwork and card belong to different factions.</p>}
-        <div className="grid max-h-[540px] grid-cols-2 gap-2 overflow-auto">
-          {filteredImages.map(i => <button type="button" key={i.key} aria-label={`Choose image ${i.name}`} disabled={!sourceCard || assemblyQuery.isPending} aria-pressed={config.image_key === i.key} onClick={() => changeAssembly({ image_key: i.key, image_url: '', transform: defaultArtwork() })} className={`overflow-hidden rounded border text-left ${config.image_key === i.key ? 'border-accent ring-1 ring-accent' : 'border-divider hover:border-accent/60'}`}><img loading="lazy" src={i.url} alt="" className="aspect-[3/4] w-full object-cover" /><span className="block truncate px-2 pt-1 text-xs" title={i.name}>{i.name}</span><span className="block px-2 pb-1 text-[10px] text-ink/50">{i.source} · {types.data?.find(t => t.id === i.cardTypeId)?.name}</span></button>)}
+    {queryError && <div role="alert" className="text-danger">{queryError.message}</div>}
+    <CategoryTabs value={category} onChange={c => state.select({ category: c })} badges={counts} />
+    {shown.length > 0 && <div role="toolbar" aria-label="Selected cards" className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-ink/60">{selected.size ? `${chosen.length} selected` : 'Select cards to download or delete them.'}</span>
+      <Button onClick={() => setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map(c => c.id)))}>{chosen.length === shown.length ? 'Select none' : 'Select all'}</Button>
+      {chosen.length > 0 && <>
+        <Button disabled={!!busy} onClick={() => void downloadSelected()}>{busy === 'download' ? 'Preparing…' : 'Download PNGs (zip)'}</Button>
+        <Button disabled={!!busy} onClick={() => { setActionError(null); setConfirmDelete(true) }}>Delete</Button>
+      </>}
+    </div>}
+    {actionError && !confirmDelete && <p role="alert" className="m-0 text-sm text-danger">{actionError}</p>}
+    {notice && <p role="status" className="m-0 text-sm text-ink/70">{notice}</p>}
+    {factionId && !template.isPending && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink/60">
+      {template.image
+        ? <><span>Template: <span className="text-ink">{template.image.name}</span></span><Link to={labLink(template.image)} className="text-accent underline">Edit in Faction Lab</Link></>
+        : <><span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span><Button onClick={() => setSettingsOpen('front')}>Choose template</Button></>}
+    </div>}
+    {!factions.isPending && !factions.data?.length && <p className="text-sm text-ink/60"><Link to="/factions?mode=library" className="text-accent underline">Create a faction</Link> first.</p>}
+    {factionId && <section aria-label="Card back" className="space-y-3">
+      <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Card back</h2>
+      <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+        <BackTile image={back.image} label={`${tabLabel} back`} onChoose={() => setSettingsOpen('back')}
+          generateLink={backType ? `/faction-lab?faction=${factionId}&card_type=${backType.id}` : null} />
+      </div>
+    </section>}
+    {!cards.isPending && factionId && !shown.length && <p className="text-sm text-ink/60">No {tabLabel.toLowerCase()} cards for {faction?.name}. <Link to={newCardLink} className="text-accent underline">Add one</Link>.</p>}
+    {(category === 'combat' ? [0, 1, 2, 3].map(level => ({ level, cards: shown.filter(c => c.category === 'combat' && c.level === level) })).filter(g => g.cards.length) : [{ level: null, cards: shown }]).map(group =>
+      <section key={group.level ?? 'all'} aria-label={group.level === null ? `${tabLabel} cards` : `Level ${group.level}`} className="space-y-3">
+        {group.level !== null && <h2 className="m-0 flex items-baseline gap-2 border-b border-divider pb-1.5 font-display text-lg text-accent-300">
+          Level {group.level}<span className="font-sans text-xs font-normal text-ink/45">{group.cards.length} card{group.cards.length === 1 ? '' : 's'}</span>
+        </h2>}
+        <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+          {group.cards.map(card => card.category === 'combat'
+            ? <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} onRendered={onRendered} {...selectProps(card)} />
+            : <TextTile key={card.id} card={card} image={template.image} {...selectProps(card)} />)}
         </div>
-        {!generations.isPending && !batches.isPending && !filteredImages.length && <p className="text-sm text-ink/60">No finished images match. <Link to="/generations" className="text-accent underline">Open Generations</Link>.</p>}
-      </section>
-      <section aria-label="Card preview" className="space-y-3 lg:sticky lg:top-5">
-        <div className="flex items-center justify-between"><h2 className="font-display text-accent-300">2. Preview</h2>{result && <span className="font-mono text-xs text-ink/50">{result.canvas.width} × {result.canvas.height} px</span>}</div>
-        <div className="flex min-h-80 items-center justify-center rounded-lg border border-divider bg-black/30 p-3">
-          <canvas ref={preview} aria-label="Assembled battle card" tabIndex={editingArtwork ? 0 : undefined} style={{ touchAction: editingArtwork ? 'none' : undefined, cursor: editingArtwork ? 'grab' : undefined }}
-            onPointerDown={e => { if (!editingArtwork || e.button !== 0) return; e.preventDefault(); e.currentTarget.setPointerCapture?.(e.pointerId); drag.current = { id: state.cardId, x: e.clientX, y: e.clientY, transform: config.transform } }}
-            onPointerMove={e => { const start = drag.current; if (!start || start.id !== state.cardId) return; const rect = e.currentTarget.getBoundingClientRect(); if (!rect.width || !rect.height) return; changeAssembly({ transform: panArtwork(start.transform, (e.clientX - start.x) / rect.width * 100, (e.clientY - start.y) / rect.height * 100) }) }}
-            onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }} className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
-          {!result && <p role="status" className="p-6 text-center text-sm text-ink/60">{renderError ? renderError : issues.length ? 'Fix the card fields to update the preview.' : !card || !imageUrl ? 'Choose a combat card and artwork.' : !ready ? 'Waiting for card and overlay data…' : 'Rendering card…'}</p>}
-        </div>
-        {sourceCard && imageUrl && <div className="space-y-2 rounded border border-divider p-3">
-          <Button aria-pressed={editingArtwork} disabled={!result} onClick={() => setEditingArtwork(v => !v)}>{editingArtwork ? 'Finish artwork editing' : 'Edit artwork with mouse'}</Button>
-          <p className="text-xs text-ink/60">Drag the preview to move artwork. Scroll over it to zoom around the cursor. Overlay and text stay fixed.</p>
-          <Field label="Artwork scale">{id => <input id={id} type="range" min={0.1} max={5} step={0.01} value={config.transform.scale} className="w-full" onChange={e => changeAssembly({ transform: zoomArtwork(config.transform, Number(e.target.value)) })} />}</Field>
-          <div className="grid grid-cols-2 gap-2"><Field label="Artwork X (%)">{id => <PositionNumber id={id} value={config.transform.x} min={-200} max={200} onChange={x => changeAssembly({ transform: { ...config.transform, x } })} />}</Field><Field label="Artwork Y (%)">{id => <PositionNumber id={id} value={config.transform.y} min={-200} max={200} onChange={y => changeAssembly({ transform: { ...config.transform, y } })} />}</Field></div>
-          <div className="flex justify-between text-xs"><span>{Math.round(config.transform.scale * 100)}% scale</span><Button onClick={() => changeAssembly({ transform: defaultArtwork() })}>Reset artwork</Button></div>
-        </div>}
-        {rendering && result && <p role="status" className="text-xs text-ink/50">Updating preview…</p>}
-        {renderError && <Button onClick={() => setRetry(n => n + 1)}>Retry rendering</Button>}
-        {!!result?.warnings.length && <div role="status" className="space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w}>{w}</p>)}</div>}
-        <p className="text-xs text-ink/50">Parchment panels resize to fit wrapped rules text. PNG exports at the overlay's original resolution, or 1140 × 1480 for uploads without an overlay.</p>
-      </section>
-      <section aria-label="Text and layout editor" className="space-y-4 rounded-lg border border-divider bg-surface p-4">
-        <h2 className="font-display text-accent-300">3. Edit text & positions</h2>
-        {scope && <p className="text-xs text-ink/60">Shared layout: {selectedImage?.name ?? 'Uploaded template'} · {factions.data?.find(f => f.id === scope.faction_id)?.name} · {types.data?.find(t => t.id === scope.card_type_id)?.name ?? 'No card type'}</p>}
-        {!draft ? <p className="text-sm text-ink/60">Choose a combat card to edit its content.</p> : <>
-          <Field label="Title">{id => <input id={id} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} disabled={save.isPending} />}</Field>
-          <div className="grid grid-cols-2 gap-3">{['level', 'resource_cost', 'guns', 'shields', 'eagles'].map(key => <Field key={key} label={key === 'eagles' ? 'Morale / eagles' : key === 'resource_cost' ? 'Resource price' : key[0].toUpperCase() + key.slice(1)}>{id => <input id={id} type="number" min={0} max={key === 'level' ? 3 : undefined} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} disabled={save.isPending} />}</Field>)}</div>
-          {(['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={LAYER_LABELS[key]}>{id => <textarea id={id} rows={4} ref={key === 'upper_text' ? upperText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} disabled={save.isPending} />}</Field>)}
-          <SymbolPicker insert={insertSymbol} disabled={save.isPending} />
-          <p className="text-xs text-ink/60">Use (B), (S), (M) for non-boxed icons; [B], [S], [M] for boxed icons. **Italic text** is supported. Drafts are remembered in this browser. Save assembly stores artwork per card and shares positions across the selected template, faction, and card type.</p>
-          {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field}>{i.field}: {i.message}</p>)}</div>}
-          {dirty && sourceCard && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
-            simpleRows={['level', 'resource_cost', 'guns', 'shields', 'eagles'].filter(key => cardDraft(sourceCard)[key] !== draft[key]).map(key => ({ field: key, before: cardDraft(sourceCard)[key], after: draft[key] }))}
-            textDiffs={['name', 'upper_text', 'lower_text'].map(key => ({ field: LAYER_LABELS[key as Layer], before: cardDraft(sourceCard)[key], after: draft[key] }))} /></details>}
-          <div className="flex flex-wrap gap-2"><Button variant="primary" disabled={!dirty || !!issues.length || save.isPending} onClick={() => { if (sourceCard && card) save.mutate({ id: sourceCard.id, value: card }) }}>{save.isPending ? 'Saving…' : 'Save to card'}</Button><Button disabled={!dirty || save.isPending} onClick={() => { state.clearEdits(state.cardId); save.reset() }}>Discard text edits</Button></div>
-          {save.isError && <p role="alert" className="text-sm text-danger">{save.error.message}</p>}{save.isSuccess && <p role="status" className="text-sm text-success">Card saved to database.</p>}
-          <div className="space-y-3 border-t border-divider pt-4">
-            <Field label="Position controls for">{id => <select id={id} className={selectClass} value={layer} onChange={e => setLayer(e.target.value as Layer)}>{LAYERS.map(key => <option key={key} value={key}>{LAYER_LABELS[key]}</option>)}</select>}</Field>
-            {rulesLayer && <label className="flex items-center gap-2 text-xs text-ink/70"><input type="checkbox" checked={layout[rulesLayer].autoY ?? layout[rulesLayer].y === defaultLayout()[rulesLayer].y} onChange={e => move({ autoY: e.target.checked })} />Automatic vertical position</label>}
-            <p className="text-xs text-ink/50">X / width are % of card width. Y / height / size are % of card height. X and Y set the text area's start. Alignment positions text within that area.</p>
-            <div className="grid grid-cols-2 gap-3">{(['x', 'y', 'width', 'height', 'size', 'lineHeight'] as const).map(key => <Field key={key} label={{ x: 'Start X (%)', y: 'Start Y (%)', width: 'Box width (%)', height: 'Box height (%)', size: 'Font size (%)', lineHeight: 'Line spacing' }[key]}>{id => <PositionNumber key={`${state.cardId}-${layer}-${key}`} id={id} value={p[key]} min={key === 'x' || key === 'y' ? -100 : 0.1} max={key === 'lineHeight' ? 5 : 200} onChange={n => move({ [key]: n })} />}</Field>)}</div>
-            {(['guns', 'shields', 'eagles'].includes(layer)) && <Field label="Icon style">{id => <select id={id} className={selectClass} value={p.iconStyle === 'badge' || !p.iconStyle ? (layer === 'eagles' ? 'box_outline' : 'circle') : p.iconStyle} onChange={e => move({ iconStyle: e.target.value as IconStyle })}>{['plain', ...Object.keys(RESOURCE_TOKENS[layer as ResourceLayer])].map(style => <option key={style} value={style}>{ICON_STYLE_LABELS[style as IconStyle]}</option>)}</select>}</Field>}
-            <Field label="Text alignment">{id => <select id={id} className={selectClass} value={p.align ?? 'left'} onChange={e => move({ align: e.target.value as Placement['align'] })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>}</Field>
-            <Field label="Font">{id => <select id={id} className={selectClass} value={p.font ?? 'rules'} onChange={e => move({ font: e.target.value as Placement['font'] })}><option value="rules">Forbidden Stars (rules)</option><option value="event">Event</option><option value="headline">Headline</option></select>}</Field>
-            <Field label="Text / icon color">{id => <input id={id} type="color" value={p.color} onChange={e => move({ color: e.target.value })} className="h-9 w-full rounded border border-divider bg-bg" />}</Field>
-            <Button onClick={() => state.resetLayout(scopeKey)}>Reset positions to reference layout</Button>
-          </div>
-        </>}
-      </section>
-    </div>
+      </section>)}
+    {confirmDelete && <ConfirmDialog title={`Delete ${chosen.length} card${chosen.length === 1 ? '' : 's'}?`}
+      body={`This permanently deletes ${chosen.map(c => c.name).slice(0, 5).join(', ')}${chosen.length > 5 ? ` and ${chosen.length - 5} more` : ''}, with their artwork. It cannot be undone.`}
+      confirmLabel={busy === 'delete' ? 'Deleting…' : 'Delete cards'} error={actionError}
+      onConfirm={() => { if (!busy) void removeSelected() }} onCancel={() => { if (!busy) setConfirmDelete(false) }} />}
+    {importOpen && factions.data && <ImportCardsDialog factions={factions.data} onClose={() => setImportOpen(false)} onDirty={() => {}}
+      onImported={count => { setImportOpen(false); setNotice(`Imported ${count} card${count === 1 ? '' : 's'}.`); void queryClient.invalidateQueries({ queryKey: ['cards'] }) }} />}
+    {settingsOpen && <TemplateSettingsDialog initialFactionId={factionId} initialCategory={category} initialSide={settingsOpen} onClose={() => setSettingsOpen(null)} />}
   </div>
 }

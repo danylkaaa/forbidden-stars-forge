@@ -7,9 +7,8 @@ import { DiffPanel } from '../../components/DiffPanel'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, inputClass } from '../../components/Field'
 import { isDraftDirty } from '../../lib/draftForm'
-import { buildCardTypeForm, createCardType, startCardTypeAssist, updateCardType, type CardType } from './api'
+import { buildCardTypeForm, isBuiltinCardType, createCardType, startCardTypeAssist, updateCardType, type CardType } from './api'
 import { OpenAIFilePanel } from './OpenAIFilePanel'
-import { OverlayPanel } from './OverlayPanel'
 import { TemplateDropzone } from './TemplateDropzone'
 import { useCardTypeDraft, useCardTypesUi } from './store'
 
@@ -109,6 +108,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
         <Field label="Name">
           {(id) => (
             <input id={id} type="text" value={draft.name} placeholder="e.g. combat"
+              disabled={!!persistedCt && isBuiltinCardType(persistedCt.name)} title={persistedCt && isBuiltinCardType(persistedCt.name) ? 'Built-in card types cannot be renamed' : undefined}
               onChange={(e) => draftState.setField('name', e.target.value)} className={inputClass} />
           )}
         </Field>
@@ -126,7 +126,6 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
 
         <TemplateDropzone persisted={persistedCt} />
         <OpenAIFilePanel persisted={persistedCt} />
-        <OverlayPanel persisted={persistedCt} />
 
         {saveResult.error && <p role="alert" className="m-0 text-sm text-danger">{saveResult.error}</p>}
 

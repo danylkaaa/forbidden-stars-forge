@@ -1,10 +1,10 @@
 import { Link } from 'react-router'
-import { CogMechanicumIcon, TestGenIcon, CardTypesIcon } from './icons'
+import { CogMechanicumIcon, TestGenIcon, LibraryIcon } from './icons'
 import type { WorkspaceMode } from './workspaceMode'
 
 const modes = [
   { mode: 'generation', to: '/faction-lab', label: 'AI Image Generation', Icon: TestGenIcon },
-  { mode: 'library', to: '/assemble', label: 'Assemble Library', Icon: CardTypesIcon },
+  { mode: 'library', to: '/assemble', label: 'Library', Icon: LibraryIcon },
 ] as const
 
 export function ModeNavbar({ mode }: { mode: WorkspaceMode }) {

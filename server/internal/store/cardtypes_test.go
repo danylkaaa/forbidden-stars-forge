@@ -113,3 +113,19 @@ func TestCardTypeSetFileIDNotFound(t *testing.T) {
 		t.Fatalf("set file id missing: %v", err)
 	}
 }
+
+func TestEnsureBuiltinCardTypesIsIdempotent(t *testing.T) {
+	s := openCardTypes(t)
+	if _, err := s.Create("combat", "kept", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := s.EnsureBuiltins(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := s.List()
+	if err != nil || len(list) != 6 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "combat back" || list[3].Description == "" || list[3].Constraints == "" {
+		t.Fatalf("builtins: %+v %v", list, err)
+	}
+}
