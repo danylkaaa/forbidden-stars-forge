@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"cardforge/internal/openai"
@@ -21,6 +23,7 @@ type GenerationsHandler struct {
 	Factions  *store.FactionsStore
 	CardTypes *store.CardTypesStore
 	Settings  *store.SettingsStore
+	Usage     *store.UsageStore
 	DataDir   string
 }
 
@@ -29,6 +32,7 @@ type generateRequest struct {
 	CardTypeID     int64  `json:"card_type_id"`
 	Mode           string `json:"mode"`
 	PromptOverride string `json:"prompt_override"`
+	Model          string `json:"model"` // empty = Settings default
 }
 
 // loadPair fetches the faction and card type, mapping ErrNotFound to 404.
@@ -67,31 +71,91 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 
 	p := req.PromptOverride
 	if p == "" {
-		p = prompt.ImageEdit(ct.Name, ct.Description, ct.Constraints, f.Description)
+		p = prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f))
 	}
-	g, err := h.Gens.Create(req.FactionID, req.CardTypeID, req.Mode, p)
+	model, err := h.resolveModel(req.Model)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	all, err := h.Settings.GetAll()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Quality is fixed now so the image name and the request agree.
+	quality := modeQuality(req.Mode, all)
+	g, err := h.Gens.Create(req.FactionID, req.CardTypeID, req.Mode, model, quality,
+		store.ImageNameSuffix(f.Name, ct.Name, quality), p)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	go h.run(g.ID, req.Mode, p, ct.OpenAIFileID)
+	go h.run(g.ID, quality, model, p, ct.OpenAIFileID)
 	writeJSON(w, http.StatusCreated, g)
+}
+
+// modeQuality is the Settings quality for a draft/final run.
+func modeQuality(mode string, all map[string]string) string {
+	if mode == "final" {
+		return all["final_quality"]
+	}
+	return all["draft_quality"]
+}
+
+// SetFavorite stars or unstars a generation.
+func (h *GenerationsHandler) SetFavorite(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req struct {
+		Favorite bool `json:"favorite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if err := h.Gens.SetFavorite(id, req.Favorite); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "generation not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"favorite": req.Favorite})
+}
+
+// factionStyle maps a stored faction to the image prompt's faction part.
+func factionStyle(f store.Faction) prompt.FactionStyle {
+	return prompt.FactionStyle{Name: f.Name, PrimaryColor: f.PrimaryColor, Texture: f.Texture, Description: f.Description}
+}
+
+// resolveModel returns the per-request model, falling back to the Settings
+// default.
+func (h *GenerationsHandler) resolveModel(override string) (string, error) {
+	if m := strings.TrimSpace(override); m != "" {
+		return m, nil
+	}
+	all, err := h.Settings.GetAll()
+	if err != nil {
+		return "", err
+	}
+	return all["openai_model"], nil
 }
 
 // run performs the OpenAI call in the background and persists the outcome.
 // All artifacts are written before status flips to done (PRD §7.3).
-func (h *GenerationsHandler) run(id int64, mode, promptText, fileID string) {
+func (h *GenerationsHandler) run(id int64, quality, model, promptText, fileID string) {
 	fail := func(msg string) { _ = h.Gens.MarkFailed(id, msg) }
 
 	all, err := h.Settings.GetAll()
 	if err != nil {
 		fail("read settings: " + err.Error())
 		return
-	}
-	quality := all["draft_quality"]
-	if mode == "final" {
-		quality = all["final_quality"]
 	}
 	client := openai.New(resolveOpenAIKey(all))
 	client.BaseURL = openAIBaseURL
@@ -100,8 +164,9 @@ func (h *GenerationsHandler) run(id int64, mode, promptText, fileID string) {
 	defer cancel()
 	start := time.Now()
 	res, err := client.EditImage(ctx, openai.ImageEditRequest{
-		Model: all["openai_model"], FileID: fileID, Prompt: promptText,
+		Model: model, FileID: fileID, Prompt: promptText,
 		Size: all["image_size"], Quality: quality, InputFidelity: all["input_fidelity"],
+		Background: all["background"],
 	})
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
@@ -122,7 +187,9 @@ func (h *GenerationsHandler) run(id int64, mode, promptText, fileID string) {
 
 	cost := 0.0
 	if pt, err := pricing.Parse(all["price_table"]); err == nil {
-		cost = pt.Cost(all["openai_model"], res.InputTokens, res.OutputTokens)
+		cost = pt.Cost(model, pricing.Usage{
+			InputTokens: res.InputTokens, TextInputTokens: res.TextInputTokens, OutputTokens: res.OutputTokens,
+		})
 	}
 	if err := h.Gens.MarkDone(id, rel, res.InputTokens, res.OutputTokens, cost, duration); err != nil {
 		fail("persist result: " + err.Error())
@@ -167,6 +234,44 @@ func (h *GenerationsHandler) ServeImage(w http.ResponseWriter, r *http.Request) 
 	http.ServeFile(w, r, filepath.Join(h.DataDir, g.ImagePath))
 }
 
+// Assemble builds the image prompt from *unsaved* faction fields and,
+// optionally, unsaved card type description/constraints (Faction Lab), so
+// the user can see and send it before saving anything.
+func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CardTypeID   int64  `json:"card_type_id"`
+		Name         string `json:"name"`
+		PrimaryColor string `json:"primary_color"`
+		Texture      string `json:"texture"`
+		Description  string `json:"description"`
+		// nil = use the saved card type text
+		CardTypeDescription *string `json:"card_type_description"`
+		CardTypeConstraints *string `json:"card_type_constraints"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	ct, err := h.CardTypes.Get(req.CardTypeID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "card type not found")
+		return
+	}
+	if req.CardTypeDescription != nil {
+		ct.Description = *req.CardTypeDescription
+	}
+	if req.CardTypeConstraints != nil {
+		ct.Constraints = *req.CardTypeConstraints
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"prompt": prompt.ImageEdit(ct.Description, ct.Constraints, prompt.FactionStyle{
+			Name: strings.TrimSpace(req.Name), PrimaryColor: strings.TrimSpace(req.PrimaryColor),
+			Texture: strings.TrimSpace(req.Texture), Description: req.Description,
+		}),
+		"has_file": ct.OpenAIFileID != "",
+	})
+}
+
 func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	factionID, err1 := strconv.ParseInt(r.URL.Query().Get("faction_id"), 10, 64)
 	cardTypeID, err2 := strconv.ParseInt(r.URL.Query().Get("card_type_id"), 10, 64)
@@ -183,10 +288,14 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	model := strings.TrimSpace(r.URL.Query().Get("model"))
+	if model == "" {
+		model = all["openai_model"]
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"prompt":        prompt.ImageEdit(ct.Name, ct.Description, ct.Constraints, f.Description),
+		"prompt":        prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f)),
 		"has_file":      ct.OpenAIFileID != "",
-		"est_draft_usd": pricing.EstimatePerImage(all["draft_quality"]),
-		"est_final_usd": pricing.EstimatePerImage(all["final_quality"]),
+		"est_draft_usd": estimatePerImage(h.Usage, all, model, "draft"),
+		"est_final_usd": estimatePerImage(h.Usage, all, model, "final"),
 	})
 }

@@ -10,6 +10,7 @@ export type Batch = {
   id: number
   openai_batch_id: string
   mode: BatchMode
+  model: string
   status: BatchStatus
   jsonl_path: string
   output_path: string
@@ -28,6 +29,9 @@ export type BatchItem = {
   faction_id: number
   card_type_id: number
   custom_id: string
+  quality: string
+  name: string // "<n>-<faction>-<type>-<quality>"
+  favorite: boolean
   status: 'pending' | 'done' | 'failed'
   image_path: string
   input_tokens: number
@@ -38,7 +42,7 @@ export type BatchItem = {
 
 export type BatchDetail = { batch: Batch; items: BatchItem[] }
 export type BatchPreview = { jsonl: string; count: number; est_cost: number }
-export type BatchScope = { faction_ids: number[]; card_type_ids: number[]; mode: BatchMode }
+export type BatchScope = { faction_ids: number[]; card_type_ids: number[]; mode: BatchMode; model?: string }
 
 const ACTIVE_STATUSES: BatchStatus[] = ['created', 'submitted', 'in_progress']
 

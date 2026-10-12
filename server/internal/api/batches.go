@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"cardforge/internal/batchpoller"
@@ -25,6 +27,7 @@ type BatchesHandler struct {
 	Factions  *store.FactionsStore
 	CardTypes *store.CardTypesStore
 	Settings  *store.SettingsStore
+	Usage     *store.UsageStore
 	Poller    *batchpoller.Poller
 	DataDir   string
 }
@@ -82,8 +85,13 @@ func (h *BatchesHandler) counts(b store.Batch) batchpoller.Counts {
 // after the batch was submitted.
 func (h *BatchesHandler) out(b store.Batch) batchOut {
 	c := h.counts(b)
-	quality := h.resolveQuality(b.Mode, h.settingsOrEmpty())
-	return batchOut{Batch: b, Counts: c, EstCostUSD: float64(c.Total) * pricing.EstimatePerImage(quality) * 0.5}
+	all := h.settingsOrEmpty()
+	model := b.Model
+	if model == "" { // batches created before per-batch models
+		model = all["openai_model"]
+	}
+	est := estimatePerImage(h.Usage, all, model, b.Mode) * pricing.BatchDiscount
+	return batchOut{Batch: b, Counts: c, EstCostUSD: float64(c.Total) * est}
 }
 
 // settingsOrEmpty returns an empty map on error so a settings read failure
@@ -100,6 +108,15 @@ type batchScopeRequest struct {
 	FactionIDs  []int64 `json:"faction_ids"`
 	CardTypeIDs []int64 `json:"card_type_ids"`
 	Mode        string  `json:"mode"`
+	Model       string  `json:"model"` // empty = Settings default
+}
+
+// batchModel is the request's model override or the Settings default.
+func batchModel(req batchScopeRequest, all map[string]string) string {
+	if m := strings.TrimSpace(req.Model); m != "" {
+		return m
+	}
+	return all["openai_model"]
 }
 
 func (h *BatchesHandler) resolveQuality(mode string, all map[string]string) string {
@@ -123,6 +140,7 @@ func (h *BatchesHandler) buildLines(req batchScopeRequest) (string, []jsonl.Line
 		return "", nil, nil, err
 	}
 	quality := h.resolveQuality(req.Mode, all)
+	model := batchModel(req, all)
 	items := make([]jsonl.Item, 0, len(req.FactionIDs)*len(req.CardTypeIDs))
 	for _, fid := range req.FactionIDs {
 		f, err := h.Factions.Get(fid)
@@ -141,11 +159,14 @@ func (h *BatchesHandler) buildLines(req batchScopeRequest) (string, []jsonl.Line
 				FactionID: f.ID, FactionName: f.Name,
 				CardTypeID: ct.ID, CardTypeName: ct.Name,
 				FileID: ct.OpenAIFileID,
-				Prompt: prompt.ImageEdit(ct.Name, ct.Description, ct.Constraints, f.Description),
+				Prompt: prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f)),
 			})
 		}
 	}
-	text, lines, err := jsonl.Build(items, all["openai_model"], all["image_size"], quality, all["input_fidelity"])
+	text, lines, err := jsonl.Build(items, openai.ImageEditRequest{
+		Model: model, Size: all["image_size"], Quality: quality,
+		InputFidelity: all["input_fidelity"], Background: all["background"],
+	})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -163,13 +184,13 @@ func (h *BatchesHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	quality := h.resolveQuality(req.Mode, all)
 	// The batch discount (PRD §5) applies to actual usage-based cost; the
 	// pre-call estimate mirrors that so the preview isn't misleadingly high.
+	est := estimatePerImage(h.Usage, all, batchModel(req, all), req.Mode) * pricing.BatchDiscount
 	writeJSON(w, http.StatusOK, map[string]any{
 		"jsonl":    text,
 		"count":    len(lines),
-		"est_cost": float64(len(lines)) * pricing.EstimatePerImage(quality) * 0.5,
+		"est_cost": float64(len(lines)) * est,
 	})
 }
 
@@ -179,15 +200,22 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
-	text, lines, _, err := h.buildLines(req)
+	text, lines, all, err := h.buildLines(req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	quality := h.resolveQuality(req.Mode, all)
 	items := make([]store.BatchItemInput, len(lines))
 	for i, l := range lines {
-		items[i] = store.BatchItemInput{FactionID: l.FactionID, CardTypeID: l.CardTypeID, CustomID: l.CustomID}
+		// buildLines already validated both exist.
+		f, _ := h.Factions.Get(l.FactionID)
+		ct, _ := h.CardTypes.Get(l.CardTypeID)
+		items[i] = store.BatchItemInput{
+			FactionID: l.FactionID, CardTypeID: l.CardTypeID, CustomID: l.CustomID,
+			Quality: quality, NameSuffix: store.ImageNameSuffix(f.Name, ct.Name, quality),
+		}
 	}
 	// Directory name is a nanosecond timestamp, not the (not-yet-known) DB
 	// id — the DB row and the on-disk directory are both unique identifiers,
@@ -203,7 +231,7 @@ func (h *BatchesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := h.Store.Create(req.Mode, relPath, items)
+	b, err := h.Store.Create(req.Mode, batchModel(req, all), relPath, items)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -389,4 +417,40 @@ func (h *BatchesHandler) Download(w http.ResponseWriter, r *http.Request) {
 		}
 		fw.Write(data)
 	}
+}
+
+// DoneItems lists every finished batch image for the Generations page.
+func (h *BatchesHandler) DoneItems(w http.ResponseWriter, _ *http.Request) {
+	items, err := h.Store.DoneItems()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// SetItemFavorite stars or unstars a batch item.
+func (h *BatchesHandler) SetItemFavorite(w http.ResponseWriter, r *http.Request) {
+	batchID, ok1 := idParam(r, "id")
+	itemID, ok2 := idParam(r, "itemID")
+	if !ok1 || !ok2 {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req struct {
+		Favorite bool `json:"favorite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if err := h.Store.SetItemFavorite(batchID, itemID, req.Favorite); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "batch item not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"favorite": req.Favorite})
 }

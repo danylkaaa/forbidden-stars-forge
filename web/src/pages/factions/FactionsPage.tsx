@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { deleteFaction, useFactions } from './api'
 import { FactionDialog } from './FactionDialog'
 import { FactionsTable } from './FactionsTable'
+import { ClaudeAssistPanel } from './ClaudeAssistPanel'
 import { GenerateButton } from './GenerateButton'
 import { HistoryDialog } from './HistoryDialog'
 import { useFactionsUi } from './store'
@@ -52,7 +53,7 @@ export default function FactionsPage() {
           onDelete={(f) => { setDeleteError(null); ui.set({ deleteConfirmId: f.id }) }} />
       )}
 
-      <FactionDialog generateSlot={<GenerateButton />} />
+      <FactionDialog generateSlot={<GenerateButton />} assistSlot={<ClaudeAssistPanel />} />
 
       <HistoryDialog factions={data ?? []} />
 

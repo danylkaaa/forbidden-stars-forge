@@ -129,8 +129,11 @@ type outputLine struct {
 				B64JSON string `json:"b64_json"`
 			} `json:"data"`
 			Usage struct {
-				InputTokens  int64 `json:"input_tokens"`
-				OutputTokens int64 `json:"output_tokens"`
+				InputTokens        int64 `json:"input_tokens"`
+				OutputTokens       int64 `json:"output_tokens"`
+				InputTokensDetails struct {
+					TextTokens int64 `json:"text_tokens"`
+				} `json:"input_tokens_details"`
 			} `json:"usage"`
 		} `json:"body"`
 	} `json:"response"`
@@ -177,7 +180,11 @@ func (p *Poller) complete(ctx context.Context, b store.Batch, status openai.Batc
 			log.Printf("batchpoller: batch %d: save output: %v", b.ID, err)
 			return
 		}
-		total, ok = p.processOutputLines(b.ID, dir, data, pt, all["openai_model"])
+		model := b.Model
+		if model == "" { // batches created before per-batch models
+			model = all["openai_model"]
+		}
+		total, ok = p.processOutputLines(b.ID, dir, data, pt, model)
 	}
 	if status.ErrorFileID != "" {
 		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -236,7 +243,9 @@ func (p *Poller) processOutputLines(batchID int64, dir string, data []byte, pt p
 			continue
 		}
 		usage := line.Response.Body.Usage
-		cost := pt.Cost(model, usage.InputTokens, usage.OutputTokens) * 0.5 // batch pricing is 50% of the standard rate
+		cost := pt.Cost(model, pricing.Usage{
+			InputTokens: usage.InputTokens, TextInputTokens: usage.InputTokensDetails.TextTokens, OutputTokens: usage.OutputTokens,
+		}) * pricing.BatchDiscount // batch pricing is 50% of the standard rate
 		total += cost
 		if err := p.Store.MarkItemDone(batchID, line.CustomID, rel, usage.InputTokens, usage.OutputTokens, cost); err != nil {
 			log.Printf("batchpoller: batch %d: mark done %s: %v", batchID, line.CustomID, err)

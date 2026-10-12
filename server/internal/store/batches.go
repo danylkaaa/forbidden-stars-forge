@@ -6,6 +6,7 @@ type Batch struct {
 	ID            int64   `json:"id"`
 	OpenAIBatchID string  `json:"openai_batch_id"`
 	Mode          string  `json:"mode"`
+	Model         string  `json:"model"`
 	Status        string  `json:"status"`
 	JSONLPath     string  `json:"jsonl_path"`
 	OutputPath    string  `json:"output_path"`
@@ -22,6 +23,9 @@ type BatchItem struct {
 	FactionID    int64   `json:"faction_id"`
 	CardTypeID   int64   `json:"card_type_id"`
 	CustomID     string  `json:"custom_id"`
+	Quality      string  `json:"quality"`
+	Name         string  `json:"name"`
+	Favorite     bool    `json:"favorite"`
 	Status       string  `json:"status"`
 	ImagePath    string  `json:"image_path"`
 	InputTokens  int64   `json:"input_tokens"`
@@ -34,6 +38,8 @@ type BatchItemInput struct {
 	FactionID  int64
 	CardTypeID int64
 	CustomID   string
+	Quality    string
+	NameSuffix string // see ImageNameSuffix; the number is assigned on insert
 }
 
 type BatchesStore struct {
@@ -44,13 +50,13 @@ func NewBatchesStore(db *sql.DB) *BatchesStore {
 	return &BatchesStore{db: db}
 }
 
-const batchCols = `id, COALESCE(openai_batch_id,''), mode, status, jsonl_path,
+const batchCols = `id, COALESCE(openai_batch_id,''), mode, model, status, jsonl_path,
 	COALESCE(output_path,''), COALESCE(total_cost_usd,0),
 	COALESCE(submitted_at,''), COALESCE(completed_at,''), created_at, updated_at`
 
 func scanBatch(row interface{ Scan(...any) error }) (Batch, error) {
 	var b Batch
-	err := row.Scan(&b.ID, &b.OpenAIBatchID, &b.Mode, &b.Status, &b.JSONLPath,
+	err := row.Scan(&b.ID, &b.OpenAIBatchID, &b.Mode, &b.Model, &b.Status, &b.JSONLPath,
 		&b.OutputPath, &b.TotalCostUSD, &b.SubmittedAt, &b.CompletedAt, &b.CreatedAt, &b.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return b, ErrNotFound
@@ -58,13 +64,13 @@ func scanBatch(row interface{ Scan(...any) error }) (Batch, error) {
 	return b, err
 }
 
-func (s *BatchesStore) Create(mode, jsonlPath string, items []BatchItemInput) (Batch, error) {
+func (s *BatchesStore) Create(mode, model, jsonlPath string, items []BatchItemInput) (Batch, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Batch{}, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`INSERT INTO batches (mode, status, jsonl_path) VALUES (?, 'created', ?)`, mode, jsonlPath)
+	res, err := tx.Exec(`INSERT INTO batches (mode, model, status, jsonl_path) VALUES (?, ?, 'created', ?)`, mode, model, jsonlPath)
 	if err != nil {
 		return Batch{}, err
 	}
@@ -74,8 +80,10 @@ func (s *BatchesStore) Create(mode, jsonlPath string, items []BatchItemInput) (B
 	}
 	for _, it := range items {
 		if _, err := tx.Exec(
-			`INSERT INTO batch_items (batch_id, faction_id, card_type_id, custom_id, status) VALUES (?, ?, ?, ?, 'pending')`,
-			id, it.FactionID, it.CardTypeID, it.CustomID); err != nil {
+			`INSERT INTO batch_items (batch_id, faction_id, card_type_id, custom_id, quality, name, status)
+			 VALUES (?, ?, ?, ?, ?, (`+nextImageNumber+`) || ?, 'pending')`,
+			id, it.FactionID, it.CardTypeID, it.CustomID, it.Quality,
+			it.FactionID, it.CardTypeID, it.FactionID, it.CardTypeID, it.NameSuffix); err != nil {
 			return Batch{}, err
 		}
 	}
@@ -156,7 +164,7 @@ func (s *BatchesStore) execOne(q string, args ...any) error {
 	return nil
 }
 
-const batchItemCols = `id, batch_id, faction_id, card_type_id, custom_id, status,
+const batchItemCols = `id, batch_id, faction_id, card_type_id, custom_id, quality, name, favorite, status,
 	COALESCE(image_path,''), COALESCE(input_tokens,0), COALESCE(output_tokens,0),
 	COALESCE(cost_usd,0), COALESCE(error,'')`
 
@@ -169,13 +177,54 @@ func (s *BatchesStore) Items(batchID int64) ([]BatchItem, error) {
 	out := make([]BatchItem, 0)
 	for rows.Next() {
 		var it BatchItem
-		if err := rows.Scan(&it.ID, &it.BatchID, &it.FactionID, &it.CardTypeID, &it.CustomID, &it.Status,
+		if err := rows.Scan(&it.ID, &it.BatchID, &it.FactionID, &it.CardTypeID, &it.CustomID,
+			&it.Quality, &it.Name, &it.Favorite, &it.Status,
 			&it.ImagePath, &it.InputTokens, &it.OutputTokens, &it.CostUSD, &it.Error); err != nil {
 			return nil, err
 		}
 		out = append(out, it)
 	}
 	return out, rows.Err()
+}
+
+// GalleryItem is a finished batch item plus the batch fields the
+// Generations page needs.
+type GalleryItem struct {
+	BatchItem
+	Mode        string `json:"mode"`
+	Model       string `json:"model"`
+	CompletedAt string `json:"completed_at"`
+}
+
+// DoneItems returns every batch item with an image, newest batch first.
+func (s *BatchesStore) DoneItems() ([]GalleryItem, error) {
+	rows, err := s.db.Query(`SELECT i.id, i.batch_id, i.faction_id, i.card_type_id, i.custom_id,
+		i.quality, i.name, i.favorite, i.status,
+		COALESCE(i.image_path,''), COALESCE(i.input_tokens,0), COALESCE(i.output_tokens,0),
+		COALESCE(i.cost_usd,0), COALESCE(i.error,''), b.mode, b.model, COALESCE(b.completed_at, b.created_at)
+		FROM batch_items i JOIN batches b ON b.id = i.batch_id
+		WHERE i.status = 'done' AND i.image_path IS NOT NULL AND i.image_path != ''
+		ORDER BY b.id DESC, i.custom_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]GalleryItem, 0)
+	for rows.Next() {
+		var it GalleryItem
+		if err := rows.Scan(&it.ID, &it.BatchID, &it.FactionID, &it.CardTypeID, &it.CustomID,
+			&it.Quality, &it.Name, &it.Favorite, &it.Status,
+			&it.ImagePath, &it.InputTokens, &it.OutputTokens, &it.CostUSD, &it.Error,
+			&it.Mode, &it.Model, &it.CompletedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+func (s *BatchesStore) SetItemFavorite(batchID, itemID int64, favorite bool) error {
+	return s.execOne(`UPDATE batch_items SET favorite = ? WHERE batch_id = ? AND id = ?`, favorite, batchID, itemID)
 }
 
 func (s *BatchesStore) MarkItemDone(batchID int64, customID, imagePath string, inTok, outTok int64, costUSD float64) error {

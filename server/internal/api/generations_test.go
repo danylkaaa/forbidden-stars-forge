@@ -70,7 +70,7 @@ func TestGenerateHappyPath(t *testing.T) {
 		if body["quality"] != "low" { // draft mode → draft_quality default 'low'
 			t.Errorf("quality: %v", body["quality"])
 		}
-		img := body["image"].([]any)[0].(map[string]any)
+		img := body["images"].([]any)[0].(map[string]any)
 		if img["file_id"] != "file-gen-test" {
 			t.Errorf("file_id: %v", img["file_id"])
 		}
@@ -95,8 +95,8 @@ func TestGenerateHappyPath(t *testing.T) {
 	if done["status"] != "done" {
 		t.Fatalf("final: %v", done)
 	}
-	// cost: 1200/1M*10 + 4800/1M*40 = 0.204 (seeded price table)
-	if c := done["cost_usd"].(float64); c < 0.2039 || c > 0.2041 {
+	// cost: 1200/1M*8 + 4800/1M*30 = 0.1536 (seeded gpt-image-2 rates)
+	if c := done["cost_usd"].(float64); c < 0.1535 || c > 0.1537 {
 		t.Fatalf("cost: %v", c)
 	}
 	if done["duration_ms"].(float64) < 0 || done["image_path"] == "" {
@@ -205,8 +205,17 @@ func TestGeneratePreview(t *testing.T) {
 	if p, _ := out["prompt"].(string); !strings.Contains(p, "fill crimson zone") {
 		t.Fatalf("prompt: %v", out["prompt"])
 	}
-	if out["has_file"] != true || out["est_draft_usd"].(float64) != 0.01 || out["est_final_usd"].(float64) != 0.19 {
+	// No history yet: default input mix + measured output tokens at the
+	// seeded gpt-image-2 rates (draft=low ≈ $0.0154, final=high ≈ $0.0478).
+	draft, final := out["est_draft_usd"].(float64), out["est_final_usd"].(float64)
+	if out["has_file"] != true || draft < 0.014 || draft > 0.017 || final < 0.045 || final > 0.051 {
 		t.Fatalf("preview meta: %v", out)
+	}
+	// A per-run model override is priced as that model.
+	_, unpriced := doJSON(t, h, http.MethodGet,
+		fmt.Sprintf("/api/generate/preview?faction_id=%d&card_type_id=%d&model=not-a-priced-model", fid, ctid), "")
+	if unpriced["est_draft_usd"].(float64) != 0 {
+		t.Fatalf("unpriced model estimate: %v", unpriced)
 	}
 
 	rec, _ = doJSON(t, h, http.MethodGet, "/api/generate/preview?faction_id=999&card_type_id=1", "")
@@ -245,4 +254,90 @@ func TestGenerationsList(t *testing.T) {
 	}
 	_ = os.PathSeparator
 	_ = filepath.Join
+}
+
+func TestGenerateUsesModelOverride(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h := newTestRouter(t)
+	fid, ctid := setupGenFixtures(t, h)
+
+	b64 := base64.StdEncoding.EncodeToString([]byte("\x89PNG"))
+	var gotModel any
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		gotModel = body["model"]
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}],"usage":{"input_tokens":1,"output_tokens":1}}`, b64)
+	}))
+	defer fake.Close()
+	old := openAIBaseURL
+	openAIBaseURL = fake.URL
+	defer func() { openAIBaseURL = old }()
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/generate",
+		fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft","model":"gpt-image-2.5-flare"}`, fid, ctid))
+	if rec.Code != http.StatusCreated || out["model"] != "gpt-image-2.5-flare" {
+		t.Fatalf("start: %d %v", rec.Code, out)
+	}
+	if done := pollGeneration(t, h, int64(out["id"].(float64))); done["status"] != "done" {
+		t.Fatalf("final: %v", done)
+	}
+	if gotModel != "gpt-image-2.5-flare" {
+		t.Fatalf("openai got model %v", gotModel)
+	}
+}
+
+func TestAssembleUsesUnsavedFactionFields(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h := newTestRouter(t)
+	_, ctid := setupGenFixtures(t, h)
+	rec, out := doJSON(t, h, http.MethodPost, "/api/generate/assemble",
+		fmt.Sprintf(`{"card_type_id":%d,"name":"Tau","primary_color":" ochre ","texture":"ceramic","description":"draft style"}`, ctid))
+	if rec.Code != 200 || out["has_file"] != true {
+		t.Fatalf("assemble: %d %v", rec.Code, out)
+	}
+	p, _ := out["prompt"].(string)
+	for _, want := range []string{"## Constraints\nfill crimson zone", "## Primary color\nochre", "## Texture\nceramic", "## Faction style\ndraft style"} {
+		if !strings.Contains(p, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, p)
+		}
+	}
+	if rec, _ := doJSON(t, h, http.MethodPost, "/api/generate/assemble", `{"card_type_id":999}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown card type: %d", rec.Code)
+	}
+}
+
+func TestFavoriteEndpoints(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h := newTestRouter(t)
+	fid, ctid := setupGenFixtures(t, h)
+	_, g := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft"}`, fid, ctid))
+	if g["name"] != "1-tau-combat-low" || g["quality"] != "low" {
+		t.Fatalf("generation: %v", g)
+	}
+	id := int64(g["id"].(float64))
+	if rec, out := doJSON(t, h, http.MethodPut, fmt.Sprintf("/api/generations/%d/favorite", id), `{"favorite":true}`); rec.Code != 200 || out["favorite"] != true {
+		t.Fatalf("favorite: %d %v", rec.Code, out)
+	}
+	if _, got := doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/generations/%d", id), ""); got["favorite"] != true {
+		t.Fatalf("not saved: %v", got)
+	}
+	if rec, _ := doJSON(t, h, http.MethodPut, "/api/generations/999/favorite", `{"favorite":true}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown: %d", rec.Code)
+	}
+	if rec, _ := doJSON(t, h, http.MethodPut, "/api/batches/1/items/1/favorite", `{"favorite":true}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown item: %d", rec.Code)
+	}
+}
+
+func TestAssembleUsesUnsavedCardTypeText(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h := newTestRouter(t)
+	_, ctid := setupGenFixtures(t, h)
+	_, out := doJSON(t, h, http.MethodPost, "/api/generate/assemble",
+		fmt.Sprintf(`{"card_type_id":%d,"name":"Tau","card_type_constraints":"draft constraints"}`, ctid))
+	p, _ := out["prompt"].(string)
+	if !strings.Contains(p, "## Constraints\ndraft constraints") || !strings.Contains(p, "## Description\nwarriors") {
+		t.Fatalf("prompt:\n%s", p)
+	}
 }

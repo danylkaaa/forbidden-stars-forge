@@ -14,7 +14,7 @@ func genFixtures(t *testing.T) (*GenerationsStore, int64, int64) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	f, err := NewFactionsStore(db).Create("Tau", "desc", "Galaxy in Flames", "manual")
+	f, err := NewFactionsStore(db).Create(FactionInput{Name: "Tau", Description: "desc", DLC: "Galaxy in Flames"}, "manual")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func genFixtures(t *testing.T) (*GenerationsStore, int64, int64) {
 
 func TestGenerationCreatePending(t *testing.T) {
 	s, fid, ctid := genFixtures(t)
-	g, err := s.Create(fid, ctid, "draft", "the prompt")
+	g, err := s.Create(fid, ctid, "draft", "gpt-image-2", "low", "-tau-combat-low", "the prompt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestGenerationCreatePending(t *testing.T) {
 
 func TestGenerationMarkDone(t *testing.T) {
 	s, fid, ctid := genFixtures(t)
-	g, _ := s.Create(fid, ctid, "final", "p")
+	g, _ := s.Create(fid, ctid, "final", "gpt-image-2", "low", "-tau-combat-low", "p")
 	if err := s.MarkDone(g.ID, "generated/gen-1.png", 1200, 4800, 0.19, 43000); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestGenerationMarkDone(t *testing.T) {
 
 func TestGenerationMarkFailed(t *testing.T) {
 	s, fid, ctid := genFixtures(t)
-	g, _ := s.Create(fid, ctid, "draft", "p")
+	g, _ := s.Create(fid, ctid, "draft", "gpt-image-2", "low", "-tau-combat-low", "p")
 	if err := s.MarkFailed(g.ID, "openai: boom (request id r1)"); err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +64,8 @@ func TestGenerationMarkFailed(t *testing.T) {
 
 func TestGenerationListNewestFirst(t *testing.T) {
 	s, fid, ctid := genFixtures(t)
-	a, _ := s.Create(fid, ctid, "draft", "p1")
-	b, _ := s.Create(fid, ctid, "draft", "p2")
+	a, _ := s.Create(fid, ctid, "draft", "gpt-image-2", "low", "-tau-combat-low", "p1")
+	b, _ := s.Create(fid, ctid, "draft", "gpt-image-2", "low", "-tau-combat-low", "p2")
 	all, err := s.List()
 	if err != nil || len(all) != 2 {
 		t.Fatalf("list: %v len=%d", err, len(all))
@@ -103,7 +103,7 @@ func TestFactionDeleteCascadesGenerations(t *testing.T) {
 	cts := NewCardTypesStore(db)
 	gs := NewGenerationsStore(db)
 
-	f, err := fs.Create("Tau", "desc", "Galaxy in Flames", "manual")
+	f, err := fs.Create(FactionInput{Name: "Tau", Description: "desc", DLC: "Galaxy in Flames"}, "manual")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestFactionDeleteCascadesGenerations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := gs.Create(f.ID, ct.ID, "draft", "the prompt")
+	g, err := gs.Create(f.ID, ct.ID, "draft", "gpt-image-2", "low", "-tau-combat-low", "the prompt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestCardTypeDeleteCascadesGenerations(t *testing.T) {
 	cts := NewCardTypesStore(db)
 	gs := NewGenerationsStore(db)
 
-	f, err := fs.Create("Tau", "desc", "Galaxy in Flames", "manual")
+	f, err := fs.Create(FactionInput{Name: "Tau", Description: "desc", DLC: "Galaxy in Flames"}, "manual")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestCardTypeDeleteCascadesGenerations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := gs.Create(f.ID, ct.ID, "draft", "the prompt")
+	g, err := gs.Create(f.ID, ct.ID, "draft", "gpt-image-2", "low", "-tau-combat-low", "the prompt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,5 +155,38 @@ func TestCardTypeDeleteCascadesGenerations(t *testing.T) {
 	}
 	if _, err := gs.Get(g.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("generation survived card type delete: %v", err)
+	}
+}
+
+func TestImageNamesNumberPerPairAcrossSources(t *testing.T) {
+	s, fid, ctid := genFixtures(t)
+	a, _ := s.Create(fid, ctid, "draft", "m", "low", ImageNameSuffix("Sisters of Battle", "combat", "low"), "p")
+	b, _ := s.Create(fid, ctid, "final", "m", "high", ImageNameSuffix("Sisters of Battle", "combat", "high"), "p")
+	if a.Name != "1-sisters_of_battle-combat-low" || b.Name != "2-sisters_of_battle-combat-high" || b.Quality != "high" {
+		t.Fatalf("names: %q %q", a.Name, b.Name)
+	}
+	bs := NewBatchesStore(s.db)
+	batch, err := bs.Create("draft", "m", "x", []BatchItemInput{
+		{FactionID: fid, CardTypeID: ctid, CustomID: "x", Quality: "low", NameSuffix: "-sisters_of_battle-combat-low"},
+		{FactionID: fid, CardTypeID: ctid, CustomID: "y", Quality: "low", NameSuffix: "-sisters_of_battle-combat-low"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _ := bs.Items(batch.ID)
+	if items[0].Name != "3-sisters_of_battle-combat-low" || items[1].Name != "4-sisters_of_battle-combat-low" {
+		t.Fatalf("batch names: %q %q", items[0].Name, items[1].Name)
+	}
+	if err := s.SetFavorite(a.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get(a.ID); !got.Favorite {
+		t.Fatal("favorite not saved")
+	}
+	if err := bs.SetItemFavorite(batch.ID, items[1].ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if done, _ := bs.Items(batch.ID); !done[1].Favorite || done[0].Favorite {
+		t.Fatalf("item favorites: %+v", done)
 	}
 }

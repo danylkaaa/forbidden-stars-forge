@@ -21,7 +21,10 @@ export function SaveBar({ settings }: { settings: Settings }) {
           draft_quality: draft.draft_quality,
           final_quality: draft.final_quality,
           input_fidelity: draft.input_fidelity,
+          background: draft.background,
           claude_binary: draft.claude_binary,
+          claude_model: draft.claude_model,
+          claude_effort: draft.claude_effort,
           price_table: settings.price_table, // pass through until pricing UI (M6)
         })
         markSaved(saved)

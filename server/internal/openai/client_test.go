@@ -37,6 +37,35 @@ func TestListModels(t *testing.T) {
 	}
 }
 
+func TestListImageModelsFiltersAndSorts(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"gpt-image-2.5-sunburst"},{"id":"gpt-4.1"},{"id":"chatgpt-image-latest"},{"id":"gpt-image-2"},{"id":"dall-e-3"}]}`))
+	})
+	got, err := c.ListImageModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"chatgpt-image-latest", "gpt-image-2", "gpt-image-2.5-sunburst"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestEditBodyOmitsInputFidelityForV2(t *testing.T) {
+	for _, m := range []string{"gpt-image-2", "gpt-image-2-2026-04-21", "gpt-image-2.5-flare"} {
+		b := EditBody(ImageEditRequest{Model: m, FileID: "f", InputFidelity: "high"})
+		if _, ok := b["input_fidelity"]; ok {
+			t.Errorf("%s: input_fidelity should be omitted", m)
+		}
+	}
+	if b := EditBody(ImageEditRequest{Model: "gpt-image-1", InputFidelity: "low"}); b["input_fidelity"] != "low" {
+		t.Errorf("gpt-image-1: input_fidelity = %v", b["input_fidelity"])
+	}
+	if _, ok := EditBody(ImageEditRequest{Model: "gpt-image-2"})["background"]; ok {
+		t.Error("empty background should be omitted")
+	}
+}
+
 func TestMissingKey(t *testing.T) {
 	c := New("")
 	_, err := c.ListModels(context.Background())
@@ -144,7 +173,8 @@ func TestEditImage(t *testing.T) {
 		fmt.Fprintf(w, `{"data":[{"b64_json":%q}],"usage":{"input_tokens":1200,"output_tokens":4800}}`, b64)
 	})
 	res, err := c.EditImage(context.Background(), ImageEditRequest{
-		Model: "gpt-image-2", FileID: "file-abc", Prompt: "p", Size: "816x1104", Quality: "low", InputFidelity: "high",
+		Model: "gpt-image-1.5", FileID: "file-abc", Prompt: "p", Size: "816x1104", Quality: "low", InputFidelity: "high",
+		Background: "transparent",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -152,9 +182,10 @@ func TestEditImage(t *testing.T) {
 	if !bytes.Equal(res.PNG, png) || res.InputTokens != 1200 || res.OutputTokens != 4800 {
 		t.Fatalf("result: tokens=%d/%d pngLen=%d", res.InputTokens, res.OutputTokens, len(res.PNG))
 	}
-	img := gotBody["image"].([]any)[0].(map[string]any)
+	img := gotBody["images"].([]any)[0].(map[string]any)
 	if img["file_id"] != "file-abc" || gotBody["output_format"] != "png" || gotBody["n"] != float64(1) ||
-		gotBody["quality"] != "low" || gotBody["size"] != "816x1104" || gotBody["input_fidelity"] != "high" {
+		gotBody["quality"] != "low" || gotBody["size"] != "816x1104" || gotBody["input_fidelity"] != "high" ||
+		gotBody["background"] != "transparent" || gotBody["moderation"] != "low" {
 		t.Fatalf("body: %v", gotBody)
 	}
 }

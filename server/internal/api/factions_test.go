@@ -97,3 +97,28 @@ func TestRevisionsAndRestoreEndpoints(t *testing.T) {
 		t.Fatalf("restore missing rev: %d", rec.Code)
 	}
 }
+
+func TestFactionColorAndTextureSavedRevisionedAndRestored(t *testing.T) {
+	h := newTestRouter(t)
+	rec, f := doJSON(t, h, http.MethodPost, "/api/factions",
+		`{"name":"Sisters","dlc":"Symphony of War","primary_color":" deep black ","texture":"polished ceramite","description":"gothic","source":"manual"}`)
+	if rec.Code != http.StatusCreated || f["primary_color"] != "deep black" || f["texture"] != "polished ceramite" {
+		t.Fatalf("create: %d %v", rec.Code, f)
+	}
+	id := int64(f["id"].(float64))
+	_, f = doJSON(t, h, http.MethodPut, fmt.Sprintf("/api/factions/%d", id),
+		`{"name":"Sisters","dlc":"Symphony of War","primary_color":"crimson","texture":"polished ceramite","description":"gothic","source":"manual"}`)
+	if f["primary_color"] != "crimson" {
+		t.Fatalf("update: %v", f)
+	}
+	rec, _ = doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/factions/%d/revisions", id), "")
+	var revs []map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &revs)
+	if len(revs) != 2 || revs[1]["primary_color"] != "deep black" {
+		t.Fatalf("revisions: %v", revs)
+	}
+	rec, f = doJSON(t, h, http.MethodPost, fmt.Sprintf("/api/factions/%d/revisions/%d/restore", id, int64(revs[1]["id"].(float64))), "")
+	if rec.Code != 200 || f["primary_color"] != "deep black" || f["texture"] != "polished ceramite" {
+		t.Fatalf("restore: %d %v", rec.Code, f)
+	}
+}

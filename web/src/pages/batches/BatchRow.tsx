@@ -20,6 +20,7 @@ export function BatchRow({ batch }: { batch: Batch }) {
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Batch #{batch.id}</span>
           <Tag variant={batch.mode === 'final' ? 'solid-accent' : 'neutral'}>{batch.mode}</Tag>
+            {batch.model && <span className="font-mono text-[11px] text-ink/45">{batch.model}</span>}
           <Tag variant={statusVariant[batch.status]}>{batch.status.replace('_', ' ')}</Tag>
         </div>
         <div className="mt-0.5 text-xs text-ink/50">

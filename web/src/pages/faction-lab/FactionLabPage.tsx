@@ -1,0 +1,431 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { Button } from '../../components/Button'
+import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
+import { Field, inputClass, selectClass } from '../../components/Field'
+import { ZoomableImage } from '../../components/ImageLightbox'
+import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
+import { LayerControls, LayeredImage } from '../../components/PreviewLayers'
+import { GeneratingSpinner } from '../../components/GeneratingSpinner'
+import { FavoriteButton } from '../../components/FavoriteButton'
+import { Tag } from '../../components/Tag'
+import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
+import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
+import { useElapsedMs } from '../../lib/useElapsedMs'
+import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
+import { useAssembledPrompt } from './api'
+import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
+
+const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
+
+const savedFields = (f: Faction): LabFields => ({ primary_color: f.primary_color, texture: f.texture, description: f.description })
+const savedCt = (c: CardType): CtFields => ({ description: c.description, constraints: c.constraints })
+
+// Debounce typing so the prompt is re-assembled once the user pauses.
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return v
+}
+
+// Quick experiments with one faction's aesthetic: edit the fields, see the
+// assembled prompt, generate — and only save to the faction once a result
+// looks right. Three full-height columns (fields | prompt | result) so
+// nothing needs page scrolling; long content scrolls inside its column.
+export default function FactionLabPage() {
+  const [params] = useSearchParams()
+  const lab = useFactionLab()
+  const { data: factions } = useFactions()
+  const { data: cardTypes } = useCardTypes()
+  const { data: gens } = useGenerations()
+  const queryClient = useQueryClient()
+  const start = useStartGeneration()
+  const [assistOpen, setAssistOpen] = useState(false)
+  const [ctAssist, setCtAssist] = useState<keyof CtFields | null>(null)
+  const [tab, setTab] = useState<'faction' | 'card-type'>('faction')
+  const [busy, setBusy] = useState<'generate' | 'save' | 'save-ct' | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // ?faction=<id> (from the Factions page) picks the faction.
+  const paramFaction = Number(params.get('faction'))
+  useEffect(() => {
+    if (paramFaction > 0) useFactionLab.getState().set({ factionId: paramFaction })
+  }, [paramFaction])
+
+  const faction = factions?.find((f) => f.id === lab.factionId) ?? null
+  const cardType = cardTypes?.find((c) => c.id === lab.cardTypeId) ?? null
+  // Memoized so object identity is stable across renders (debounce/query keys).
+  const saved = useMemo(() => (faction ? savedFields(faction) : null), [faction])
+  const fields = faction ? lab.drafts[faction.id] ?? saved : null
+  const dirty = saved !== null && fields !== null && !sameFields(saved, fields)
+  const ctSaved = useMemo(() => (cardType ? savedCt(cardType) : null), [cardType])
+  const ctFields = cardType ? lab.ctDrafts[cardType.id] ?? ctSaved : null
+  const ctDirty = ctSaved !== null && ctFields !== null && !sameCt(ctSaved, ctFields)
+
+  const inputs = useMemo(() => ({ fields, ct: ctFields }), [fields, ctFields])
+  const debounced = useDebounced(inputs, 300)
+  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct)
+  const { data: preview } = usePreview(lab.factionId, lab.cardTypeId, lab.model)
+  const promptReady = assembled.data !== undefined && !assembled.isFetching &&
+    debounced.fields !== null && fields !== null && sameFields(debounced.fields, fields) &&
+    (debounced.ct === null) === (ctFields === null) && (!ctFields || sameCt(debounced.ct!, ctFields))
+  const estimate = preview ? (lab.mode === 'draft' ? preview.est_draft_usd : preview.est_final_usd) : null
+
+  const setField = (key: keyof LabFields, value: string) => {
+    if (faction && fields) lab.setDraft(faction.id, { ...fields, [key]: value })
+  }
+  const setCtField = (key: keyof CtFields, value: string) => {
+    if (cardType && ctFields) lab.setCtDraft(cardType.id, { ...ctFields, [key]: value })
+  }
+
+  async function onGenerate() {
+    if (!faction || !cardType || !fields || !ctFields || !assembled.data) return
+    setBusy('generate')
+    setError(null)
+    try {
+      const g = await start({
+        faction_id: faction.id, card_type_id: cardType.id, mode: lab.mode,
+        prompt_override: assembled.data.prompt, ...(lab.model ? { model: lab.model } : {}),
+      })
+      lab.snapshot(g.id, fields, ctFields)
+      setSelectedId(g.id) // show the new run on the right
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed to start generation')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onSave() {
+    if (!faction || !fields) return
+    setBusy('save')
+    setError(null)
+    try {
+      await updateFaction(faction.id, {
+        name: faction.name, dlc: faction.dlc, source: 'manual',
+        primary_color: fields.primary_color.trim(), texture: fields.texture.trim(), description: fields.description,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['factions'] })
+      lab.clearDraft(faction.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'save failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onSaveCt() {
+    if (!cardType || !ctFields) return
+    setBusy('save-ct')
+    setError(null)
+    try {
+      await updateCardType(cardType.id, buildCardTypeForm(
+        { name: cardType.name, description: ctFields.description, constraints: ctFields.constraints }, null))
+      await queryClient.invalidateQueries({ queryKey: ['card-types'] })
+      lab.clearCtDraft(cardType.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'save failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Which of the run's inputs (faction fields + card type text) it matches.
+  const runLabel = (id: number): string | null => {
+    const f = lab.snapshots[id]
+    if (!f) return null
+    const c = lab.ctSnapshots[id] // absent on runs made before card type editing
+    const matches = (fv: LabFields | null, cv: CtFields | null) => fv !== null && sameFields(f, fv) && (!c || (cv !== null && sameCt(c, cv)))
+    if (matches(saved, ctSaved)) return 'saved fields'
+    if (matches(fields, ctFields)) return 'current fields'
+    return 'lab experiment'
+  }
+  const applyRunFields = (id: number) => {
+    if (faction && lab.snapshots[id]) lab.setDraft(faction.id, lab.snapshots[id])
+    if (cardType && lab.ctSnapshots[id]) lab.setCtDraft(cardType.id, lab.ctSnapshots[id])
+  }
+
+  const results = (gens ?? []).filter((g) => g.faction_id === lab.factionId && g.card_type_id === lab.cardTypeId)
+  const current = results.find((g) => g.id === selectedId) ?? results[0] ?? null
+
+  const panel = 'flex min-h-0 flex-col gap-3 rounded-md bg-surface p-4 shadow-[0_0_0_1px_var(--color-neutral-800)]'
+
+  return (
+    <div className="flex h-full min-h-[600px] flex-col gap-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">Faction Lab</h1>
+        <p className="m-0 text-[13px] text-ink/55">Nothing is saved until you click Save to faction</p>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(300px,0.85fr)] gap-4">
+        {/* Left: what to try */}
+        <section className={`${panel} overflow-y-auto`}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <Field label="Faction">
+              {(id) => (
+                <select id={id} className={selectClass} value={lab.factionId ?? ''}
+                  onChange={(e) => { lab.set({ factionId: e.target.value ? Number(e.target.value) : null }); setAssistOpen(false); setSelectedId(null) }}>
+                  <option value="">Select…</option>
+                  {factions?.map((f) => <option key={f.id} value={f.id}>{f.name}{lab.drafts[f.id] && !sameFields(lab.drafts[f.id], savedFields(f)) ? ' •' : ''}</option>)}
+                </select>
+              )}
+            </Field>
+            <Field label="Card Type">
+              {(id) => (
+                <select id={id} className={selectClass} value={lab.cardTypeId ?? ''}
+                  onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
+                  <option value="">Select…</option>
+                  {cardTypes?.map((c) => <option key={c.id} value={c.id}>{c.openai_file_id ? c.name : `${c.name} (no file)`}</option>)}
+                </select>
+              )}
+            </Field>
+            <div>
+              <span className="mb-1 block text-xs text-ink/70">Mode</span>
+              <div className="flex overflow-hidden rounded-md border border-divider" role="group" aria-label="Mode">
+                {(['draft', 'final'] as const).map((m, i) => (
+                  <button key={m} type="button" onClick={() => lab.set({ mode: m })}
+                    className={`flex-1 cursor-pointer border-0 bg-transparent px-2 py-1.5 text-[13px] ${i > 0 ? 'border-l border-divider' : ''} ${lab.mode === m ? 'text-accent shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'text-ink'}`}>
+                    {m === 'draft' ? 'Draft' : 'Final'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ModelOverrideSelect value={lab.model} onChange={(model) => lab.set({ model })} />
+          </div>
+
+          <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">
+            {([['faction', 'Faction', dirty], ['card-type', 'Card type', ctDirty]] as const).map(([key, label, isDirty]) => (
+              <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+                className={`-mb-px cursor-pointer border-0 border-b-2 bg-transparent px-3 py-1.5 text-[13px] font-medium ${tab === key ? 'border-accent text-accent' : 'border-transparent text-ink/60 hover:text-ink'}`}>
+                {label}{isDirty && <span className="ml-1 text-warn" aria-label="unsaved">•</span>}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'card-type' ? (
+            !cardType || !ctFields ? (
+              <p className="m-0 text-sm text-ink/50">Pick a card type to edit its prompt text.</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="m-0 truncate text-[15px] font-medium">{cardType.name}</h2>
+                  {ctDirty && (
+                    <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved experiment</span>
+                  )}
+                </div>
+                <p className="-mt-1 m-0 text-[11px] text-ink/45">Shared by every faction — saving changes all of this card type&apos;s prompts.</p>
+                {(['description', 'constraints'] as const).map((key) => (
+                  <div key={key} className={`flex flex-col ${key === 'constraints' ? 'min-h-48 flex-1' : 'min-h-28'}`}>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label htmlFor={`lab-ct-${key}`} className="text-xs text-ink/70">{key === 'description' ? 'Card type description' : 'Constraints'}</label>
+                      <button type="button" disabled={ctAssist !== null} onClick={() => setCtAssist(key)}
+                        aria-label={`Edit ${key} with Claude`}
+                        className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent disabled:cursor-not-allowed disabled:opacity-45">
+                        Edit with Claude
+                      </button>
+                    </div>
+                    <textarea id={`lab-ct-${key}`} value={ctFields[key]}
+                      onChange={(e) => setCtField(key, e.target.value)}
+                      className={`${inputClass} min-h-20 flex-1 resize-none font-sans text-[13px] leading-relaxed`} />
+                    {ctAssist === key && (
+                      <div className="mt-2">
+                        <ClaudeTextAssist
+                          field={key}
+                          current={ctFields[key]}
+                          start={(baseline, messages) => startCardTypeAssist({
+                            field: key, name: cardType.name, messages,
+                            description: key === 'description' ? baseline : ctFields.description,
+                            constraints: key === 'constraints' ? baseline : ctFields.constraints,
+                          })}
+                          onAccept={(text) => { setCtField(key, text); setCtAssist(null) }}
+                          onClose={() => setCtAssist(null)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center justify-end gap-2">
+                  {ctDirty && <Button type="button" onClick={() => lab.clearCtDraft(cardType.id)}>Reset to saved</Button>}
+                  <Button variant="primary" type="button" disabled={!ctDirty || busy !== null} onClick={onSaveCt}>
+                    {busy === 'save-ct' ? 'Saving…' : 'Save to card type'}
+                  </Button>
+                </div>
+              </>
+            )
+          ) : !faction || !fields ? (
+            <p className="m-0 text-sm text-ink/50">Pick a faction to start experimenting.</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="m-0 truncate text-[15px] font-medium">{faction.name}</h2>
+                {dirty && (
+                  <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved experiment</span>
+                )}
+              </div>
+              <Field label="Primary color">
+                {(id) => (
+                  <input id={id} type="text" value={fields.primary_color} placeholder="e.g. deep crimson with gold trim"
+                    onChange={(e) => setField('primary_color', e.target.value)} className={`${inputClass} font-sans`} />
+                )}
+              </Field>
+              <Field label="Texture">
+                {(id) => (
+                  <>
+                    <input id={id} type="text" list="lab-texture-suggestions" value={fields.texture} placeholder="e.g. metal, skin, wood"
+                      onChange={(e) => setField('texture', e.target.value)} className={`${inputClass} font-sans`} />
+                    <datalist id="lab-texture-suggestions">
+                      {TEXTURE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
+                    </datalist>
+                  </>
+                )}
+              </Field>
+              <div className="flex min-h-40 flex-1 flex-col">
+                <div className="mb-1 flex items-center justify-between">
+                  <label htmlFor="lab-description" className="text-xs text-ink/70">Description (rest of the style)</label>
+                  <button type="button" disabled={assistOpen} onClick={() => setAssistOpen(true)}
+                    className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent disabled:cursor-not-allowed disabled:opacity-45">
+                    Edit with Claude
+                  </button>
+                </div>
+                <textarea id="lab-description" value={fields.description}
+                  onChange={(e) => setField('description', e.target.value)}
+                  className={`${inputClass} min-h-32 flex-1 resize-none font-sans text-[13px] leading-relaxed`} />
+              </div>
+              {assistOpen && (
+                <ClaudeTextAssist
+                  field="description"
+                  current={fields.description}
+                  start={(baseline, messages) => startGenerateDescription(faction.name, faction.dlc, {
+                    primary_color: fields.primary_color, texture: fields.texture, current_description: baseline, messages,
+                  })}
+                  onAccept={(text) => { setField('description', text); setAssistOpen(false) }}
+                  onClose={() => setAssistOpen(false)}
+                />
+              )}
+              <div className="flex items-center justify-end gap-2">
+                {dirty && <Button type="button" onClick={() => lab.clearDraft(faction.id)}>Reset to saved</Button>}
+                <Button variant="primary" type="button" disabled={!dirty || busy !== null} onClick={onSave}>
+                  {busy === 'save' ? 'Saving…' : 'Save to faction'}
+                </Button>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* Middle: exactly what will be sent */}
+        <section className={panel}>
+          <div className="flex items-center justify-between">
+            <h2 className="m-0 text-[15px] font-medium">Assembled prompt</h2>
+            {!promptReady && lab.cardTypeId !== null && fields && <span className="text-[11px] text-ink/45">updating…</span>}
+          </div>
+          <pre aria-label="Assembled prompt"
+            className={`m-0 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12px] leading-normal text-ink/75 ${promptReady ? '' : 'opacity-60'}`}>
+            {!fields ? 'Pick a faction' : lab.cardTypeId === null ? 'Select a card type' : assembled.data?.prompt ?? 'Loading…'}
+          </pre>
+          {cardType && !cardType.openai_file_id && (
+            <p className="m-0 text-[13px] text-warn">This card type has no OpenAI file uploaded yet.</p>
+          )}
+          {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
+          <div className="flex items-center gap-3">
+            <Button variant="primary" type="button" onClick={onGenerate}
+              disabled={!promptReady || !cardType?.openai_file_id || busy !== null}>
+              {busy === 'generate' ? 'Starting…' : 'Generate'}
+            </Button>
+            <span className="text-xs text-ink/45">
+              {estimate !== null && `est. ${formatCost(estimate)} · `}uses the fields as they are now
+            </span>
+          </div>
+        </section>
+
+        {/* Right: the result */}
+        <section className={panel}>
+          <h2 className="m-0 text-[15px] font-medium">Result</h2>
+          {!faction || !cardType ? (
+            <p className="m-0 text-sm text-ink/50">Pick a faction and card type.</p>
+          ) : !current ? (
+            <p className="m-0 text-sm text-ink/50">No generations for this pair yet — click Generate.</p>
+          ) : (
+            <ResultView
+              gen={current}
+              alt={`${faction.name} × ${cardType.name} #${current.id}`}
+              {...previewLayers(cardType)}
+              label={runLabel(current.id)}
+              onUseFields={runLabel(current.id) && runLabel(current.id) !== 'current fields' ? () => applyRunFields(current.id) : undefined}
+            />
+          )}
+          {results.length > 1 && cardType && (
+            <div>
+              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-ink/45">All runs ({results.length})</div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {results.map((g) => (
+                  <button key={g.id} type="button" onClick={() => setSelectedId(g.id)}
+                    aria-label={`Show run #${g.id}`} aria-pressed={g.id === current?.id}
+                    className={`h-20 w-15 flex-none cursor-pointer overflow-hidden rounded border-2 bg-neutral-800 p-0 ${g.id === current?.id ? 'border-accent' : 'border-transparent'}`}>
+                    {g.status === 'done' ? (
+                      <img src={`/api/generations/${g.id}/image`} alt="" loading="lazy" className="block h-full w-full object-cover" />
+                    ) : g.status === 'pending' ? (
+                      <span className="grid h-full w-full place-items-center bg-accent-900/60"><GeneratingSpinner seed={g.id} size="sm" /></span>
+                    ) : (
+                      <span className="block h-full w-full bg-danger/20" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  )
+}
+
+// The selected run, as large as the column allows.
+function ResultView({ gen, alt, overlaySrc, maskSrc, label, onUseFields }: {
+  gen: Generation; alt: string; overlaySrc: string | null; maskSrc: string | null; label: string | null; onUseFields?: () => void
+}) {
+  const pending = gen.status === 'pending'
+  const elapsed = useElapsedMs(gen.created_at, pending)
+  const imageUrl = gen.status === 'done' ? `/api/generations/${gen.id}/image` : null
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {imageUrl && <LayerControls overlaySrc={overlaySrc} maskSrc={maskSrc} />}
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        {imageUrl ? (
+          <ZoomableImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }} className="block h-full w-full">
+            <LayeredImage src={imageUrl} alt={alt} overlaySrc={overlaySrc} maskSrc={maskSrc} fit="contain" />
+          </ZoomableImage>
+        ) : (
+          <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>
+            {pending ? (
+              <>
+                <GeneratingSpinner seed={gen.id} />
+                <span className="mt-2">generating…</span>
+                <span className="text-xs text-ink/50">{formatDuration(elapsed)} elapsed</span>
+              </>
+            ) : gen.error || 'failed'}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink/80" title={gen.name}>{gen.name}</span>
+        <FavoriteButton target={{ kind: 'generation', id: gen.id }} favorite={gen.favorite} />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink/45">
+        <Tag variant={gen.mode === 'final' ? 'solid-accent' : 'neutral'}>{gen.mode}</Tag>
+        {label && <span className={label === 'saved fields' ? 'text-success' : label === 'current fields' ? 'text-accent' : ''}>{label}</span>}
+        <span>{gen.created_at}{gen.status === 'done' && ` · ${formatDuration(gen.duration_ms)} · ${formatCost(gen.cost_usd)}`}</span>
+        {onUseFields && (
+          <button type="button" onClick={onUseFields}
+            className="ml-auto cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-accent">
+            Use these fields
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}

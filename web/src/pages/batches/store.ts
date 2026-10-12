@@ -6,15 +6,16 @@ type BatchWizardState = {
   factionIds: number[]
   cardTypeIds: number[]
   mode: BatchMode
+  model: string // '' = Settings default
   toggleFaction: (id: number) => void
   toggleCardType: (id: number) => void
   setAllFactions: (ids: number[], on: boolean) => void
   setAllCardTypes: (ids: number[], on: boolean) => void
   reset: () => void
-  set: (partial: Partial<Pick<BatchWizardState, 'step' | 'mode'>>) => void
+  set: (partial: Partial<Pick<BatchWizardState, 'step' | 'mode' | 'model'>>) => void
 }
 
-const initial = { step: 'scope' as const, factionIds: [] as number[], cardTypeIds: [] as number[], mode: 'draft' as BatchMode }
+const initial = { step: 'scope' as const, factionIds: [] as number[], cardTypeIds: [] as number[], mode: 'draft' as BatchMode, model: '' }
 
 function toggle(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]

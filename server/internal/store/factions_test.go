@@ -18,7 +18,7 @@ func openFactions(t *testing.T) *FactionsStore {
 
 func TestCreateWritesFactionAndRevision(t *testing.T) {
 	s := openFactions(t)
-	f, err := s.Create("Tau Empire", "blue-grey plating", "Galaxy in Flames", "manual")
+	f, err := s.Create(FactionInput{Name: "Tau Empire", Description: "blue-grey plating", DLC: "Galaxy in Flames"}, "manual")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,10 +36,10 @@ func TestCreateWritesFactionAndRevision(t *testing.T) {
 
 func TestCreateDuplicateName(t *testing.T) {
 	s := openFactions(t)
-	if _, err := s.Create("Eldar", "", "Darkest Dawn", "manual"); err != nil {
+	if _, err := s.Create(FactionInput{Name: "Eldar", Description: "", DLC: "Darkest Dawn"}, "manual"); err != nil {
 		t.Fatal(err)
 	}
-	_, err := s.Create("Eldar", "", "Darkest Dawn", "manual")
+	_, err := s.Create(FactionInput{Name: "Eldar", Description: "", DLC: "Darkest Dawn"}, "manual")
 	if !errors.Is(err, ErrDuplicateName) {
 		t.Fatalf("err = %v, want ErrDuplicateName", err)
 	}
@@ -47,14 +47,14 @@ func TestCreateDuplicateName(t *testing.T) {
 
 func TestUpdateWritesRevisionOnlyWhenChanged(t *testing.T) {
 	s := openFactions(t)
-	f, _ := s.Create("Necrons", "gunmetal", "Darkest Dawn", "manual")
+	f, _ := s.Create(FactionInput{Name: "Necrons", Description: "gunmetal", DLC: "Darkest Dawn"}, "manual")
 
-	_, changed, err := s.Update(f.ID, "Necrons", "gunmetal and jade", "Darkest Dawn", "claude")
+	_, changed, err := s.Update(f.ID, FactionInput{Name: "Necrons", Description: "gunmetal and jade", DLC: "Darkest Dawn"}, "claude")
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v", changed, err)
 	}
 	// no-op save: identical state → no new revision, changed=false
-	_, changed, err = s.Update(f.ID, "Necrons", "gunmetal and jade", "Darkest Dawn", "manual")
+	_, changed, err = s.Update(f.ID, FactionInput{Name: "Necrons", Description: "gunmetal and jade", DLC: "Darkest Dawn"}, "manual")
 	if err != nil || changed {
 		t.Fatalf("no-op save: changed=%v err=%v", changed, err)
 	}
@@ -83,8 +83,8 @@ func TestUpdateWritesRevisionOnlyWhenChanged(t *testing.T) {
 // id-tie-break assertions below, which hold unconditionally.
 func TestListOrdersByUpdatedDesc(t *testing.T) {
 	s := openFactions(t)
-	s.Create("A", "", "Galaxy in Flames", "manual")
-	s.Create("B", "", "Symphony of War", "manual")
+	s.Create(FactionInput{Name: "A", Description: "", DLC: "Galaxy in Flames"}, "manual")
+	s.Create(FactionInput{Name: "B", Description: "", DLC: "Symphony of War"}, "manual")
 	all, err := s.List()
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestListOrdersByUpdatedDesc(t *testing.T) {
 
 func TestDeleteCascadesRevisions(t *testing.T) {
 	s := openFactions(t)
-	f, _ := s.Create("Orks", "", "Symphony of War", "manual")
+	f, _ := s.Create(FactionInput{Name: "Orks", Description: "", DLC: "Symphony of War"}, "manual")
 	if err := s.Delete(f.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +117,8 @@ func TestDeleteCascadesRevisions(t *testing.T) {
 
 func TestRestoreAppliesRevisionAndAppendsRollback(t *testing.T) {
 	s := openFactions(t)
-	f, _ := s.Create("Eldar", "v1", "Darkest Dawn", "manual")
-	s.Update(f.ID, "Eldar", "v2", "Darkest Dawn", "manual")
+	f, _ := s.Create(FactionInput{Name: "Eldar", Description: "v1", DLC: "Darkest Dawn"}, "manual")
+	s.Update(f.ID, FactionInput{Name: "Eldar", Description: "v2", DLC: "Darkest Dawn"}, "manual")
 	revs, _ := s.Revisions(f.ID) // [v2, v1]
 	oldest := revs[len(revs)-1]
 
@@ -137,8 +137,8 @@ func TestRestoreAppliesRevisionAndAppendsRollback(t *testing.T) {
 
 func TestRestoreOfRollbackWorks(t *testing.T) {
 	s := openFactions(t)
-	f, _ := s.Create("Orks", "v1", "Symphony of War", "manual")
-	s.Update(f.ID, "Orks", "v2", "Symphony of War", "manual")
+	f, _ := s.Create(FactionInput{Name: "Orks", Description: "v1", DLC: "Symphony of War"}, "manual")
+	s.Update(f.ID, FactionInput{Name: "Orks", Description: "v2", DLC: "Symphony of War"}, "manual")
 	revs, _ := s.Revisions(f.ID)
 	s.Restore(f.ID, revs[len(revs)-1].ID) // back to v1 (rollback rev)
 	revs, _ = s.Revisions(f.ID)           // [rollback(v1), v2, v1]
@@ -157,8 +157,8 @@ func TestRestoreOfRollbackWorks(t *testing.T) {
 
 func TestRestoreWrongFaction(t *testing.T) {
 	s := openFactions(t)
-	a, _ := s.Create("A2", "", "Galaxy in Flames", "manual")
-	b, _ := s.Create("B2", "", "Galaxy in Flames", "manual")
+	a, _ := s.Create(FactionInput{Name: "A2", Description: "", DLC: "Galaxy in Flames"}, "manual")
+	b, _ := s.Create(FactionInput{Name: "B2", Description: "", DLC: "Galaxy in Flames"}, "manual")
 	bRevs, _ := s.Revisions(b.ID)
 	if _, err := s.Restore(a.ID, bRevs[0].ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-faction restore: %v", err)

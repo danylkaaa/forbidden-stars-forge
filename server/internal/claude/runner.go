@@ -14,6 +14,20 @@ import (
 
 type Runner struct {
 	Binary string // path or name of the claude binary; empty means "claude"
+	Model  string // --model (alias like "opus" or a full name); empty = CLI default
+	Effort string // --effort (low|medium|high|xhigh|max); empty = CLI default
+}
+
+// args builds the CLI arguments; -p <prompt> always comes first.
+func (r *Runner) args(prompt string) []string {
+	args := []string{"-p", prompt}
+	if r.Model != "" {
+		args = append(args, "--model", r.Model)
+	}
+	if r.Effort != "" {
+		args = append(args, "--effort", r.Effort)
+	}
+	return args
 }
 
 func (r *Runner) Run(ctx context.Context, prompt string) (string, error) {
@@ -25,7 +39,7 @@ func (r *Runner) Run(ctx context.Context, prompt string) (string, error) {
 		return "", fmt.Errorf("claude CLI not found (%q) — set path in Settings", bin)
 	}
 
-	cmd := exec.CommandContext(ctx, bin, "-p", prompt)
+	cmd := exec.CommandContext(ctx, bin, r.args(prompt)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

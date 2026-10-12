@@ -1,12 +1,40 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// nextImageNumber is a SQL expression for the next image number of a
+// faction × card type pair, counted across Test Generation and batches.
+// Args: factionID, cardTypeID, factionID, cardTypeID. The single-writer
+// connection (db.go) serializes inserts, so numbers don't collide.
+const nextImageNumber = `(SELECT COUNT(*) FROM generations WHERE faction_id = ? AND card_type_id = ?) +
+	(SELECT COUNT(*) FROM batch_items WHERE faction_id = ? AND card_type_id = ?) + 1`
+
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+func nameSlug(s string) string {
+	return strings.Trim(nonAlnum.ReplaceAllString(strings.ToLower(s), "_"), "_")
+}
+
+// ImageNameSuffix is the part of an image name after its number:
+// "-<faction>-<type>-<quality>".
+func ImageNameSuffix(factionName, cardTypeName, quality string) string {
+	return fmt.Sprintf("-%s-%s-%s", nameSlug(factionName), nameSlug(cardTypeName), quality)
+}
 
 type Generation struct {
 	ID           int64   `json:"id"`
 	FactionID    int64   `json:"faction_id"`
 	CardTypeID   int64   `json:"card_type_id"`
 	Mode         string  `json:"mode"`
+	Model        string  `json:"model"`
+	Quality      string  `json:"quality"`
+	Name         string  `json:"name"` // "<n>-<faction>-<type>-<quality>", searchable
+	Favorite     bool    `json:"favorite"`
 	Prompt       string  `json:"prompt"`
 	Status       string  `json:"status"`
 	ImagePath    string  `json:"image_path"`
@@ -26,13 +54,13 @@ func NewGenerationsStore(db *sql.DB) *GenerationsStore {
 	return &GenerationsStore{db: db}
 }
 
-const generationCols = `id, faction_id, card_type_id, mode, prompt, status,
+const generationCols = `id, faction_id, card_type_id, mode, model, quality, name, favorite, prompt, status,
 	COALESCE(image_path,''), COALESCE(input_tokens,0), COALESCE(output_tokens,0),
 	COALESCE(cost_usd,0), COALESCE(duration_ms,0), COALESCE(error,''), created_at`
 
 func scanGeneration(row interface{ Scan(...any) error }) (Generation, error) {
 	var g Generation
-	err := row.Scan(&g.ID, &g.FactionID, &g.CardTypeID, &g.Mode, &g.Prompt, &g.Status,
+	err := row.Scan(&g.ID, &g.FactionID, &g.CardTypeID, &g.Mode, &g.Model, &g.Quality, &g.Name, &g.Favorite, &g.Prompt, &g.Status,
 		&g.ImagePath, &g.InputTokens, &g.OutputTokens, &g.CostUSD, &g.DurationMS, &g.Error, &g.CreatedAt)
 	if err == sql.ErrNoRows {
 		return g, ErrNotFound
@@ -40,10 +68,13 @@ func scanGeneration(row interface{ Scan(...any) error }) (Generation, error) {
 	return g, err
 }
 
-func (s *GenerationsStore) Create(factionID, cardTypeID int64, mode, prompt string) (Generation, error) {
+// Create inserts a pending generation named "<n><nameSuffix>", where n is
+// the next image number for this faction × card type (see nextImageNumber).
+func (s *GenerationsStore) Create(factionID, cardTypeID int64, mode, model, quality, nameSuffix, prompt string) (Generation, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO generations (faction_id, card_type_id, mode, prompt, status) VALUES (?, ?, ?, ?, 'pending')`,
-		factionID, cardTypeID, mode, prompt)
+		`INSERT INTO generations (faction_id, card_type_id, mode, model, quality, name, prompt, status)
+		 VALUES (?, ?, ?, ?, ?, (`+nextImageNumber+`) || ?, ?, 'pending')`,
+		factionID, cardTypeID, mode, model, quality, factionID, cardTypeID, factionID, cardTypeID, nameSuffix, prompt)
 	if err != nil {
 		return Generation{}, err
 	}
@@ -82,6 +113,17 @@ func (s *GenerationsStore) MarkDone(id int64, imagePath string, inTok, outTok in
 		`UPDATE generations SET status = 'done', image_path = ?, input_tokens = ?, output_tokens = ?,
 		 cost_usd = ?, duration_ms = ? WHERE id = ?`,
 		imagePath, inTok, outTok, costUSD, durationMS, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *GenerationsStore) SetFavorite(id int64, favorite bool) error {
+	res, err := s.db.Exec(`UPDATE generations SET favorite = ? WHERE id = ?`, favorite, id)
 	if err != nil {
 		return err
 	}

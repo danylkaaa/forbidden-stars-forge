@@ -2,27 +2,30 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
+import { MemoryRouter } from 'react-router'
 import { server } from '../../test/msw'
 import { useFactionsUi, useFactionDraft } from './store'
 import type { Faction } from './api'
 import FactionsPage from './FactionsPage'
 
 const factions: Faction[] = [
-  { id: 1, name: 'Tau Empire', description: 'Blue-grey plating and honeycomb geometry over ritual.', dlc: 'Galaxy in Flames', created_at: '2026-07-10', updated_at: '2026-07-14' },
-  { id: 2, name: 'Eldar', description: 'Bonewhite curves.', dlc: 'Darkest Dawn', created_at: '2026-07-09', updated_at: '2026-07-12' },
+  { id: 1, name: 'Tau Empire', primary_color: '', texture: '', description: 'Blue-grey plating and honeycomb geometry over ritual.', dlc: 'Galaxy in Flames', created_at: '2026-07-10', updated_at: '2026-07-14' },
+  { id: 2, name: 'Eldar', primary_color: '', texture: '', description: 'Bonewhite curves.', dlc: 'Darkest Dawn', created_at: '2026-07-09', updated_at: '2026-07-12' },
 ]
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={qc}>
-      <FactionsPage />
+      <MemoryRouter>
+        <FactionsPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
 beforeEach(() => {
-  useFactionsUi.setState({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null, historyFactionId: null, expandedRevId: null, activeJobId: null })
+  useFactionsUi.setState({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null, historyFactionId: null, expandedRevId: null, assistOpen: false })
   useFactionDraft.getState().close()
   server.use(http.get('/api/factions', () => HttpResponse.json(factions)))
 })
@@ -47,10 +50,15 @@ test('create flow posts and closes dialog', async () => {
   const dialog = screen.getByRole('dialog', { name: 'New Faction' })
   await userEvent.type(within(dialog).getByLabelText('Name'), 'Necrons')
   await userEvent.click(within(dialog).getByRole('button', { name: 'Darkest Dawn' }))
-  await userEvent.type(within(dialog).getByLabelText('Description'), 'gunmetal')
+  await userEvent.type(within(dialog).getByLabelText('Primary color'), 'gunmetal ')
+  await userEvent.type(within(dialog).getByLabelText('Texture'), 'living metal')
+  await userEvent.type(within(dialog).getByLabelText('Description'), 'green glow')
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save Faction' }))
   await screen.findByText('Tau Empire') // dialog closed, back to table
-  expect(posted).toMatchObject({ name: 'Necrons', dlc: 'Darkest Dawn', description: 'gunmetal', source: 'manual' })
+  expect(posted).toMatchObject({
+    name: 'Necrons', dlc: 'Darkest Dawn', primary_color: 'gunmetal', texture: 'living metal',
+    description: 'green glow', source: 'manual',
+  })
   expect(screen.queryByRole('dialog', { name: 'New Faction' })).not.toBeInTheDocument()
 })
 
@@ -105,4 +113,28 @@ test('delete failure shows alert, keeps dialog open, cancel still dismisses', as
   expect(screen.getByText('Delete faction?')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByText('Delete faction?')).not.toBeInTheDocument()
+})
+
+test('clicking outside closes an unchanged dialog but not a changed one', async () => {
+  renderPage()
+  await screen.findByText('Tau Empire')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Faction' })
+
+  // Clicks inside the dialog never close it.
+  await userEvent.click(within(dialog).getByLabelText('Description'))
+  expect(screen.getByRole('dialog', { name: 'Edit Faction' })).toBeInTheDocument()
+
+  await userEvent.type(within(dialog).getByLabelText('Name'), 'X')
+  await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  expect(screen.getByRole('dialog', { name: 'Edit Faction' })).toBeInTheDocument()
+
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }))
+  await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  expect(screen.queryByRole('dialog', { name: 'Edit Faction' })).not.toBeInTheDocument()
+})
+
+test('faction name links to its generations', async () => {
+  renderPage()
+  expect(await screen.findByRole('link', { name: 'Tau Empire' })).toHaveAttribute('href', '/generations?faction=1')
 })

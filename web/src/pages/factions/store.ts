@@ -5,6 +5,8 @@ import type { Faction } from './api'
 export type FactionDraft = {
   name: string
   dlc: string
+  primary_color: string
+  texture: string
   description: string
 }
 
@@ -19,7 +21,7 @@ type FactionsUiState = {
   deleteConfirmId: number | null
   historyFactionId: number | null
   expandedRevId: number | null
-  activeJobId: string | null
+  assistOpen: boolean // Claude description panel
   openCreate: () => void
   openEdit: (f: Faction) => void
   closeDialog: () => void
@@ -35,18 +37,18 @@ export const useFactionsUi = create<FactionsUiState>()((set) => ({
   deleteConfirmId: null,
   historyFactionId: null,
   expandedRevId: null,
-  activeJobId: null,
+  assistOpen: false,
   openCreate: () => {
-    useFactionDraft.getState().open('new', { name: '', dlc: 'Galaxy in Flames', description: '' })
-    set({ dialogMode: 'create', editingId: null, lastGenerated: null, showDiff: false, activeJobId: null })
+    useFactionDraft.getState().open('new', { name: '', dlc: 'Galaxy in Flames', primary_color: '', texture: '', description: '' })
+    set({ dialogMode: 'create', editingId: null, lastGenerated: null, showDiff: false, assistOpen: false })
   },
   openEdit: (f) => {
-    useFactionDraft.getState().open(String(f.id), { name: f.name, dlc: f.dlc, description: f.description })
-    set({ dialogMode: 'edit', editingId: f.id, lastGenerated: null, showDiff: false, activeJobId: null })
+    useFactionDraft.getState().open(String(f.id), { name: f.name, dlc: f.dlc, primary_color: f.primary_color, texture: f.texture, description: f.description })
+    set({ dialogMode: 'edit', editingId: f.id, lastGenerated: null, showDiff: false, assistOpen: false })
   },
   closeDialog: () => {
     useFactionDraft.getState().close()
-    set({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, activeJobId: null })
+    set({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, assistOpen: false })
   },
   set: (partial) => set(partial),
 }))

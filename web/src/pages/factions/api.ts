@@ -1,11 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../../lib/api'
 import type { DLC } from './dlc'
+import type { ChatMessage } from '../../lib/jobs'
+
+// Shared job/chat helpers live in lib/jobs; re-exported for existing callers.
+export { cancelJob, useJob, type ChatMessage, type Job } from '../../lib/jobs'
 
 export type Faction = {
   id: number
   name: string
-  description: string
+  primary_color: string
+  texture: string // material, e.g. metal / skin / wood
+  description: string // the rest of the style
   dlc: DLC
   created_at: string
   updated_at: string
@@ -15,6 +21,8 @@ export type FactionRevision = {
   id: number
   faction_id: number
   name: string
+  primary_color: string
+  texture: string
   description: string
   dlc: DLC
   source: 'manual' | 'claude' | 'rollback'
@@ -23,18 +31,13 @@ export type FactionRevision = {
 
 export type FactionSave = {
   name: string
+  primary_color: string
+  texture: string
   description: string
   dlc: DLC
   source: 'manual' | 'claude'
 }
 
-export type Job = {
-  id: string
-  status: 'pending' | 'done' | 'failed'
-  result?: string
-  error?: string
-  duration_ms: number
-}
 
 export function useFactions() {
   return useQuery({ queryKey: ['factions'], queryFn: () => apiGet<Faction[]>('/api/factions') })
@@ -64,22 +67,15 @@ export function restoreRevision(factionId: number, revId: number): Promise<Facti
   return apiSend<Faction>('POST', `/api/factions/${factionId}/revisions/${revId}/restore`, undefined)
 }
 
-export function startGenerateDescription(name: string, dlc: DLC): Promise<{ job_id: string; status: string }> {
-  return apiSend('POST', '/api/factions/generate-description', { name, dlc })
+// Without chat: one-shot description from name + DLC. With chat: Claude
+// edits current_description following the whole conversation (the CLI is
+// stateless, so the full history is sent every turn).
+export function startGenerateDescription(
+  name: string,
+  dlc: DLC,
+  chat?: { primary_color: string; texture: string; current_description: string; messages: ChatMessage[] },
+): Promise<{ job_id: string; status: string }> {
+  return apiSend('POST', '/api/factions/generate-description', { name, dlc, ...chat })
 }
 
-export function cancelJob(jobId: string): Promise<{ ok: boolean }> {
-  return apiSend('POST', `/api/jobs/${jobId}/cancel`, undefined)
-}
 
-export function useJob(jobId: string | null, intervalMs = 2000) {
-  return useQuery({
-    queryKey: ['jobs', jobId],
-    queryFn: () => apiGet<Job>(`/api/jobs/${jobId}`),
-    enabled: jobId !== null,
-    refetchInterval: (query) => {
-      const s = query.state.data?.status
-      return s === 'done' || s === 'failed' ? false : intervalMs
-    },
-  })
-}

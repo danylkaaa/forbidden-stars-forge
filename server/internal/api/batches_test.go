@@ -145,7 +145,7 @@ func TestCancelNeverSubmittedBatchConflicts(t *testing.T) {
 	_, ct := doMultipart(t, h, http.MethodPost, "/api/card-types",
 		map[string]string{"name": "combat", "description": "", "constraints": ""}, "", nil)
 	ctid := int64(ct["id"].(float64))
-	b, err := bs.Create("draft", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, err := bs.Create("draft", "gpt-image-2", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestDeleteGuardBlocksReferencedFactionAndCardType(t *testing.T) {
 	_, ct := doMultipart(t, h, http.MethodPost, "/api/card-types",
 		map[string]string{"name": "combat", "description": "", "constraints": ""}, "", nil)
 	ctid := int64(ct["id"].(float64))
-	if _, err := bs.Create("draft", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}}); err != nil {
+	if _, err := bs.Create("draft", "gpt-image-2", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +185,7 @@ func TestBatchItemImageAndDownload(t *testing.T) {
 	_, ct := doMultipart(t, h, http.MethodPost, "/api/card-types",
 		map[string]string{"name": "combat", "description": "", "constraints": ""}, "", nil)
 	ctid := int64(ct["id"].(float64))
-	b, err := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, err := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,5 +295,22 @@ func TestFailedSubmitDoesNotOrphanBatchOrBlockDelete(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("expected no leftover batch directories after cleanup, got: %v", entries)
+	}
+}
+
+func TestBatchesPreviewUsesModelOverride(t *testing.T) {
+	h := newTestRouter(t)
+	withFakeOpenAI(t, func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"id":"file-abc"}`)) })
+	fid, ctid := createFactionAndUploadedCardType(t, h)
+
+	for model, want := range map[string]string{"": "gpt-image-2", "gpt-image-2.5-flare": "gpt-image-2.5-flare"} {
+		rec, out := doJSON(t, h, http.MethodPost, "/api/batches/preview",
+			fmt.Sprintf(`{"faction_ids":[%d],"card_type_ids":[%d],"mode":"draft","model":%q}`, fid, ctid, model))
+		if rec.Code != 200 {
+			t.Fatalf("preview: %d %v", rec.Code, out)
+		}
+		if text, _ := out["jsonl"].(string); !strings.Contains(text, `"model":"`+want+`"`) {
+			t.Fatalf("model %q: jsonl = %s", model, text)
+		}
 	}
 }

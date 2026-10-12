@@ -1,18 +1,33 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 
 export function Dialog({
   title,
   titleExtra,
   width = 'min(620px,100%)',
+  onBackdropClick,
   children,
 }: {
   title: string
   titleExtra?: ReactNode
   width?: string
+  // Called on a click outside the dialog box. Callers decide whether that
+  // closes it (e.g. only when there are no unsaved changes).
+  onBackdropClick?: () => void
   children: ReactNode
 }) {
+  // Only a press that both starts and ends on the backdrop counts, so a text
+  // selection dragged out of the dialog doesn't close it.
+  const pressedBackdrop = useRef(false)
   return (
-    <div className="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-neutral-900/50 p-5">
+    <div
+      data-testid="dialog-backdrop"
+      onMouseDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget }}
+      onClick={(e) => {
+        if (pressedBackdrop.current && e.target === e.currentTarget) onBackdropClick?.()
+        pressedBackdrop.current = false
+      }}
+      className="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-neutral-900/50 p-5"
+    >
       <div
         role="dialog"
         aria-label={title}

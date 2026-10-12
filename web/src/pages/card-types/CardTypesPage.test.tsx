@@ -1,15 +1,16 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
+import { MemoryRouter } from 'react-router'
 import { server } from '../../test/msw'
 import { useCardTypesUi, useCardTypeDraft } from './store'
 import type { CardType } from './api'
 import CardTypesPage from './CardTypesPage'
 
 const cardTypes: CardType[] = [
-  { id: 1, name: 'combat', description: 'frontline warriors', constraints: 'fill crimson zone', template_path: 'templates/a.png', openai_file_id: 'file-8a2f91cd', created_at: 'a', updated_at: 'u1' },
-  { id: 2, name: 'upgrade', description: 'insignia art', constraints: '', template_path: '', openai_file_id: '', created_at: 'a', updated_at: 'u2' },
+  { id: 1, name: 'combat', description: 'frontline warriors', constraints: 'fill crimson zone', template_path: 'templates/a.png', openai_file_id: 'file-8a2f91cd', overlay_path: '', created_at: 'a', updated_at: 'u1' },
+  { id: 2, name: 'upgrade', description: 'insignia art', constraints: '', template_path: '', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'u2' },
 ]
 
 // jsdom can't load images: stub Image so onFileSelect gets fixed dimensions.
@@ -26,7 +27,9 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={qc}>
-      <CardTypesPage />
+      <MemoryRouter>
+        <CardTypesPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -40,7 +43,7 @@ beforeEach(() => {
     static revokeObjectURL = () => {}
   })
   useCardTypeDraft.getState().close()
-  useCardTypesUi.setState({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null })
+  useCardTypesUi.setState({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null, assistField: null })
   server.use(http.get('/api/card-types', () => HttpResponse.json(cardTypes)))
 })
 
@@ -62,7 +65,7 @@ test('create flow posts multipart with staged file', async () => {
       const form = await request.formData()
       gotName = form.get('name')
       gotFile = form.get('template') as File | null
-      return HttpResponse.json({ id: 3, name: gotName, description: '', constraints: '', template_path: 'templates/x.png', openai_file_id: '', created_at: 'a', updated_at: 'u' }, { status: 201 })
+      return HttpResponse.json({ id: 3, name: gotName, description: '', constraints: '', template_path: 'templates/x.png', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'u' }, { status: 201 })
     }),
   )
   renderPage()
@@ -159,4 +162,55 @@ test('undecodable file shows error, revokes blob url, stages nothing', async () 
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(/could not be read as an image/)
   expect(revoke).toHaveBeenCalledWith('blob:bad')
   expect(useCardTypesUi.getState().stagedFile).toBeNull()
+})
+
+test('edit constraints with Claude: sends draft fields + conversation, accept updates the draft', async () => {
+  let body: Record<string, unknown> | null = null
+  server.use(
+    http.post('/api/card-types/assist', async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json({ job_id: 'job-ct', status: 'pending' }, { status: 202 })
+    }),
+    http.get('/api/jobs/job-ct', () =>
+      HttpResponse.json({ id: 'job-ct', status: 'done', result: 'fill crimson zone; keep banner', duration_ms: 5 })),
+  )
+  renderPage()
+  await screen.findByText('combat')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  await userEvent.click(screen.getByRole('button', { name: 'Edit constraints with Claude' }))
+  const panel = screen.getByRole('region', { name: 'Claude assistant: constraints' })
+  await userEvent.type(within(panel).getByRole('textbox'), 'keep the banner')
+  await userEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }))
+  await userEvent.click(await within(panel).findByRole('button', { name: 'Accept' }, { timeout: 4000 }))
+
+  expect(body).toEqual({
+    field: 'constraints', name: 'combat', description: 'frontline warriors', constraints: 'fill crimson zone',
+    messages: [{ role: 'user', content: 'keep the banner' }],
+  })
+  expect(useCardTypeDraft.getState().draft?.constraints).toBe('fill crimson zone; keep banner')
+  expect(screen.queryByRole('region', { name: /Claude assistant/ })).not.toBeInTheDocument()
+})
+
+test('overlay upload saves immediately via its own endpoint', async () => {
+  let uploaded: string | null = null
+  server.use(
+    // jsdom mangles File parts in intercepted FormData (see the create-flow
+    // test), so only assert the endpoint is hit.
+    http.put('/api/card-types/1/overlay', () => {
+      uploaded = 'yes'
+      return HttpResponse.json({ ...cardTypes[0], overlay_path: 'overlays/o.png' })
+    }),
+  )
+  renderPage()
+  await screen.findByText('combat')
+  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Card Type' })
+  expect(within(dialog).getByText(/Never sent to OpenAI/)).toBeInTheDocument()
+  await userEvent.upload(within(dialog).getByLabelText('Overlay file'), new File(['png'], 'o.png', { type: 'image/png' }))
+  await waitFor(() => expect(uploaded).toBe('yes'))
+})
+
+test('card type name links to its generations', async () => {
+  renderPage()
+  expect(await screen.findByRole('link', { name: 'combat' })).toHaveAttribute('href', '/generations?card_type=1')
 })

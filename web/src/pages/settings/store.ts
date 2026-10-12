@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Settings } from './api'
+import type { Background, ClaudeEffort, Settings } from './api'
 
 export type SettingsDraft = {
   openai_api_key_input: string
@@ -9,7 +9,10 @@ export type SettingsDraft = {
   draft_quality: 'low' | 'medium'
   final_quality: 'medium' | 'high'
   input_fidelity: 'low' | 'high'
+  background: Background
   claude_binary: string
+  claude_model: string
+  claude_effort: ClaudeEffort
 }
 
 type SettingsState = {
@@ -30,7 +33,10 @@ const fromSettings = (s: Settings): SettingsDraft => ({
   draft_quality: s.draft_quality,
   final_quality: s.final_quality,
   input_fidelity: s.input_fidelity,
+  background: s.background,
   claude_binary: s.claude_binary,
+  claude_model: s.claude_model,
+  claude_effort: s.claude_effort,
 })
 
 export const useSettingsStore = create<SettingsState>()(
@@ -78,6 +84,9 @@ export function selectIsDirty(st: SettingsState): boolean {
     d.draft_quality !== p.draft_quality ||
     d.final_quality !== p.final_quality ||
     d.input_fidelity !== p.input_fidelity ||
-    d.claude_binary !== p.claude_binary
+    d.background !== p.background ||
+    d.claude_binary !== p.claude_binary ||
+    d.claude_model !== p.claude_model ||
+    d.claude_effort !== p.claude_effort
   )
 }

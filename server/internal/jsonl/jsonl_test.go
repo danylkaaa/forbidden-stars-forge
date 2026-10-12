@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"cardforge/internal/openai"
 )
 
 func TestSlugify(t *testing.T) {
@@ -25,7 +27,9 @@ func TestBuildProducesValidLinesPerItem(t *testing.T) {
 		{FactionID: 1, FactionName: "Tau Empire", CardTypeID: 10, CardTypeName: "combat", FileID: "file-1", Prompt: "p1"},
 		{FactionID: 2, FactionName: "Iron Hands", CardTypeID: 10, CardTypeName: "combat", FileID: "file-1", Prompt: "p2"},
 	}
-	text, lines, err := Build(items, "gpt-image-2", "816x1104", "low", "high")
+	text, lines, err := Build(items, openai.ImageEditRequest{
+		Model: "gpt-image-1.5", Size: "816x1104", Quality: "low", InputFidelity: "high", Background: "transparent",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +46,13 @@ func TestBuildProducesValidLinesPerItem(t *testing.T) {
 		URL      string `json:"url"`
 		Body     struct {
 			Model         string              `json:"model"`
-			Image         []map[string]string `json:"image"`
+			Images        []map[string]string `json:"images"`
 			Prompt        string              `json:"prompt"`
 			Size          string              `json:"size"`
 			Quality       string              `json:"quality"`
 			InputFidelity string              `json:"input_fidelity"`
+			Background    string              `json:"background"`
+			Moderation    string              `json:"moderation"`
 			OutputFormat  string              `json:"output_format"`
 			N             int                 `json:"n"`
 		} `json:"body"`
@@ -55,8 +61,9 @@ func TestBuildProducesValidLinesPerItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	if parsed.CustomID != "tau_empire__combat" || parsed.Method != "POST" || parsed.URL != "/v1/images/edits" ||
-		parsed.Body.Model != "gpt-image-2" || parsed.Body.Image[0]["file_id"] != "file-1" || parsed.Body.Prompt != "p1" ||
+		parsed.Body.Model != "gpt-image-1.5" || parsed.Body.Images[0]["file_id"] != "file-1" || parsed.Body.Prompt != "p1" ||
 		parsed.Body.Size != "816x1104" || parsed.Body.Quality != "low" || parsed.Body.InputFidelity != "high" ||
+		parsed.Body.Background != "transparent" || parsed.Body.Moderation != "low" ||
 		parsed.Body.OutputFormat != "png" || parsed.Body.N != 1 {
 		t.Fatalf("parsed: %+v", parsed)
 	}
@@ -67,7 +74,7 @@ func TestBuildDedupesCollidingCustomIDs(t *testing.T) {
 		{FactionID: 1, FactionName: "Tau!!", CardTypeID: 10, CardTypeName: "combat", FileID: "f", Prompt: "p"},
 		{FactionID: 2, FactionName: "Tau??", CardTypeID: 10, CardTypeName: "combat", FileID: "f", Prompt: "p"},
 	}
-	_, lines, err := Build(items, "m", "s", "q", "f")
+	_, lines, err := Build(items, openai.ImageEditRequest{Model: "m"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +87,7 @@ func TestBuildDedupesCollidingCustomIDs(t *testing.T) {
 }
 
 func TestBuildRejectsEmpty(t *testing.T) {
-	if _, _, err := Build(nil, "m", "s", "q", "f"); err == nil {
+	if _, _, err := Build(nil, openai.ImageEditRequest{Model: "m"}); err == nil {
 		t.Fatal("expected error for empty items")
 	}
 }
@@ -90,7 +97,7 @@ func TestBuildRejectsOverCap(t *testing.T) {
 	for i := range items {
 		items[i] = Item{FactionID: int64(i), FactionName: "f", CardTypeID: int64(i), CardTypeName: "c", FileID: "x", Prompt: "p"}
 	}
-	_, _, err := Build(items, "m", "s", "q", "f")
+	_, _, err := Build(items, openai.ImageEditRequest{Model: "m"})
 	if err == nil || !strings.Contains(err.Error(), "1001") {
 		t.Fatalf("err = %v", err)
 	}

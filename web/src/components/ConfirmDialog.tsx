@@ -19,7 +19,7 @@ export function ConfirmDialog({
   onCancel: () => void
 }) {
   return (
-    <Dialog title={title} width="min(400px,100%)">
+    <Dialog title={title} width="min(400px,100%)" onBackdropClick={onCancel}>
       <p className="m-0 text-sm opacity-85">{body}</p>
       {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
       <div className="mt-1.5 flex justify-end gap-2">

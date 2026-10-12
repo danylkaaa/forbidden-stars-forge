@@ -27,13 +27,16 @@ test('sidebar renders all five section links', () => {
         draft_quality: 'low',
         final_quality: 'high',
         input_fidelity: 'high',
+        background: 'auto',
         claude_binary: '',
+        claude_model: '',
+        claude_effort: '',
         price_table: '{}',
       }),
     ),
   )
   renderAt('/settings')
-  for (const label of ['Factions', 'Card Types', 'Test Generation', 'Batch Processing', 'Settings']) {
+  for (const label of ['Factions', 'Card Types', 'Faction Lab', 'Test Generation', 'Generations', 'Batch Processing', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
 })

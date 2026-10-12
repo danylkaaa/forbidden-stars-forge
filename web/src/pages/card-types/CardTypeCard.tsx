@@ -1,3 +1,5 @@
+import { Link } from 'react-router'
+import { generationsLink } from '../generations/api'
 import { Button } from '../../components/Button'
 import { Tag } from '../../components/Tag'
 import { templateUrl, type CardType } from './api'
@@ -14,7 +16,8 @@ export function CardTypeCard({ ct, onEdit, onDelete }: { ct: CardType; onEdit: (
         </div>
       )}
       <div>
-        <div className="mb-0.5 text-[17px] font-medium leading-tight">{ct.name}</div>
+        <Link to={generationsLink({ cardTypeIds: [ct.id] })} title="Show this card type's generations"
+          className="mb-0.5 block text-[17px] font-medium leading-tight text-ink no-underline hover:text-accent hover:underline">{ct.name}</Link>
         <p className="m-0 text-[13px] text-ink/70">{ct.description}</p>
       </div>
       <div className="text-[11px]">

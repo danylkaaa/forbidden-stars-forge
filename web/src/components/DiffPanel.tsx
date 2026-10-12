@@ -20,9 +20,11 @@ function DiffColumn({ label, tokens }: { label: string; tokens: DiffToken[] }) {
 }
 
 export function DiffPanel({
+  title = 'Changes since last save',
   simpleRows,
   textDiffs,
 }: {
+  title?: string
   simpleRows: { field: string; before: string; after: string }[]
   textDiffs: { field: string; before: string; after: string }[]
 }) {
@@ -34,7 +36,7 @@ export function DiffPanel({
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-ink/10 bg-bg p-3.5">
-      <div className="text-[11px] uppercase tracking-wider text-ink/50">Changes since last save</div>
+      <div className="text-[11px] uppercase tracking-wider text-ink/50">{title}</div>
       {simpleRows.map((row) => (
         <div key={row.field} className="flex gap-3 text-[13px]">
           <span className="w-20 flex-none text-ink/50">{row.field}</span>

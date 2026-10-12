@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,5 +88,15 @@ func TestRunTimeoutWithGrandchild(t *testing.T) {
 	}
 	if elapsed > 5*time.Second {
 		t.Fatalf("Run took %v, want < 5s (grandchild likely kept pipes open past deadline)", elapsed)
+	}
+}
+
+func TestArgsAddModelAndEffortWhenSet(t *testing.T) {
+	if got := fmt.Sprint((&Runner{}).args("hi")); got != "[-p hi]" {
+		t.Fatalf("defaults: %s", got)
+	}
+	got := fmt.Sprint((&Runner{Model: "opus", Effort: "high"}).args("hi"))
+	if got != "[-p hi --model opus --effort high]" {
+		t.Fatalf("args: %s", got)
 	}
 }

@@ -1,5 +1,6 @@
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { ApiKeyField } from './ApiKeyField'
+import { ModelSelect } from './ModelSelect'
 import { TestButton } from './TestButton'
 import { postTestOpenAI, type Settings } from './api'
 import { useSettingsStore, type SettingsDraft } from './store'
@@ -9,7 +10,7 @@ export function OpenAISection({ settings }: { settings: Settings }) {
   const setField = useSettingsStore((s) => s.setField)
   if (!draft) return null
 
-  const text = (key: 'openai_model' | 'image_size', label: string) => (
+  const text = (key: 'image_size', label: string) => (
     <Field label={label}>
       {(id) => (
         <input
@@ -23,7 +24,7 @@ export function OpenAISection({ settings }: { settings: Settings }) {
     </Field>
   )
 
-  const select = <K extends 'draft_quality' | 'final_quality' | 'input_fidelity'>(
+  const select = <K extends 'draft_quality' | 'final_quality' | 'input_fidelity' | 'background'>(
     key: K,
     label: string,
     options: SettingsDraft[K][],
@@ -50,11 +51,22 @@ export function OpenAISection({ settings }: { settings: Settings }) {
     <section className="flex flex-col gap-3.5 p-4 rounded-md bg-surface shadow-[0_0_0_1px_#3f424d]">
       <h2 className="text-[13px] font-medium">OpenAI</h2>
       <ApiKeyField settings={settings} />
-      {text('openai_model', 'Model')}
+      <ModelSelect settings={settings} />
       <div className="grid grid-cols-2 gap-3.5">
         {text('image_size', 'Image size')}
-        {select('input_fidelity', 'Input fidelity', ['low', 'high'])}
+        {select('background', 'Background', ['auto', 'opaque', 'transparent'])}
       </div>
+      {draft.background === 'transparent' &&
+        (draft.openai_model === 'gpt-image-2' || draft.openai_model.startsWith('gpt-image-2-')) && (
+        <p className="text-[11px] text-ink/45 -mt-2">
+          Transparent backgrounds are in preview for gpt-image-2.
+        </p>
+      )}
+      {!draft.openai_model.startsWith('gpt-image-2') && (
+        <div className="grid grid-cols-2 gap-3.5">
+          {select('input_fidelity', 'Input fidelity', ['low', 'high'])}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3.5">
         {select('draft_quality', 'Draft quality', ['low', 'medium'])}
         {select('final_quality', 'Final quality', ['medium', 'high'])}

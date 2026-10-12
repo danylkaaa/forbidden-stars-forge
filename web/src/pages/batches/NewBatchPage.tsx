@@ -23,7 +23,7 @@ export default function NewBatchPage() {
     setError(null)
     setPreviewing(true)
     try {
-      const p = await previewBatch({ faction_ids: wizard.factionIds, card_type_ids: wizard.cardTypeIds, mode: wizard.mode })
+      const p = await previewBatch({ faction_ids: wizard.factionIds, card_type_ids: wizard.cardTypeIds, mode: wizard.mode, ...(wizard.model ? { model: wizard.model } : {}) })
       setPreview(p)
       wizard.set({ step: 'preview' })
     } catch (e) {
@@ -37,7 +37,7 @@ export default function NewBatchPage() {
     setError(null)
     setSubmitting(true)
     try {
-      const batch = await submitBatch({ faction_ids: wizard.factionIds, card_type_ids: wizard.cardTypeIds, mode: wizard.mode })
+      const batch = await submitBatch({ faction_ids: wizard.factionIds, card_type_ids: wizard.cardTypeIds, mode: wizard.mode, ...(wizard.model ? { model: wizard.model } : {}) })
       queryClient.invalidateQueries({ queryKey: ['batches'] })
       wizard.reset()
       navigate(`/batches/${batch.id}`)

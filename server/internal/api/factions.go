@@ -20,10 +20,8 @@ type FactionsHandler struct {
 }
 
 type factionSave struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	DLC         string `json:"dlc"`
-	Source      string `json:"source"`
+	store.FactionInput
+	Source string `json:"source"`
 }
 
 func decodeFactionSave(r *http.Request) (factionSave, string) {
@@ -32,6 +30,8 @@ func decodeFactionSave(r *http.Request) (factionSave, string) {
 		return s, "invalid JSON: " + err.Error()
 	}
 	s.Name = strings.TrimSpace(s.Name)
+	s.PrimaryColor = strings.TrimSpace(s.PrimaryColor)
+	s.Texture = strings.TrimSpace(s.Texture)
 	if s.Name == "" {
 		return s, "name is required"
 	}
@@ -78,7 +78,7 @@ func (h *FactionsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	f, err := h.Store.Create(s.Name, s.Description, s.DLC, s.Source)
+	f, err := h.Store.Create(s.FactionInput, s.Source)
 	if err != nil {
 		h.storeErr(w, err)
 		return
@@ -97,7 +97,7 @@ func (h *FactionsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	f, _, err := h.Store.Update(id, s.Name, s.Description, s.DLC, s.Source)
+	f, _, err := h.Store.Update(id, s.FactionInput, s.Source)
 	if err != nil {
 		h.storeErr(w, err)
 		return

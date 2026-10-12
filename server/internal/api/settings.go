@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
-	"cardforge/internal/claude"
 	"cardforge/internal/openai"
 	"cardforge/internal/store"
 )
@@ -25,7 +27,10 @@ type settingsResponse struct {
 	DraftQuality        string `json:"draft_quality"`
 	FinalQuality        string `json:"final_quality"`
 	InputFidelity       string `json:"input_fidelity"`
+	Background          string `json:"background"`
 	ClaudeBinary        string `json:"claude_binary"`
+	ClaudeModel         string `json:"claude_model"`
+	ClaudeEffort        string `json:"claude_effort"`
 	PriceTable          string `json:"price_table"`
 }
 
@@ -36,7 +41,10 @@ type settingsUpdate struct {
 	DraftQuality  string `json:"draft_quality"`
 	FinalQuality  string `json:"final_quality"`
 	InputFidelity string `json:"input_fidelity"`
+	Background    string `json:"background"`
 	ClaudeBinary  string `json:"claude_binary"`
+	ClaudeModel   string `json:"claude_model"`
+	ClaudeEffort  string `json:"claude_effort"`
 	PriceTable    string `json:"price_table"`
 }
 
@@ -76,7 +84,10 @@ func (h *SettingsHandler) buildResponse() (settingsResponse, error) {
 		DraftQuality:        all["draft_quality"],
 		FinalQuality:        all["final_quality"],
 		InputFidelity:       all["input_fidelity"],
+		Background:          all["background"],
 		ClaudeBinary:        all["claude_binary"],
+		ClaudeModel:         all["claude_model"],
+		ClaudeEffort:        all["claude_effort"],
 		PriceTable:          all["price_table"],
 	}, nil
 }
@@ -109,13 +120,29 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if u.Background == "" {
+		u.Background = "auto"
+	}
+	if !oneOf(u.Background, "auto", "opaque", "transparent") {
+		writeError(w, http.StatusBadRequest, "background must be auto, opaque or transparent")
+		return
+	}
+	u.ClaudeModel = strings.TrimSpace(u.ClaudeModel)
+	if !oneOf(u.ClaudeEffort, "", "low", "medium", "high", "xhigh", "max") {
+		writeError(w, http.StatusBadRequest, "claude_effort must be empty, low, medium, high, xhigh or max")
+		return
+	}
+
 	kv := map[string]string{
 		"openai_model":   u.OpenAIModel,
 		"image_size":     u.ImageSize,
 		"draft_quality":  u.DraftQuality,
 		"final_quality":  u.FinalQuality,
 		"input_fidelity": u.InputFidelity,
+		"background":     u.Background,
 		"claude_binary":  u.ClaudeBinary,
+		"claude_model":   u.ClaudeModel,
+		"claude_effort":  u.ClaudeEffort,
 		"price_table":    u.PriceTable,
 	}
 	if u.OpenAIAPIKey != "" { // write-only: empty means "leave unchanged"
@@ -151,15 +178,47 @@ func (h *SettingsHandler) TestOpenAI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": fmt.Sprintf("Connected — %d models available", n)})
 }
 
+// OpenAIModels lists the image models available to an API key, for the
+// Settings model dropdown. The body's api_key (a not-yet-saved key typed
+// in the UI) wins; otherwise the env/stored key is used.
+func (h *SettingsHandler) OpenAIModels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	key := req.APIKey
+	if key == "" {
+		all, err := h.Store.GetAll()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		key = resolveOpenAIKey(all)
+	}
+	client := openai.New(key)
+	client.BaseURL = openAIBaseURL
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	models, err := client.ListImageModels(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
 func (h *SettingsHandler) TestClaude(w http.ResponseWriter, r *http.Request) {
 	all, err := h.Store.GetAll()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	bin := all["claude_binary"]
-	runner := &claude.Runner{Binary: bin}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	runner := claudeRunner(all)
+	// Higher effort / bigger models can take a while even for "Reply with OK".
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	out, err := runner.Run(ctx, "Reply with OK")
 	if err != nil {

@@ -213,7 +213,112 @@ func (h *CardTypesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.removeTemplateFile(ct.TemplatePath)
+	h.removeTemplateFile(ct.OverlayPath)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// PutOverlay stores a preview-only overlay PNG for the card type (saved
+// immediately, independent of the edit form). It stays local: nothing in
+// the generation path reads overlay_path.
+func (h *CardTypesHandler) PutOverlay(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	prev, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxTemplateBytes+(1<<20))
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("overlay must be a PNG up to %d MB", maxTemplateBytes>>20))
+		return
+	}
+	f, hdr, err := r.FormFile("overlay")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "overlay file is required")
+		return
+	}
+	defer f.Close()
+	if strings.ToLower(filepath.Ext(hdr.Filename)) != ".png" {
+		writeError(w, http.StatusBadRequest, "overlay must be a PNG (with transparency)")
+		return
+	}
+	dir := filepath.Join(h.DataDir, "overlays")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	rel := filepath.Join("overlays", fmt.Sprintf("overlay-%d.png", time.Now().UnixNano()))
+	dst, err := os.Create(filepath.Join(h.DataDir, rel))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_, err = io.Copy(dst, f)
+	dst.Close()
+	if err != nil {
+		h.removeTemplateFile(rel)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.Store.SetOverlay(id, rel); err != nil {
+		h.removeTemplateFile(rel)
+		h.cardTypeErr(w, err)
+		return
+	}
+	h.removeTemplateFile(prev.OverlayPath)
+	ct, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ct)
+}
+
+func (h *CardTypesHandler) DeleteOverlay(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	prev, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	if err := h.Store.SetOverlay(id, ""); err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	h.removeTemplateFile(prev.OverlayPath)
+	ct, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ct)
+}
+
+func (h *CardTypesHandler) ServeOverlay(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	ct, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	if ct.OverlayPath == "" {
+		writeError(w, http.StatusNotFound, "no overlay uploaded")
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	http.ServeFile(w, r, filepath.Join(h.DataDir, ct.OverlayPath))
 }
 
 func (h *CardTypesHandler) ServeTemplate(w http.ResponseWriter, r *http.Request) {

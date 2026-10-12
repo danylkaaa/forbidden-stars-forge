@@ -7,6 +7,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -244,5 +246,52 @@ func TestRealTestOpenAIEndpoint(t *testing.T) {
 	rec, out = doJSON(t, h, http.MethodPost, "/api/settings/test-openai", "")
 	if rec.Code != 200 || out["ok"] != false {
 		t.Fatalf("no-key case: %d %v", rec.Code, out)
+	}
+}
+
+func putOverlay(t *testing.T, h http.Handler, id int64, fileName string) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	body, ct := multipartBody(t, nil, "overlay", fileName, pngBytes)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/card-types/%d/overlay", id), body)
+	req.Header.Set("Content-Type", ct)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var out map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec, out
+}
+
+func TestCardTypeOverlayUploadServeReplaceDelete(t *testing.T) {
+	h, _, dataDir := newTestRouterWithStore(t)
+	_, ct := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "combat"}, "", nil)
+	id := int64(ct["id"].(float64))
+
+	if rec, _ := putOverlay(t, h, id, "overlay.jpg"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("non-PNG accepted: %d", rec.Code)
+	}
+	rec, out := putOverlay(t, h, id, "overlay.png")
+	first, _ := out["overlay_path"].(string)
+	if rec.Code != 200 || first == "" {
+		t.Fatalf("upload: %d %v", rec.Code, out)
+	}
+	rec, _ = doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/card-types/%d/overlay", id), "")
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("serve: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+
+	_, out = putOverlay(t, h, id, "overlay.png")
+	if out["overlay_path"] == first {
+		t.Fatal("replace kept the old path")
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, first)); !os.IsNotExist(err) {
+		t.Fatalf("old overlay file not removed: %v", err)
+	}
+
+	rec, out = doJSON(t, h, http.MethodDelete, fmt.Sprintf("/api/card-types/%d/overlay", id), "")
+	if rec.Code != 200 || out["overlay_path"] != "" {
+		t.Fatalf("delete: %d %v", rec.Code, out)
+	}
+	if rec, _ := doJSON(t, h, http.MethodGet, fmt.Sprintf("/api/card-types/%d/overlay", id), ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("serve after delete: %d", rec.Code)
 	}
 }

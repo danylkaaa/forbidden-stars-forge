@@ -1,0 +1,44 @@
+package store
+
+import (
+	"database/sql"
+
+	"cardforge/internal/pricing"
+)
+
+// UsageStore reads token usage of past finished runs (Test Generation and
+// batch items) to calibrate cost estimates.
+type UsageStore struct {
+	db *sql.DB
+}
+
+func NewUsageStore(db *sql.DB) *UsageStore {
+	return &UsageStore{db: db}
+}
+
+// RecentRuns returns the most recent finished, priced runs with this model
+// (any model when model is ""), newest first. Batch costs are doubled back
+// to standard prices so both sources are comparable.
+func (s *UsageStore) RecentRuns(model string, limit int) ([]pricing.PastRun, error) {
+	rows, err := s.db.Query(`SELECT output_tokens, cost FROM (
+			SELECT g.output_tokens, g.cost_usd AS cost, g.model, g.created_at AS at FROM generations g
+			WHERE g.status = 'done' AND g.cost_usd > 0
+			UNION ALL
+			SELECT i.output_tokens, i.cost_usd / ?, b.model, COALESCE(b.completed_at, b.created_at)
+			FROM batch_items i JOIN batches b ON b.id = i.batch_id
+			WHERE i.status = 'done' AND i.cost_usd > 0
+		) WHERE (? = '' OR model = ?) ORDER BY at DESC LIMIT ?`, pricing.BatchDiscount, model, model, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]pricing.PastRun, 0)
+	for rows.Next() {
+		var r pricing.PastRun
+		if err := rows.Scan(&r.OutputTokens, &r.StandardCost); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

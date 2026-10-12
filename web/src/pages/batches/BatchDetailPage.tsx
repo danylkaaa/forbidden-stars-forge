@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Tag } from '../../components/Tag'
 import { formatCost, formatDuration } from '../../lib/format'
 import { useFactions } from '../factions/api'
-import { useCardTypes } from '../card-types/api'
+import { previewLayers, useCardTypes } from '../card-types/api'
 import { useBatch, cancelBatch, batchDownloadUrl } from './api'
 import { ItemCard } from './ItemCard'
 
@@ -69,6 +69,7 @@ export default function BatchDetailPage() {
           <div className="mb-1.5 flex items-center gap-2.5">
             <h1 className="m-0 text-[32px] font-medium leading-tight tracking-tight">Batch #{batch.id}</h1>
             <Tag variant={batch.mode === 'final' ? 'solid-accent' : 'neutral'}>{batch.mode}</Tag>
+            {batch.model && <span className="font-mono text-[11px] text-ink/45">{batch.model}</span>}
             <Tag variant={active ? 'outline-accent' : batch.status === 'completed' ? 'solid-accent' : 'warn'}>
               {batch.status.replace('_', ' ')}
             </Tag>
@@ -100,7 +101,8 @@ export default function BatchDetailPage() {
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4">
         {items.map((item) => (
           <ItemCard key={item.id} item={item} batchId={batch.id}
-            factionName={factionName(item.faction_id)} cardTypeName={cardTypeName(item.card_type_id)} />
+            factionName={factionName(item.faction_id)} cardTypeName={cardTypeName(item.card_type_id)}
+            {...previewLayers(cardTypes?.find((c) => c.id === item.card_type_id))} />
         ))}
       </div>
       {items.length === 0 && <p className="m-0 text-sm text-ink/50">No items in this batch.</p>}

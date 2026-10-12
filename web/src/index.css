@@ -28,6 +28,12 @@
   --radius-lg: 14px;
 
   --font-sans: 'Inter', system-ui, sans-serif;
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
 }
 
 body {
@@ -41,4 +47,121 @@ body {
 
 ::selection {
   background: rgba(145, 132, 217, 0.3);
+}
+
+/* App-wide checkbox look: dark box, accent fill + check when checked.
+   Applies to every <input type="checkbox"> (batch wizard, filters, …). */
+input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--color-neutral-500);
+  border-radius: 4px;
+  background: var(--color-bg);
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+}
+
+input[type='checkbox']::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  /* checkmark */
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  background: var(--color-bg);
+  transform: scale(0);
+  transition: transform 120ms ease-in-out;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+input[type='checkbox']:checked {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+input[type='checkbox']:checked::before {
+  transform: scale(1);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--color-accent-300);
+  outline-offset: 2px;
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* App-wide select look: native arrow replaced by a muted chevron with
+   proper right padding, and long values truncate with an ellipsis. */
+select {
+  appearance: none;
+  padding-right: 2rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%239397ab' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 12px 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+select:hover:not(:disabled):not(:focus) {
+  border-color: var(--color-neutral-500);
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+select option {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* Loading spinners for images being generated (GeneratingSpinner). */
+@keyframes spinner-bar {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes spinner-cell {
+  0%, 70%, 100% { opacity: 0.15; transform: scale(0.8); }
+  35% { opacity: 1; transform: scale(1); }
+}
+@keyframes spinner-flip {
+  0% { transform: perspective(120px) rotateX(0) rotateY(0); }
+  50% { transform: perspective(120px) rotateX(-180deg) rotateY(0); }
+  100% { transform: perspective(120px) rotateX(-180deg) rotateY(-180deg); }
+}
+@keyframes spinner-ripple {
+  0% { transform: scale(0.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes spinner-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-anim, .spinner-anim * { animation-duration: 3s !important; }
+}
+
+/* App-wide scrollbars: thin, dark thumb, transparent track (standard
+   properties; Chrome 121+, Firefox, Safari 18.2+). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-800) transparent;
+}
+
+*:hover {
+  scrollbar-color: var(--color-neutral-500) transparent;
 }

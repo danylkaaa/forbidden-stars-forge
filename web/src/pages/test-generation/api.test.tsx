@@ -11,7 +11,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 const base: Generation = {
-  id: 7, faction_id: 1, card_type_id: 2, mode: 'draft', prompt: 'p', status: 'done',
+  id: 7, faction_id: 1, card_type_id: 2, mode: 'draft', model: '', quality: 'low', name: '1-tau_empire-combat-low', favorite: false, prompt: 'p', status: 'done',
   image_path: 'generated/gen-7.png', input_tokens: 100, output_tokens: 400,
   cost_usd: 0.012, duration_ms: 43000, error: '', created_at: '2026-07-18',
 }

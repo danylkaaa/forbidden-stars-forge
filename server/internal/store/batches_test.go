@@ -15,14 +15,14 @@ func batchFixtures(t *testing.T) (*BatchesStore, *FactionsStore, *CardTypesStore
 	t.Cleanup(func() { db.Close() })
 	fs := NewFactionsStore(db)
 	cs := NewCardTypesStore(db)
-	f, _ := fs.Create("Tau", "d", "Galaxy in Flames", "manual")
+	f, _ := fs.Create(FactionInput{Name: "Tau", Description: "d", DLC: "Galaxy in Flames"}, "manual")
 	ct, _ := cs.Create("combat", "", "", "")
 	return NewBatchesStore(db), fs, cs, f.ID, ct.ID
 }
 
 func mkBatch(t *testing.T, s *BatchesStore, fid, ctid int64) Batch {
 	t.Helper()
-	b, err := s.Create("draft", "batches/1/requests.jsonl", []BatchItemInput{
+	b, err := s.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []BatchItemInput{
 		{FactionID: fid, CardTypeID: ctid, CustomID: "tau__combat"},
 	})
 	if err != nil {
@@ -130,5 +130,27 @@ func TestReferencedGuards(t *testing.T) {
 	}
 	if err := cs.Delete(ctid); err == nil {
 		t.Fatal("card type delete should fail at FK level")
+	}
+}
+
+func TestDoneItemsJoinsBatchAndSkipsUnfinished(t *testing.T) {
+	s, _, _, fid, ctid := batchFixtures(t)
+	b, err := s.Create("final", "gpt-image-2.5-flare", "x", []BatchItemInput{
+		{FactionID: fid, CardTypeID: ctid, CustomID: "a"},
+		{FactionID: fid, CardTypeID: ctid, CustomID: "b"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkItemDone(b.ID, "a", "batches/1/a.png", 1, 2, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.DoneItems()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].CustomID != "a" || items[0].Mode != "final" ||
+		items[0].Model != "gpt-image-2.5-flare" || items[0].CompletedAt == "" || items[0].CostUSD != 0.5 {
+		t.Fatalf("items: %+v", items)
 	}
 }

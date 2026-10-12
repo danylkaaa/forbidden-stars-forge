@@ -18,6 +18,7 @@ type CardTypesUiState = {
   showDiff: boolean
   discardConfirmOpen: boolean
   deleteConfirmId: number | null
+  assistField: 'description' | 'constraints' | null // open Claude panel
   openCreate: () => void
   openEdit: (ct: CardType) => void
   closeDialog: () => void
@@ -39,20 +40,21 @@ export const useCardTypesUi = create<CardTypesUiState>()((set, get) => {
     showDiff: false,
     discardConfirmOpen: false,
     deleteConfirmId: null,
+    assistField: null,
     openCreate: () => {
       revokeStaged()
       useCardTypeDraft.getState().open('new', { name: '', description: '', constraints: '' })
-      set({ dialogMode: 'create', editingId: null, stagedFile: null, stagedMeta: null, showDiff: false })
+      set({ dialogMode: 'create', editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, assistField: null })
     },
     openEdit: (ct) => {
       revokeStaged()
       useCardTypeDraft.getState().open(String(ct.id), { name: ct.name, description: ct.description, constraints: ct.constraints })
-      set({ dialogMode: 'edit', editingId: ct.id, stagedFile: null, stagedMeta: null, showDiff: false })
+      set({ dialogMode: 'edit', editingId: ct.id, stagedFile: null, stagedMeta: null, showDiff: false, assistField: null })
     },
     closeDialog: () => {
       revokeStaged()
       useCardTypeDraft.getState().close()
-      set({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false })
+      set({ dialogMode: null, editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, discardConfirmOpen: false, assistField: null })
     },
     set: (partial) => {
       // Replacing or clearing stagedMeta releases the previous blob URL.

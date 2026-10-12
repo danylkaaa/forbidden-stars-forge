@@ -9,6 +9,7 @@ type CardType struct {
 	Constraints  string `json:"constraints"`
 	TemplatePath string `json:"template_path"`
 	OpenAIFileID string `json:"openai_file_id"`
+	OverlayPath  string `json:"overlay_path"` // preview-only, never sent to OpenAI
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
 }
@@ -21,11 +22,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), created_at, updated_at"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.CreatedAt, &ct.UpdatedAt)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -107,6 +108,19 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 func (s *CardTypesStore) SetFileID(id int64, fileID string) error {
 	res, err := s.db.Exec(
 		`UPDATE card_types SET openai_file_id = ?, updated_at = datetime('now') WHERE id = ?`, fileID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetOverlay sets (or with "" clears) the overlay image path.
+func (s *CardTypesStore) SetOverlay(id int64, path string) error {
+	res, err := s.db.Exec(
+		`UPDATE card_types SET overlay_path = ?, updated_at = datetime('now') WHERE id = ?`, nullable(path), id)
 	if err != nil {
 		return err
 	}

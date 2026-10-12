@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"cardforge/internal/openai"
 )
 
 // MaxLines is the hard cap on a single batch (PRD §8.3).
@@ -39,7 +41,9 @@ type Line struct {
 // needs to create matching batch_items rows. custom_id is normally
 // slug(faction)__slug(cardtype); if two pairs slugify identically, later
 // ones get a "-N" suffix so custom_id stays unique per batch.
-func Build(items []Item, model, size, quality, inputFidelity string) (string, []Line, error) {
+// params carries the shared request settings; FileID and Prompt come from
+// each item.
+func Build(items []Item, params openai.ImageEditRequest) (string, []Line, error) {
 	if len(items) == 0 {
 		return "", nil, fmt.Errorf("no items to batch")
 	}
@@ -59,20 +63,13 @@ func Build(items []Item, model, size, quality, inputFidelity string) (string, []
 		} else {
 			seen[base] = 0
 		}
+		req := params
+		req.FileID, req.Prompt = it.FileID, it.Prompt
 		raw, err := json.Marshal(map[string]any{
 			"custom_id": customID,
 			"method":    "POST",
 			"url":       "/v1/images/edits",
-			"body": map[string]any{
-				"model":          model,
-				"image":          []map[string]string{{"file_id": it.FileID}},
-				"prompt":         it.Prompt,
-				"size":           size,
-				"quality":        quality,
-				"input_fidelity": inputFidelity,
-				"output_format":  "png",
-				"n":              1,
-			},
+			"body":      openai.EditBody(req),
 		})
 		if err != nil {
 			return "", nil, err

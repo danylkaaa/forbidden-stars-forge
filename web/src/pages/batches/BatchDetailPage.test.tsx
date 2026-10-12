@@ -11,12 +11,12 @@ const factions = [{ id: 1, name: 'Tau Empire', description: 'd', dlc: 'Galaxy in
 const cardTypes = [{ id: 1, name: 'combat', description: '', constraints: '', template_path: 't.png', openai_file_id: 'file-1', created_at: 'a', updated_at: 'b' }]
 
 const baseBatch: Batch = {
-  id: 5, openai_batch_id: 'b5', mode: 'draft', status: 'in_progress', jsonl_path: 'x', output_path: '',
+  id: 5, model: '', openai_batch_id: 'b5', mode: 'draft', status: 'in_progress', jsonl_path: 'x', output_path: '',
   total_cost_usd: 0, submitted_at: 'a', completed_at: '', created_at: 'a', updated_at: 'a',
   counts: { completed: 1, failed: 0, total: 2 }, est_cost_usd: 0.02,
 }
 const doneItem: BatchItem = {
-  id: 1, batch_id: 5, faction_id: 1, card_type_id: 1, custom_id: 'tau_empire__combat', status: 'done',
+  id: 1, batch_id: 5, faction_id: 1, card_type_id: 1, custom_id: 'tau_empire__combat', quality: 'low', name: '1-tau-combat-low', favorite: false, status: 'done',
   image_path: 'batches/5/tau_empire__combat.png', input_tokens: 100, output_tokens: 400, cost_usd: 0.008, error: '',
 }
 const failedItem: BatchItem = { ...doneItem, id: 2, status: 'failed', image_path: '', cost_usd: 0, error: 'content policy violation' }

@@ -1,11 +1,13 @@
 import { NavLink } from 'react-router'
 import type { ComponentType } from 'react'
-import { FactionsIcon, CardTypesIcon, TestGenIcon, BatchIcon, SettingsIcon } from './icons'
+import { FactionsIcon, CardTypesIcon, LabIcon, TestGenIcon, GalleryIcon, BatchIcon, SettingsIcon } from './icons'
 
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
   { to: '/factions', label: 'Factions', Icon: FactionsIcon },
   { to: '/card-types', label: 'Card Types', Icon: CardTypesIcon },
+  { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
   { to: '/test-generation', label: 'Test Generation', Icon: TestGenIcon },
+  { to: '/generations', label: 'Generations', Icon: GalleryIcon },
   { to: '/batches', label: 'Batch Processing', Icon: BatchIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]

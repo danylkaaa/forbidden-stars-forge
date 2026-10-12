@@ -11,7 +11,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 const inProgress: Batch = {
-  id: 1, openai_batch_id: 'b1', mode: 'draft', status: 'in_progress', jsonl_path: 'x', output_path: '',
+  id: 1, openai_batch_id: 'b1', mode: 'draft', model: '', status: 'in_progress', jsonl_path: 'x', output_path: '',
   total_cost_usd: 0, submitted_at: 'a', completed_at: '', created_at: 'a', updated_at: 'a',
   counts: { completed: 0, failed: 0, total: 2 }, est_cost_usd: 0.02,
 }
@@ -36,7 +36,7 @@ test('useBatch disabled when id is null', () => {
 })
 
 test('batchItemImageUrl is null unless the item is done with an image', () => {
-  const pending: BatchItem = { id: 1, batch_id: 1, faction_id: 1, card_type_id: 1, custom_id: 'a__b', status: 'pending', image_path: '', input_tokens: 0, output_tokens: 0, cost_usd: 0, error: '' }
+  const pending: BatchItem = { id: 1, batch_id: 1, faction_id: 1, card_type_id: 1, custom_id: 'a__b', quality: 'low', name: '1-tau-combat-low', favorite: false, status: 'pending', image_path: '', input_tokens: 0, output_tokens: 0, cost_usd: 0, error: '' }
   const done: BatchItem = { ...pending, status: 'done', image_path: 'batches/1/a__b.png' }
   expect(batchItemImageUrl(1, pending)).toBeNull()
   expect(batchItemImageUrl(1, done)).toBe('/api/batches/1/items/1/image')

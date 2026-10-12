@@ -12,6 +12,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -94,9 +96,31 @@ func (c *Client) do(ctx context.Context, method, path, contentType string, makeB
 }
 
 func (c *Client) ListModels(ctx context.Context) (int, error) {
+	ids, err := c.modelIDs(ctx)
+	return len(ids), err
+}
+
+// ListImageModels returns the sorted ids of the GPT Image models this key
+// can use (gpt-image-*, chatgpt-image-*), for the Settings model picker.
+func (c *Client) ListImageModels(ctx context.Context) ([]string, error) {
+	ids, err := c.modelIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, id := range ids {
+		if strings.HasPrefix(id, "gpt-image-") || strings.HasPrefix(id, "chatgpt-image-") {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (c *Client) modelIDs(ctx context.Context) ([]string, error) {
 	data, err := c.do(ctx, http.MethodGet, "/v1/models", "", func() (io.Reader, error) { return nil, nil })
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	var out struct {
 		Data []struct {
@@ -104,9 +128,13 @@ func (c *Client) ListModels(ctx context.Context) (int, error) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
-		return 0, fmt.Errorf("openai: bad models response: %w", err)
+		return nil, fmt.Errorf("openai: bad models response: %w", err)
 	}
-	return len(out.Data), nil
+	ids := make([]string, len(out.Data))
+	for i, m := range out.Data {
+		ids[i] = m.ID
+	}
+	return ids, nil
 }
 
 // UploadFile uploads via the Files API and returns the file id.
@@ -164,28 +192,52 @@ type ImageEditRequest struct {
 	Size          string
 	Quality       string
 	InputFidelity string
+	Background    string // transparent | opaque | auto
+}
+
+// usesV2 reports whether model is a gpt-image-2 family model (incl. 2.5
+// and dated snapshots). These always process inputs at high fidelity, so
+// input_fidelity must be omitted.
+func usesV2(model string) bool {
+	return strings.HasPrefix(model, "gpt-image-2")
+}
+
+// EditBody is the JSON body for POST /v1/images/edits, shared by the
+// direct call and batch JSONL lines. Uses the `images` array of file
+// references; output is always PNG so a transparent background works.
+// Moderation is always "low": grimdark Warhammer subjects (skulls, war,
+// gore) trip the default "auto" filter.
+func EditBody(req ImageEditRequest) map[string]any {
+	body := map[string]any{
+		"model":         req.Model,
+		"images":        []map[string]string{{"file_id": req.FileID}},
+		"prompt":        req.Prompt,
+		"size":          req.Size,
+		"quality":       req.Quality,
+		"output_format": "png",
+		"moderation":    "low",
+		"n":             1,
+	}
+	if req.InputFidelity != "" && !usesV2(req.Model) {
+		body["input_fidelity"] = req.InputFidelity
+	}
+	if req.Background != "" {
+		body["background"] = req.Background
+	}
+	return body
 }
 
 type ImageEditResult struct {
-	PNG          []byte
-	InputTokens  int64
-	OutputTokens int64
+	PNG             []byte
+	InputTokens     int64
+	TextInputTokens int64 // text share of InputTokens
+	OutputTokens    int64
 }
 
 // EditImage calls POST /v1/images/edits referencing an uploaded template
-// by file_id (PRD §7.3/§8.3 body shape) and decodes the b64 PNG.
+// by file_id (see EditBody) and decodes the b64 PNG.
 func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEditResult, error) {
-	body := map[string]any{
-		"model":          req.Model,
-		"image":          []map[string]string{{"file_id": req.FileID}},
-		"prompt":         req.Prompt,
-		"size":           req.Size,
-		"quality":        req.Quality,
-		"input_fidelity": req.InputFidelity,
-		"output_format":  "png",
-		"n":              1,
-	}
-	payload, err := json.Marshal(body)
+	payload, err := json.Marshal(EditBody(req))
 	if err != nil {
 		return ImageEditResult{}, err
 	}
@@ -199,8 +251,11 @@ func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEdit
 			B64JSON string `json:"b64_json"`
 		} `json:"data"`
 		Usage struct {
-			InputTokens  int64 `json:"input_tokens"`
-			OutputTokens int64 `json:"output_tokens"`
+			InputTokens        int64 `json:"input_tokens"`
+			OutputTokens       int64 `json:"output_tokens"`
+			InputTokensDetails struct {
+				TextTokens int64 `json:"text_tokens"`
+			} `json:"input_tokens_details"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
@@ -213,5 +268,10 @@ func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEdit
 	if err != nil {
 		return ImageEditResult{}, fmt.Errorf("openai: bad image base64: %w", err)
 	}
-	return ImageEditResult{PNG: png, InputTokens: out.Usage.InputTokens, OutputTokens: out.Usage.OutputTokens}, nil
+	return ImageEditResult{
+		PNG:             png,
+		InputTokens:     out.Usage.InputTokens,
+		TextInputTokens: out.Usage.InputTokensDetails.TextTokens,
+		OutputTokens:    out.Usage.OutputTokens,
+	}, nil
 }

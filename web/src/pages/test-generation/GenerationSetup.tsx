@@ -2,21 +2,24 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
+import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, selectClass, inputClass } from '../../components/Field'
+import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
 import { useFactions } from '../factions/api'
 import { useCardTypes } from '../card-types/api'
-import { formatCost, startGeneration, useGeneration, usePreview } from './api'
+import { formatCost, startGeneration, startPromptAssist, useGeneration, usePreview, useStartGeneration } from './api'
 import { useTestGenUi } from './store'
 
 export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) {
   const ui = useTestGenUi()
   const { data: factions, error: factionsError } = useFactions()
   const { data: cardTypes, error: cardTypesError } = useCardTypes()
-  const { data: previewData, error: previewError } = usePreview(ui.factionId, ui.cardTypeId)
+  const { data: previewData, error: previewError } = usePreview(ui.factionId, ui.cardTypeId, ui.model)
   const gen = useGeneration(ui.activeGenerationId, intervalMs)
   const [genError, setGenError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
   const queryClient = useQueryClient()
+  const start = useStartGeneration()
 
   const pending = ui.activeGenerationId !== null && (gen.data === undefined || gen.data.status === 'pending')
 
@@ -44,7 +47,8 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
         faction_id: ui.factionId, card_type_id: ui.cardTypeId, mode: ui.mode,
       }
       if (ui.editingPrompt && ui.promptOverride.trim()) body.prompt_override = ui.promptOverride
-      const g = await startGeneration(body)
+      if (ui.model) body.model = ui.model
+      const g = await start(body)
       ui.set({ activeGenerationId: g.id })
     } catch (e) {
       setGenError(e instanceof Error ? e.message : 'failed to start generation')
@@ -119,6 +123,7 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
         </p>
       ) : (
         <>
+          <div className="grid grid-cols-2 items-end gap-3.5">
           <div>
             <span className="mb-1 block text-xs text-ink/70">Mode</span>
             <div className="flex items-center gap-3">
@@ -133,15 +138,30 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
               {estimate !== null && <span className="text-xs text-ink/50">est. {formatCost(estimate)} per image (estimate)</span>}
             </div>
           </div>
+          <ModelOverrideSelect value={ui.model} onChange={(model) => ui.set({ model })} />
+          </div>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
               <label htmlFor="tg-prompt" className="text-xs text-ink/70">{ui.editingPrompt ? 'Prompt override' : 'Prompt preview'}</label>
-              <button type="button"
-                onClick={() => ui.set(ui.editingPrompt ? { editingPrompt: false, promptOverride: '' } : { editingPrompt: true, promptOverride: previewData?.prompt ?? '' })}
-                className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent">
-                {ui.editingPrompt ? 'Use assembled prompt' : 'Edit prompt'}
-              </button>
+              <span className="flex items-center gap-1">
+                <button type="button" disabled={!previewData?.prompt || ui.promptAssistOpen}
+                  onClick={() => ui.set(ui.editingPrompt
+                    ? { promptAssistOpen: true }
+                    // Claude edits the override, so start one from the assembled prompt.
+                    : { editingPrompt: true, promptOverride: previewData?.prompt ?? '', promptAssistOpen: true })}
+                  className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent disabled:cursor-not-allowed disabled:opacity-45">
+                  Edit with Claude
+                </button>
+                <span aria-hidden="true" className="text-ink/25">·</span>
+                <button type="button"
+                  onClick={() => ui.set(ui.editingPrompt
+                    ? { editingPrompt: false, promptOverride: '', promptAssistOpen: false }
+                    : { editingPrompt: true, promptOverride: previewData?.prompt ?? '' })}
+                  className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent">
+                  {ui.editingPrompt ? 'Use assembled prompt' : 'Edit prompt'}
+                </button>
+              </span>
             </div>
             {ui.editingPrompt ? (
               <textarea id="tg-prompt" aria-label="Prompt override" value={ui.promptOverride}
@@ -150,6 +170,17 @@ export function GenerationSetup({ intervalMs = 2000 }: { intervalMs?: number }) 
             ) : (
               <div id="tg-prompt" className="min-h-36 whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12.5px] leading-normal text-ink/75">
                 {previewData?.prompt ?? (ui.factionId && ui.cardTypeId ? 'Loading…' : 'Select a faction and card type')}
+              </div>
+            )}
+            {ui.editingPrompt && ui.promptAssistOpen && (
+              <div className="mt-2">
+                <ClaudeTextAssist
+                  field="prompt"
+                  current={ui.promptOverride}
+                  start={startPromptAssist}
+                  onAccept={(text) => useTestGenUi.getState().set({ promptOverride: text, promptAssistOpen: false })}
+                  onClose={() => useTestGenUi.getState().set({ promptAssistOpen: false })}
+                />
               </div>
             )}
           </div>

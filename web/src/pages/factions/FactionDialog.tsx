@@ -10,7 +10,10 @@ import { createFaction, updateFaction, type FactionSave } from './api'
 import { DLC_VALUES, type DLC } from './dlc'
 import { useFactionDraft, useFactionsUi } from './store'
 
-export function FactionDialog({ generateSlot }: { generateSlot?: ReactNode }) {
+// Suggestions only; any text is allowed.
+const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
+
+export function FactionDialog({ generateSlot, assistSlot }: { generateSlot?: ReactNode; assistSlot?: ReactNode }) {
   const ui = useFactionsUi()
   const draftState = useFactionDraft()
   const dirty = isDraftDirty(draftState)
@@ -24,6 +27,8 @@ export function FactionDialog({ generateSlot }: { generateSlot?: ReactNode }) {
       if (!d || !d.name.trim()) return { error: 'Name is required' }
       const save: FactionSave = {
         name: d.name.trim(),
+        primary_color: d.primary_color.trim(),
+        texture: d.texture.trim(),
         description: d.description,
         dlc: d.dlc as DLC,
         source: lastGenerated !== null && d.description === lastGenerated ? 'claude' : 'manual',
@@ -52,12 +57,16 @@ export function FactionDialog({ generateSlot }: { generateSlot?: ReactNode }) {
   if (ui.dialogMode === 'edit' && persisted) {
     if (draft.name !== persisted.name) simpleRows.push({ field: 'name', before: persisted.name, after: draft.name })
     if (draft.dlc !== persisted.dlc) simpleRows.push({ field: 'dlc', before: persisted.dlc, after: draft.dlc })
+    if (draft.primary_color !== persisted.primary_color) simpleRows.push({ field: 'primary color', before: persisted.primary_color, after: draft.primary_color })
+    if (draft.texture !== persisted.texture) simpleRows.push({ field: 'texture', before: persisted.texture, after: draft.texture })
   }
 
   return (
     <>
       <Dialog
         title={ui.dialogMode === 'edit' ? 'Edit Faction' : 'New Faction'}
+        // Outside click closes only when there's nothing to lose.
+        onBackdropClick={() => { if (!dirty && !ui.assistOpen) ui.closeDialog() }}
         titleExtra={dirty ? (
           <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved changes</span>
         ) : undefined}
@@ -81,17 +90,40 @@ export function FactionDialog({ generateSlot }: { generateSlot?: ReactNode }) {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-3.5">
+          <Field label="Primary color">
+            {(id) => (
+              <input id={id} type="text" value={draft.primary_color} placeholder="e.g. deep crimson with gold trim"
+                onChange={(e) => draftState.setField('primary_color', e.target.value)} className={`${inputClass} font-sans`} />
+            )}
+          </Field>
+          <Field label="Texture">
+            {(id) => (
+              <>
+                <input id={id} type="text" list="faction-texture-suggestions" value={draft.texture}
+                  placeholder="e.g. metal, skin, wood"
+                  onChange={(e) => draftState.setField('texture', e.target.value)} className={`${inputClass} font-sans`} />
+                <datalist id="faction-texture-suggestions">
+                  {TEXTURE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
+                </datalist>
+              </>
+            )}
+          </Field>
+        </div>
+
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <label htmlFor="faction-description" className="text-xs text-ink/70">Description</label>
+            <label htmlFor="faction-description" className="text-xs text-ink/70">Description (rest of the style)</label>
             {generateSlot}
           </div>
           <textarea id="faction-description" aria-label="Description" value={draft.description}
-            placeholder="Color palette, materials, iconography, mood…"
+            placeholder="Secondary colors, iconography, mood, motifs…"
             onChange={(e) => draftState.setField('description', e.target.value)}
             className={`${inputClass} min-h-28 resize-y font-sans`} />
           <p className="mt-1 text-[11px] text-ink/45">Nothing is persisted until you click Save — including generated text.</p>
         </div>
+
+        {assistSlot}
 
         {ui.showDiff && dirty && persisted && (
           <DiffPanel simpleRows={simpleRows}

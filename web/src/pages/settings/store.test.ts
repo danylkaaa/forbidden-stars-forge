@@ -9,7 +9,10 @@ const serverSettings: Settings = {
   draft_quality: 'low',
   final_quality: 'high',
   input_fidelity: 'high',
+  background: 'auto',
   claude_binary: 'claude',
+  claude_model: '',
+  claude_effort: '',
   price_table: '{}',
 }
 

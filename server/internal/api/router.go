@@ -31,12 +31,14 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			factionsStore := store.NewFactionsStore(db)
 			cardTypesStore := store.NewCardTypesStore(db)
 			batchesStore := store.NewBatchesStore(db)
+			usageStore := store.NewUsageStore(db)
 
 			settings := &SettingsHandler{Store: settingsStore}
 			r.Get("/settings", settings.Get)
 			r.Put("/settings", settings.Put)
 			r.Post("/settings/test-openai", settings.TestOpenAI)
 			r.Post("/settings/test-claude", settings.TestClaude)
+			r.Post("/settings/openai-models", settings.OpenAIModels)
 
 			factions := &FactionsHandler{Store: factionsStore, Batches: batchesStore}
 			r.Get("/factions", factions.List)
@@ -48,6 +50,8 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 
 			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}
 			r.Post("/factions/generate-description", jobsH.GenerateDescription)
+			r.Post("/card-types/assist", jobsH.CardTypeAssist)
+			r.Post("/generate/prompt-assist", jobsH.ImagePromptAssist)
 			r.Get("/jobs/{id}", jobsH.Get)
 			r.Post("/jobs/{id}/cancel", jobsH.Cancel)
 
@@ -62,6 +66,9 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Put("/card-types/{id}", cardTypes.Update)
 			r.Delete("/card-types/{id}", cardTypes.Delete)
 			r.Get("/card-types/{id}/template", cardTypes.ServeTemplate)
+			r.Put("/card-types/{id}/overlay", cardTypes.PutOverlay)
+			r.Delete("/card-types/{id}/overlay", cardTypes.DeleteOverlay)
+			r.Get("/card-types/{id}/overlay", cardTypes.ServeOverlay)
 			r.Post("/card-types/{id}/upload-to-openai", cardTypes.UploadToOpenAI)
 
 			gens := &GenerationsHandler{
@@ -69,13 +76,16 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 				Factions:  factionsStore,
 				CardTypes: cardTypesStore,
 				Settings:  settingsStore,
+				Usage:     usageStore,
 				DataDir:   dataDir,
 			}
 			r.Post("/generate", gens.Generate)
 			r.Get("/generate/preview", gens.Preview)
+			r.Post("/generate/assemble", gens.Assemble)
 			r.Get("/generations", gens.List)
 			r.Get("/generations/{id}", gens.Get)
 			r.Get("/generations/{id}/image", gens.ServeImage)
+			r.Put("/generations/{id}/favorite", gens.SetFavorite)
 
 			// The poller's own client factory reads openAIBaseURL/resolveOpenAIKey
 			// fresh on every call, so tests that swap openAIBaseURL for a fake
@@ -96,6 +106,7 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 				Factions:  factionsStore,
 				CardTypes: cardTypesStore,
 				Settings:  settingsStore,
+				Usage:     usageStore,
 				Poller:    poller,
 				DataDir:   dataDir,
 			}
@@ -105,7 +116,9 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/batches/{id}", batches.Get)
 			r.Post("/batches/{id}/cancel", batches.Cancel)
 			r.Get("/batches/{id}/items/{itemID}/image", batches.ItemImage)
+			r.Put("/batches/{id}/items/{itemID}/favorite", batches.SetItemFavorite)
 			r.Get("/batches/{id}/download", batches.Download)
+			r.Get("/batch-items", batches.DoneItems)
 		}
 	})
 

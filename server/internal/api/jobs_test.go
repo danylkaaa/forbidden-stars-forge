@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -85,6 +86,44 @@ func TestGenerateDescriptionValidation(t *testing.T) {
 	}
 }
 
+func TestGenerateDescriptionChatSendsHistoryToClaude(t *testing.T) {
+	h := newTestRouter(t)
+	// The fake echoes its prompt (-p <prompt>) back so we can inspect it.
+	installFakeClaude(t, h, `printf '%s' "$2"`)
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/factions/generate-description", `{
+		"name":"Sisters","dlc":"Symphony of War","current_description":"Black and crimson.",
+		"messages":[
+			{"role":"user","content":"Add candles."},
+			{"role":"assistant","content":"Black, crimson, candles."},
+			{"role":"user","content":"More gold."}
+		]}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %v", rec.Code, out)
+	}
+	job := pollJob(t, h, out["job_id"].(string))
+	got, _ := job["result"].(string)
+	for _, want := range []string{"Black and crimson.", "Add candles.", "Black, crimson, candles.", "More gold."} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestGenerateDescriptionChatValidation(t *testing.T) {
+	h := newTestRouter(t)
+	for name, msgs := range map[string]string{
+		"ends with assistant": `[{"role":"user","content":"a"},{"role":"assistant","content":"b"}]`,
+		"bad role order":      `[{"role":"assistant","content":"a"}]`,
+	} {
+		rec, _ := doJSON(t, h, http.MethodPost, "/api/factions/generate-description",
+			`{"name":"X","dlc":"Darkest Dawn","messages":`+msgs+`}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status %d", name, rec.Code)
+		}
+	}
+}
+
 func TestJobNotFoundAndCancel(t *testing.T) {
 	h := newTestRouter(t)
 	rec, _ := doJSON(t, h, http.MethodGet, "/api/jobs/job-999", "")
@@ -122,5 +161,51 @@ func TestRealTestClaudeEndpoint(t *testing.T) {
 	rec, out = doJSON(t, h, http.MethodPost, "/api/settings/test-claude", "")
 	if rec.Code != 200 || out["ok"] != false {
 		t.Fatalf("test-claude failure case: %d %v", rec.Code, out)
+	}
+}
+
+func TestCardTypeAssistSendsFieldsAndHistory(t *testing.T) {
+	h := newTestRouter(t)
+	installFakeClaude(t, h, `printf '%s' "$2"`)
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/card-types/assist", `{
+		"field":"constraints","name":"combat","description":"Frame.","constraints":"Keep window clear.",
+		"messages":[{"role":"user","content":"Use green as mask."}]}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %v", rec.Code, out)
+	}
+	got, _ := pollJob(t, h, out["job_id"].(string))["result"].(string)
+	for _, want := range []string{"editing the card type's constraints", "Keep window clear.", "Use green as mask."} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, got)
+		}
+	}
+
+	for name, body := range map[string]string{
+		"bad field":   `{"field":"name","messages":[{"role":"user","content":"x"}]}`,
+		"no messages": `{"field":"description","messages":[]}`,
+	} {
+		if rec, _ := doJSON(t, h, http.MethodPost, "/api/card-types/assist", body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status %d", name, rec.Code)
+		}
+	}
+}
+
+func TestImagePromptAssist(t *testing.T) {
+	h := newTestRouter(t)
+	installFakeClaude(t, h, `printf '%s' "$2"`)
+
+	rec, out := doJSON(t, h, http.MethodPost, "/api/generate/prompt-assist",
+		`{"current_prompt":"## Faction\nTau","messages":[{"role":"user","content":"Add fog."}]}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %v", rec.Code, out)
+	}
+	got, _ := pollJob(t, h, out["job_id"].(string))["result"].(string)
+	if !strings.Contains(got, "## Faction\nTau") || !strings.Contains(got, "Add fog.") {
+		t.Fatalf("prompt:\n%s", got)
+	}
+	if rec, _ := doJSON(t, h, http.MethodPost, "/api/generate/prompt-assist",
+		`{"current_prompt":"","messages":[{"role":"user","content":"x"}]}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty prompt: %d", rec.Code)
 	}
 }

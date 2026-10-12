@@ -1,4 +1,5 @@
 import { Button } from '../../components/Button'
+import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
 import type { Faction } from '../factions/api'
 import { DLC_VALUES } from '../factions/dlc'
 import type { CardType } from '../card-types/api'
@@ -78,6 +79,7 @@ export function ScopeStep({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 items-end gap-3.5">
       <div>
         <span className="mb-1 block text-xs text-ink/70">Mode</span>
         <div className="inline-flex overflow-hidden rounded-md border border-divider" role="group" aria-label="Mode">
@@ -88,6 +90,8 @@ export function ScopeStep({
             </button>
           ))}
         </div>
+      </div>
+      <ModelOverrideSelect value={wizard.model} onChange={(model) => wizard.set({ model })} />
       </div>
 
       <div className="flex items-center gap-3">

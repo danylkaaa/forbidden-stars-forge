@@ -23,7 +23,7 @@ func pollerFixtures(t *testing.T) (*Poller, *store.BatchesStore, string, int64, 
 	t.Cleanup(func() { db.Close() })
 	fs := store.NewFactionsStore(db)
 	cs := store.NewCardTypesStore(db)
-	f, _ := fs.Create("Tau Empire", "d", "Galaxy in Flames", "manual")
+	f, _ := fs.Create(store.FactionInput{Name: "Tau Empire", Description: "d", DLC: "Galaxy in Flames"}, "manual")
 	ct, _ := cs.Create("combat", "", "", "")
 	bs := store.NewBatchesStore(db)
 	settings := store.NewSettingsStore(db)
@@ -53,7 +53,7 @@ func TestMapStatus(t *testing.T) {
 
 func TestPollUpdatesInProgressStatusAndCounts(t *testing.T) {
 	p, bs, _, fid, ctid := pollerFixtures(t)
-	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, _ := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	bs.MarkSubmitted(b.ID, "batch_openai_1")
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,11 +76,11 @@ func TestPollUpdatesInProgressStatusAndCounts(t *testing.T) {
 
 func TestPollCompletesDownloadsAndMarksItemsDone(t *testing.T) {
 	p, bs, dataDir, fid, ctid := pollerFixtures(t)
-	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, _ := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	bs.MarkSubmitted(b.ID, "batch_openai_1")
 
 	png := base64.StdEncoding.EncodeToString([]byte("PNGDATA"))
-	outputLine := `{"custom_id":"tau_empire__combat","response":{"body":{"data":[{"b64_json":"` + png + `"}],"usage":{"input_tokens":100,"output_tokens":400}}}}` + "\n"
+	outputLine := `{"custom_id":"tau_empire__combat","response":{"body":{"data":[{"b64_json":"` + png + `"}],"usage":{"input_tokens":100,"output_tokens":400,"input_tokens_details":{"text_tokens":40}}}}}` + "\n"
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -101,7 +101,7 @@ func TestPollCompletesDownloadsAndMarksItemsDone(t *testing.T) {
 	if got.Status != "completed" || got.CompletedAt == "" || got.OutputPath == "" {
 		t.Fatalf("batch: %+v", got)
 	}
-	wantCost := (100.0/1e6*10.0 + 400.0/1e6*40.0) * 0.5 // gpt-image-2 seed price × 50% batch discount
+	wantCost := (60.0/1e6*8.0 + 40.0/1e6*5.0 + 400.0/1e6*30.0) * 0.5 // gpt-image-2 seed image/text/output rates × 50% batch discount
 	if diff := got.TotalCostUSD - wantCost; diff > 1e-9 || diff < -1e-9 {
 		t.Fatalf("total cost: got %v want %v", got.TotalCostUSD, wantCost)
 	}
@@ -117,7 +117,7 @@ func TestPollCompletesDownloadsAndMarksItemsDone(t *testing.T) {
 
 func TestPollHandlesErrorFile(t *testing.T) {
 	p, bs, _, fid, ctid := pollerFixtures(t)
-	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, _ := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	bs.MarkSubmitted(b.ID, "batch_openai_1")
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +154,7 @@ func TestCountsUnknownBatchReturnsFalse(t *testing.T) {
 
 func TestPollDoesNotCompleteWhenErrorFileDownloadFails(t *testing.T) {
 	p, bs, _, fid, ctid := pollerFixtures(t)
-	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, _ := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	bs.MarkSubmitted(b.ID, "batch_openai_1")
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +184,7 @@ func TestPollDoesNotCompleteWhenErrorFileDownloadFails(t *testing.T) {
 
 func TestPollDoesNotCompleteWhenOutputLineIsMalformed(t *testing.T) {
 	p, bs, _, fid, ctid := pollerFixtures(t)
-	b, _ := bs.Create("draft", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
+	b, _ := bs.Create("draft", "gpt-image-2", "batches/1/requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ctid, CustomID: "tau_empire__combat"}})
 	bs.MarkSubmitted(b.ID, "batch_openai_1")
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

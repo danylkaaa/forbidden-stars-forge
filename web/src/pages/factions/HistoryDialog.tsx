@@ -33,6 +33,8 @@ function RevisionRow({ rev, faction, isCurrent }: { rev: FactionRevision; factio
   const simpleRows = []
   if (rev.name !== faction.name) simpleRows.push({ field: 'name', before: rev.name, after: faction.name })
   if (rev.dlc !== faction.dlc) simpleRows.push({ field: 'dlc', before: rev.dlc, after: faction.dlc })
+  if (rev.primary_color !== faction.primary_color) simpleRows.push({ field: 'primary color', before: rev.primary_color, after: faction.primary_color })
+  if (rev.texture !== faction.texture) simpleRows.push({ field: 'texture', before: rev.texture, after: faction.texture })
 
   return (
     <div className="overflow-hidden rounded-md border border-ink/10">
@@ -66,6 +68,7 @@ export function HistoryDialog({ factions }: { factions: Faction[] }) {
 
   return (
     <Dialog title={`${faction.name} — History`} width="min(640px,100%)"
+      onBackdropClick={() => ui.set({ historyFactionId: null, expandedRevId: null })}
       titleExtra={<Button onClick={() => ui.set({ historyFactionId: null, expandedRevId: null })}>Close</Button>}>
       {error ? (
         <p role="alert" className="text-danger">

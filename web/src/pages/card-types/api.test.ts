@@ -20,7 +20,7 @@ test('createCardType posts multipart and parses response', async () => {
     http.post('/api/card-types', async ({ request }) => {
       const form = await request.formData()
       return HttpResponse.json(
-        { id: 1, name: form.get('name'), description: '', constraints: '', template_path: '', openai_file_id: '', created_at: 'a', updated_at: 'b' },
+        { id: 1, name: form.get('name'), description: '', constraints: '', template_path: '', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'b' },
         { status: 201 },
       )
     }),
@@ -44,7 +44,7 @@ test('uploadToOpenAI returns file id; error surfaces message', async () => {
 })
 
 test('templateUrl builds cache-busted url or null', () => {
-  const base: CardType = { id: 5, name: 'x', description: '', constraints: '', template_path: 'templates/a.png', openai_file_id: '', created_at: 'a', updated_at: '2026-07-17 10:00:00' }
+  const base: CardType = { id: 5, name: 'x', description: '', constraints: '', template_path: 'templates/a.png', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: '2026-07-17 10:00:00' }
   expect(templateUrl(base)).toBe('/api/card-types/5/template?v=2026-07-17%2010%3A00%3A00')
   expect(templateUrl({ ...base, template_path: '' })).toBeNull()
 })

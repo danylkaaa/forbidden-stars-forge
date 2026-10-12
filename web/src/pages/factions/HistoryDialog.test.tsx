@@ -7,10 +7,10 @@ import { useFactionsUi, useFactionDraft } from './store'
 import type { Faction, FactionRevision } from './api'
 import { HistoryDialog } from './HistoryDialog'
 
-const faction: Faction = { id: 1, name: 'Eldar', description: 'v2 text', dlc: 'Darkest Dawn', created_at: 'a', updated_at: 'b' }
+const faction: Faction = { id: 1, name: 'Eldar', primary_color: '', texture: '', description: 'v2 text', dlc: 'Darkest Dawn', created_at: 'a', updated_at: 'b' }
 const revisions: FactionRevision[] = [
-  { id: 12, faction_id: 1, name: 'Eldar', description: 'v2 text', dlc: 'Darkest Dawn', source: 'manual', created_at: '2026-07-15' },
-  { id: 11, faction_id: 1, name: 'Eldar', description: 'v1 text', dlc: 'Darkest Dawn', source: 'claude', created_at: '2026-07-14' },
+  { id: 12, faction_id: 1, name: 'Eldar', primary_color: '', texture: '', description: 'v2 text', dlc: 'Darkest Dawn', source: 'manual', created_at: '2026-07-15' },
+  { id: 11, faction_id: 1, name: 'Eldar', primary_color: '', texture: '', description: 'v1 text', dlc: 'Darkest Dawn', source: 'claude', created_at: '2026-07-14' },
 ]
 
 function renderDlg() {
@@ -24,7 +24,7 @@ function renderDlg() {
 
 beforeEach(() => {
   useFactionDraft.getState().close()
-  useFactionsUi.setState({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null, historyFactionId: 1, expandedRevId: null, activeJobId: null })
+  useFactionsUi.setState({ dialogMode: null, editingId: null, lastGenerated: null, showDiff: false, discardConfirmOpen: false, deleteConfirmId: null, historyFactionId: 1, expandedRevId: null, assistOpen: false })
   server.use(http.get('/api/factions/1/revisions', () => HttpResponse.json(revisions)))
 })
 
