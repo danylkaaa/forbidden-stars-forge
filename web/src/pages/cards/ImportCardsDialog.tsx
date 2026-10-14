@@ -42,7 +42,7 @@ export function ImportCardsDialog({ factions, onClose, onImported, onDirty }: { 
     <details className="rounded border border-divider p-3 text-sm">
       <summary className="cursor-pointer">JSON format and validation rules</summary>
       <p>Use an object with a non-empty <code>cards</code> array. Every card needs an existing <code>faction_id</code>, a non-empty <code>name</code>, and a <code>category</code>.</p>
-      <p>Integers must be between 0 and 9007199254740991; combat level is 0–3. All text fields are required strings; empty text is allowed. Unknown fields, fields from another category, nulls, and numeric strings are rejected.</p>
+      <p>Integers must be between 0 and 9007199254740991; combat level is 0–3. All text fields are required strings; empty text is allowed. Extra fields are ignored, including metadata and fields from another category. Required fields still reject nulls and numeric strings.</p>
       {Object.entries(FIELDS).map(([category, fields]) => <p key={category}><strong>{category}:</strong> {fields.map(f => `${f.key}${f.options ? ` (${f.options.join(', ')})` : ''}`).join('; ')}.</p>)}
       <p>Available factions: {factions.map(f => `${f.name} (ID ${f.id})`).join(', ') || 'None — create a faction first.'}</p>
       <a className="text-accent" download="cards-example.json" href={`data:application/json;charset=utf-8,${encodeURIComponent(example)}`}>Download example JSON</a>

@@ -41,7 +41,7 @@ test('shared management pages preserve library mode through navigation and Back'
 })
 
 test.each([
-  ['/cards', 'Library'], ['/assemble', 'Library'], ['/factions?mode=library', 'Library'],
+  ['/assemble', 'Library'], ['/factions?mode=library', 'Library'],
   ['/card-types?mode=library', 'Library'], ['/batches/42', 'AI Image Generation'], ['/settings', 'AI Image Generation'],
 ])('deep link %s opens the correct mode', (path, mode) => {
   mount(path)

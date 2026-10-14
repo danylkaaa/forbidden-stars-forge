@@ -65,7 +65,27 @@ export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => n
   return lines
 }
 export function paintRun(ctx: CanvasRenderingContext2D, run: Run, x: number, baseline: number, size: number) {
-  if (run.unframed) {
+  if (run.dice) {
+    // An outlined isometric cube, matching the original card's dice symbol.
+    // Its stroke uses the text colour and scales with the surrounding font.
+    const left = x + size * .08, top = baseline - size * .82
+    const width = size * .74, height = size * .82
+    ctx.save(); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = size * .035; ctx.lineJoin = 'round'
+    ctx.beginPath()
+    ctx.moveTo(left + width / 2, top)
+    ctx.lineTo(left + width, top + height * .18)
+    ctx.lineTo(left + width, top + height * .76)
+    ctx.lineTo(left + width / 2, top + height)
+    ctx.lineTo(left, top + height * .76)
+    ctx.lineTo(left, top + height * .18)
+    ctx.closePath()
+    ctx.moveTo(left, top + height * .18)
+    ctx.lineTo(left + width / 2, top + height * .38)
+    ctx.lineTo(left + width, top + height * .18)
+    ctx.moveTo(left + width / 2, top + height * .38)
+    ctx.lineTo(left + width / 2, top + height)
+    ctx.stroke(); ctx.restore()
+  } else if (run.unframed) {
     ctx.save(); ctx.beginPath(); ctx.rect(x + size * .08, baseline - size * .78, size * .82, size * .82); ctx.clip()
     ctx.fillText(run.text, x, baseline); ctx.restore()
   } else ctx.fillText(run.text, x, baseline)
@@ -73,7 +93,7 @@ export function paintRun(ctx: CanvasRenderingContext2D, run: Run, x: number, bas
 function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number) {
   const size = p.size * h / 100
   const lineHeight = size * p.lineHeight
-  const measure = (run: Run) => { ctx.font = font(run, size, family); return ctx.measureText(run.text).width }
+  const measure = (run: Run) => { ctx.font = font(run, size, family); return run.dice ? size * .9 : ctx.measureText(run.text).width }
   const lines = wrapText(textRuns(text), p.width * w / 100, measure)
   let ascent = 0, descent = 0
   for (const line of lines) {
@@ -82,7 +102,7 @@ function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement,
     for (const atom of line) {
       if (!atom.text.trim()) continue
       ctx.font = font(atom, size, family)
-      const metrics = ctx.measureText(atom.text)
+      const metrics = atom.dice ? { actualBoundingBoxAscent: size * .84, actualBoundingBoxDescent: size * .02 } : ctx.measureText(atom.text)
       ascent = Math.max(ascent, metrics.actualBoundingBoxAscent ?? size * .82)
       descent = Math.max(descent, metrics.actualBoundingBoxDescent ?? size * .18)
     }

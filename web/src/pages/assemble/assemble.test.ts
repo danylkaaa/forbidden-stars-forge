@@ -91,3 +91,18 @@ test('layouts saved with a separate gun column keep it as the resource stack', (
   expect(assemblyLayout({ guns: { x: 14, y: 30 } } as never).resources).toMatchObject({ x: 14, y: 30, iconStyle: 'plain' })
   expect(assemblyLayout({ guns: { x: 14 }, resources: { x: 20 } } as never).resources.x).toBe(20)
 })
+
+
+test('dice token works inline, in italic text, and alongside existing symbols', () => {
+  expect(textRuns('Gain 1 (D).')).toEqual([
+    { text: 'Gain 1 ', icon: false, italic: false },
+    { text: 'D', icon: true, italic: false, dice: true },
+    { text: '.', icon: false, italic: false },
+  ])
+  expect(textRuns('**Roll (D)** and (B)').filter(run => run.icon)).toEqual([
+    { text: 'D', icon: true, italic: true, dice: true },
+    { text: '#', icon: true, italic: false },
+  ])
+  const lines = wrapText(textRuns('(D) (D)'), 1, () => 1)
+  expect(lines.map(line => line.filter(run => run.icon))).toHaveLength(2)
+})

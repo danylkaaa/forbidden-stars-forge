@@ -8,7 +8,7 @@ function SymbolPreview({ symbol, ready }: { symbol: typeof SYMBOL_CATALOG[number
     const ctx = ref.current?.getContext('2d')
     if (!ready || !ctx) return
     ctx.clearRect(0, 0, 36, 36); ctx.font = '32px CardSymbols'; ctx.fillStyle = '#ecdfcb'
-    paintRun(ctx, { text: symbol.glyph, icon: true, italic: false, unframed: symbol.unframed }, 2, 28, 32)
+    paintRun(ctx, { text: symbol.glyph, icon: true, italic: false, unframed: symbol.unframed, dice: symbol.token === '(D)' }, 2, 28, 32)
   }, [symbol, ready])
   return <canvas ref={ref} width={36} height={36} aria-hidden="true" className="shrink-0" />
 }

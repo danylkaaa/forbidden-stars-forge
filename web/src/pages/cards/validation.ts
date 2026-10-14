@@ -35,8 +35,17 @@ export function parseImport(source: string, factionIds: readonly number[]): { ca
   try { value = JSON.parse(source.replace(/^\uFEFF/, '')) } catch { return { cards: [], errors: [{ field: 'file', message: 'Invalid JSON syntax' }] } }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { cards: [], errors: [{ field: 'cards', message: 'Expected an object with a cards array' }] }
   const v = value as Record<string, unknown>
-  const errors: ValidationIssue[] = Object.keys(v).filter(k => k !== 'cards').map(field => ({ field, message: 'Unknown field' }))
+  const errors: ValidationIssue[] = []
   if (!Array.isArray(v.cards) || v.cards.length === 0) return { cards: [], errors: [...errors, { field: 'cards', message: 'Must be a non-empty array' }] }
-  v.cards.forEach((c: unknown, index: number) => errors.push(...validateCard(c, factionIds).map(e => ({ ...e, index }))))
-  return { cards: errors.length ? [] : v.cards as CardInput[], errors }
+  // Import files may include extraction metadata or fields for other categories.
+  // Only pass the selected category's fields to validation and the API.
+  const cards = v.cards.map((card: unknown) => {
+    if (!card || typeof card !== 'object' || Array.isArray(card)) return card
+    const c = card as Record<string, unknown>
+    const fields = CATEGORIES.includes(c.category as Category) ? FIELDS[c.category as Category] : []
+    const allowed = ['faction_id', 'name', 'category', ...fields.map(f => f.key)]
+    return Object.fromEntries(Object.entries(c).filter(([key]) => allowed.includes(key)))
+  })
+  cards.forEach((c: unknown, index: number) => errors.push(...validateCard(c, factionIds).map(e => ({ ...e, index }))))
+  return { cards: errors.length ? [] : cards as CardInput[], errors }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEventHandler } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
 import { buttonClass } from '../../components/buttonStyles'
@@ -23,6 +23,7 @@ import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
 import { BackImage } from './BackImage'
+import { CardContextMenu } from './CardContextMenu'
 import { DemoText, TemplateSettingsDialog } from './TemplateSettingsDialog'
 
 // Selection checkbox in a tile's top-left corner; always visible once
@@ -32,7 +33,7 @@ function SelectBox({ name, selected, anySelected, onToggle }: { name: string; se
     <input type="checkbox" aria-label={`Select ${name}`} checked={selected} onChange={onToggle} className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]" />
   </label>
 }
-type Selectable = { selected: boolean; anySelected: boolean; onToggle: () => void }
+type Selectable = { selected: boolean; anySelected: boolean; onToggle: () => void; onContextMenu: MouseEventHandler<HTMLDivElement> }
 
 // The rendered card is the tile; its name sits underneath as a plain caption.
 const tile = 'group block min-w-0 text-left no-underline'
@@ -44,7 +45,7 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
   const { issues, dirty } = useCardDraft(card)
   const { result, error } = useRenderedCard(input)
   useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
-  return <div className="group/tile relative min-w-0">
+  return <div className="group/tile relative min-w-0" onContextMenu={select.onContextMenu}>
   <SelectBox name={card.name} {...select} />
   {result && <Preview3DButton title={card.name} canvas={result.canvas} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} className="absolute right-2 top-2 z-10" />}
   <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
@@ -77,7 +78,7 @@ function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImag
 function TextTile({ card, image, ...select }: { card: Card; image: LibraryImage | undefined } & Selectable) {
   const text = card.category === 'combat' ? '' : card.text
   const subtitle = card.category === 'schema' ? `${card.subtype} · ${ACTION_LABELS[card.action] ?? card.action}` : card.category === 'upgrade' ? card.upgrade_type : ''
-  return <div className={`${tile} group/tile relative`}>
+  return <div className={`${tile} group/tile relative`} onContextMenu={select.onContextMenu}>
     <SelectBox name={card.name} {...select} />
     <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : ''}`}><DemoText image={image} title={card.name} text={text || '—'} /></div>
     <span className={caption}><span className="truncate">{card.name}</span></span>
@@ -119,7 +120,11 @@ export default function AssemblePage() {
   const chosen = shown.filter(c => selected.has(c.id))
   const canvases = useRef(new Map<number, HTMLCanvasElement>())
   const onRendered = useRef((id: number, canvas: HTMLCanvasElement | null) => { if (canvas) canvases.current.set(id, canvas); else canvases.current.delete(id) }).current
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<Card[] | null>(null)
+  const deleting = confirmDelete ?? []
+  const [contextMenu, setContextMenu] = useState<{ card: Card; x: number; y: number } | null>(null)
+  const closeContextMenu = useCallback(() => setContextMenu(null), [])
+  useEffect(() => { closeContextMenu() }, [factionId, category, closeContextMenu])
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'delete' | 'download' | null>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -127,9 +132,9 @@ export default function AssemblePage() {
   async function removeSelected() {
     setBusy('delete'); setActionError(null)
     try {
-      await deleteCards(chosen.map(c => c.id))
-      chosen.forEach(c => { useAssembly.getState().clearEdits(String(c.id)); useAssembly.getState().clearTransform(String(c.id)) })
-      setSelected(new Set()); setConfirmDelete(false); setNotice(`Deleted ${chosen.length} card${chosen.length === 1 ? '' : 's'}.`)
+      await deleteCards(deleting.map(c => c.id))
+      deleting.forEach(c => { useAssembly.getState().clearEdits(String(c.id)); useAssembly.getState().clearTransform(String(c.id)) })
+      setSelected(prev => new Set([...prev].filter(id => !deleting.some(c => c.id === id)))); setConfirmDelete(null); setNotice(`Deleted ${deleting.length} card${deleting.length === 1 ? '' : 's'}.`)
       await queryClient.invalidateQueries({ queryKey: ['cards'] })
     } catch (e) { setActionError(e instanceof Error ? e.message : 'Delete failed') }
     finally { setBusy(null) }
@@ -156,13 +161,15 @@ export default function AssemblePage() {
     } catch (e) { setActionError(e instanceof Error ? e.message : 'Download failed') }
     finally { setBusy(null) }
   }
-  const selectProps = (card: Card) => ({ selected: selected.has(card.id), anySelected: selected.size > 0, onToggle: () => toggle(card.id) })
+  const selectProps = (card: Card) => ({ selected: selected.has(card.id), anySelected: selected.size > 0, onToggle: () => toggle(card.id), onContextMenu: ((e) => {
+    e.preventDefault()
+    if (!busy) setContextMenu({ card, x: e.clientX, y: e.clientY })
+  }) as MouseEventHandler<HTMLDivElement> })
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center gap-3">
       <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen('front')} className="px-2!"><GearIcon /></Button>
       <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
       <FactionSelect factions={factions.data ?? []} value={factionId} onChange={factionId => state.select({ factionId })} />
-      <Link to="/cards" className={buttonClass('secondary')}>Cards / JSON import</Link>
       {factionId && <div className="ml-auto flex gap-2">
         <Button onClick={() => setImportOpen(true)}>Import JSON</Button>
         <Link to={newCardLink} className={buttonClass('primary')}>New {tabLabel.replace(/s$/, '').toLowerCase()} card</Link>
@@ -175,7 +182,7 @@ export default function AssemblePage() {
       <Button onClick={() => setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map(c => c.id)))}>{chosen.length === shown.length ? 'Select none' : 'Select all'}</Button>
       {chosen.length > 0 && <>
         <Button disabled={!!busy} onClick={() => void downloadSelected()}>{busy === 'download' ? 'Preparing…' : 'Download PNGs (zip)'}</Button>
-        <Button disabled={!!busy} onClick={() => { setActionError(null); setConfirmDelete(true) }}>Delete</Button>
+        <Button disabled={!!busy} onClick={() => { setActionError(null); setConfirmDelete(chosen) }}>Delete</Button>
       </>}
     </div>}
     {actionError && !confirmDelete && <p role="alert" className="m-0 text-sm text-danger">{actionError}</p>}
@@ -205,10 +212,12 @@ export default function AssemblePage() {
             : <TextTile key={card.id} card={card} image={template.image} {...selectProps(card)} />)}
         </div>
       </section>)}
-    {confirmDelete && <ConfirmDialog title={`Delete ${chosen.length} card${chosen.length === 1 ? '' : 's'}?`}
-      body={`This permanently deletes ${chosen.map(c => c.name).slice(0, 5).join(', ')}${chosen.length > 5 ? ` and ${chosen.length - 5} more` : ''}, with their artwork. It cannot be undone.`}
+    {contextMenu && <CardContextMenu name={contextMenu.card.name} x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu}
+      onDelete={() => { setActionError(null); setConfirmDelete([contextMenu.card]); closeContextMenu() }} />}
+    {confirmDelete && <ConfirmDialog title={`Delete ${deleting.length} card${deleting.length === 1 ? '' : 's'}?`}
+      body={`This permanently deletes ${deleting.map(c => c.name).slice(0, 5).join(', ')}${deleting.length > 5 ? ` and ${deleting.length - 5} more` : ''}, with their artwork. It cannot be undone.`}
       confirmLabel={busy === 'delete' ? 'Deleting…' : 'Delete cards'} error={actionError}
-      onConfirm={() => { if (!busy) void removeSelected() }} onCancel={() => { if (!busy) setConfirmDelete(false) }} />}
+      onConfirm={() => { if (!busy) void removeSelected() }} onCancel={() => { if (!busy) setConfirmDelete(null) }} />}
     {importOpen && factions.data && <ImportCardsDialog factions={factions.data} onClose={() => setImportOpen(false)} onDirty={() => {}}
       onImported={count => { setImportOpen(false); setNotice(`Imported ${count} card${count === 1 ? '' : 's'}.`); void queryClient.invalidateQueries({ queryKey: ['cards'] }) }} />}
     {settingsOpen && <TemplateSettingsDialog initialFactionId={factionId} initialCategory={category} initialSide={settingsOpen} onClose={() => setSettingsOpen(null)} />}

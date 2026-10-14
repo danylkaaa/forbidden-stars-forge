@@ -29,6 +29,7 @@ export const SYMBOL_CATALOG = [
   // Morale is never boxed. The font has no standalone morale glyph, so the
   // outlined box is cropped away.
   { token: '(M)', glyph: '<', label: 'Morale', unframed: true },
+  { token: '(D)', glyph: 'D', label: 'Dice', unframed: false },
 ] as const
 // [M] from older text renders as plain morale too.
 const SHORT_SYMBOLS: Record<string, typeof SYMBOL_CATALOG[number]> = { ...Object.fromEntries(SYMBOL_CATALOG.map(s => [s.token, s])), '[M]': SYMBOL_CATALOG[4] }
@@ -47,8 +48,8 @@ export function resourceToken(layer: ResourceLayer, style: IconStyle | undefined
   const tokens: Partial<Record<IconStyle, string>> = RESOURCE_TOKENS[layer]
   return tokens[style ?? 'badge'] ?? (layer === 'guns' ? 'GUN' : layer === 'shields' ? 'SKULL' : 'MORALE')
 }
-export type Run = { text: string; icon: boolean; italic: boolean; unframed?: boolean }
-const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSM]\\)|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*)`, 'g')
+export type Run = { text: string; icon: boolean; italic: boolean; unframed?: boolean; dice?: boolean }
+const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSMD]\\)|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*)`, 'g')
 export function textRuns(text: string): Run[] {
   return text.split(TOKEN_PATTERN).filter(Boolean).flatMap<Run>(part => {
     if (part.startsWith('*') && part.endsWith('*')) {
@@ -56,7 +57,7 @@ export function textRuns(text: string): Run[] {
       return textRuns(part.slice(markers, -markers)).map(run => ({ ...run, italic: true }))
     }
     const short = SHORT_SYMBOLS[part]
-    if (short) return [{ text: short.glyph, icon: true, italic: false, ...(short.unframed ? { unframed: true } : {}) }]
+    if (short) return [{ text: short.glyph, icon: true, italic: false, ...(short.unframed ? { unframed: true } : {}), ...(part === '(D)' ? { dice: true } : {}) }]
     const symbol = part.startsWith('[') && part.endsWith(']') ? SYMBOLS[part.slice(1, -1)] : undefined
     return [{ text: symbol ?? part, icon: !!symbol, italic: false }]
   })

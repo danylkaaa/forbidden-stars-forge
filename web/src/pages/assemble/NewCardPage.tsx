@@ -70,7 +70,7 @@ function BasicNewCardPage({ category, faction, onCategoryChange }: {
           {FIELDS[category].filter(f => f.kind !== 'text').map(f => <Field key={f.key} label={f.label}>{id => <select id={id} className={selectClass} value={draft[f.key]} onChange={e => set(f.key, e.target.value)}>{f.options?.map(o => <option key={o} value={o}>{ACTION_LABELS[o] ?? o}</option>)}</select>}</Field>)}
         </div>
         {FIELDS[category].filter(f => f.kind === 'text').map(f => <Field key={f.key} label={f.label}>{id => <textarea id={id} rows={4} className={inputClass} value={draft[f.key]} onChange={e => set(f.key, e.target.value)} />}</Field>)}
-        <p className="m-0 text-xs text-ink/60">(B), (S), (M) insert icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported.</p>
+        <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported.</p>
         {!!shownIssues.length && <div role="alert" className="text-xs text-danger">{shownIssues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
       </section>
     </div>

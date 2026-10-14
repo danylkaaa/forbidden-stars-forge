@@ -1,7 +1,7 @@
 import { renderCard } from './render'
 import { defaultLayout, type CombatCard } from './model'
 
-const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), font: '', fillStyle: '' }
+const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), stroke: vi.fn(), font: '', fillStyle: '' }
 const card: CombatCard = { id: 1, faction_id: 1, category: 'combat', name: 'Title', level: 0, resource_cost: 2, guns: 0, shields: 0, eagles: 0, upper_text: 'upper (B)', lower_text: 'lower [M]', created_at: '', updated_at: '' }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -89,4 +89,16 @@ test('C0 logo scale changes size around the badge center with the same aspect ra
   expect(scaled[3]).toBeCloseTo(normal[3] * 1.75)
   expect(scaled[0] + scaled[2] / 2).toBeCloseTo(normal[0] + normal[2] / 2)
   expect(scaled[1] + scaled[3] / 2).toBeCloseTo(normal[1] + normal[3] / 2)
+})
+
+
+test('dice in rules text draws an outlined cube and reserves its width before punctuation', async () => {
+  await renderCard({ card: { ...card, upper_text: 'Gain 1 (D).', lower_text: '' }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
+  expect(ctx.stroke).toHaveBeenCalledOnce()
+  expect(ctx.closePath).toHaveBeenCalledOnce()
+  expect(ctx.fillText.mock.calls.some(call => call[0] === 'D' || call[0] === '(D)')).toBe(false)
+  const cubeX = ctx.moveTo.mock.calls[0][0] as number
+  const period = ctx.fillText.mock.calls.find(call => call[0] === '.')!
+  const size = defaultLayout().upper_text.size * 1104 / 100
+  expect(period[1]).toBeCloseTo(cubeX + size * (.9 - .08 - .74 / 2))
 })

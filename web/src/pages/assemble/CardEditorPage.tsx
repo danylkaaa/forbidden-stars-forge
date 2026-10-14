@@ -318,7 +318,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
           </div>
           {(['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === 'upper_text' ? upperText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
           <SymbolPicker insert={insertSymbol} disabled={busy} />
-          <p className="m-0 text-xs text-ink/60">(B), (S), (M) insert icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
+          <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={['level', 'resource_cost', 'guns', 'shields', 'eagles'].filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}

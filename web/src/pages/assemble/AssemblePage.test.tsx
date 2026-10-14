@@ -358,10 +358,10 @@ test('template settings preview with a chosen card or demo level, and can show f
 })
 
 
-test('library exposes the card content editor and JSON import', async () => {
+test('library offers JSON import without a link to the removed cards page', async () => {
   mount('/assemble')
-  const content = await screen.findByRole('link', { name: 'Cards / JSON import' })
-  expect(content).toHaveAttribute('href', '/cards')
+  expect(await screen.findByRole('button', { name: 'Import JSON' })).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Cards / JSON import' })).not.toBeInTheDocument()
 })
 
 test('selected cards are deleted together after confirmation', async () => {
@@ -405,10 +405,12 @@ test('cards can be imported from JSON on the library page, with validation error
   expect(within(dialog).getByRole('alert')).toHaveTextContent('Card 1, name: A non-empty name is required')
   expect(within(dialog).getByRole('button', { name: 'Import' })).toBeDisabled()
   const good = { cards: [{ faction_id: 1, name: 'Imported', category: 'combat', level: 1, resource_cost: 1, shields: 0, guns: 1, eagles: 0, upper_text: '', lower_text: '' }] }
-  fireEvent.change(within(dialog).getByLabelText('JSON content'), { target: { value: JSON.stringify(good) } })
+  const upload = { source: 'deck.pdf', cards: good.cards.map(card => ({ ...card, faction_name: 'Tau', source_file_name: 'deck.pdf' })) }
+  fireEvent.change(within(dialog).getByLabelText('JSON content'), { target: { value: JSON.stringify(upload) } })
   await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }))
   expect(await screen.findByText('Imported 1 card.')).toBeInTheDocument()
   expect(await screen.findByRole('link', { name: 'Edit Imported' })).toBeInTheDocument()
+  expect(records.find(card => card.name === 'Imported')).toEqual({ ...good.cards[0], id: 100, created_at: '', updated_at: '' })
 })
 
 test('new-card artwork supports drag, cancel, wheel zoom, and removal before saving', async () => {
@@ -495,4 +497,48 @@ test('template image checkboxes select for deletion without changing the chosen 
   expect(confirmation).toHaveTextContent('Permanently delete 2 selected images')
   await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
   expect(image).toBeChecked()
+})
+
+test('right-click deletion targets one card and preserves other selected cards', async () => {
+  mount('/assemble')
+  await userEvent.click(await screen.findByLabelText('Select Second card'))
+  const card = await screen.findByRole('link', { name: 'Edit Winged Horror' })
+  fireEvent.contextMenu(card, { clientX: 100, clientY: 150 })
+  await userEvent.click(within(screen.getByRole('menu', { name: 'Actions for Winged Horror' })).getByRole('menuitem', { name: 'Delete' }))
+  const confirm = screen.getByRole('dialog', { name: 'Delete 1 card?' })
+  expect(confirm).toHaveTextContent('Winged Horror')
+  expect(confirm).not.toHaveTextContent('Second card')
+  expect(deleted).toEqual([])
+  await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+  expect(deleted).toEqual([])
+  fireEvent.contextMenu(card)
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Delete 1 card?' })).getByRole('button', { name: 'Delete cards' }))
+  await waitFor(() => expect(deleted).toEqual([[1]]))
+  await waitFor(() => expect(screen.queryByRole('link', { name: 'Edit Winged Horror' })).not.toBeInTheDocument())
+  expect(screen.getByLabelText('Select Second card')).toBeChecked()
+})
+
+test('context menu closes on Escape or outside click without deleting', async () => {
+  mount('/assemble')
+  const card = await screen.findByRole('link', { name: 'Edit Winged Horror' })
+  fireEvent.contextMenu(card)
+  expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus()
+  await userEvent.keyboard('{Escape}')
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  fireEvent.contextMenu(card)
+  await userEvent.click(screen.getByRole('heading', { name: 'Library' }))
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(deleted).toEqual([])
+})
+
+test('upgrade cards also offer right-click deletion', async () => {
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('tab', { name: /Upgrades/ }))
+  fireEvent.contextMenu(await screen.findByLabelText('Select Forge World'))
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+  const confirm = screen.getByRole('dialog', { name: 'Delete 1 card?' })
+  expect(confirm).toHaveTextContent('Forge World')
+  await userEvent.click(within(confirm).getByRole('button', { name: 'Delete cards' }))
+  await waitFor(() => expect(deleted).toEqual([[3]]))
 })

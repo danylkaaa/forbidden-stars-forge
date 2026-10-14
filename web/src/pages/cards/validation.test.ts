@@ -5,7 +5,7 @@ import { exampleImport, readUTF8 } from './import'
 for (const c of fixtures) test(`shared JSON rules: ${c.name}`, () => {
   expect(validateCard(c.card, [1]).length === 0).toBe(c.valid)
   const result = parseImport(JSON.stringify({ cards: [c.card] }), [1])
-  expect(result.errors.length === 0).toBe(c.valid)
+  expect(result.errors.length === 0).toBe(c.valid || ['unknown key', 'foreign null field'].includes(c.name))
 })
 test('blank and fractional numeric drafts do not become zero', () => {
   for (const value of ['', ' ', '-1', '1.5', '2e0']) {
@@ -14,7 +14,7 @@ test('blank and fractional numeric drafts do not become zero', () => {
   }
 })
 test('envelope, syntax, and indexed errors', () => {
-  for (const source of ['{', 'null', '[]', '{"cards":[]}', '{"cards":null}', '{"cards":{}}', JSON.stringify({ ...exampleImport(1), extra: true })]) expect(parseImport(source, [1]).errors.length).toBeGreaterThan(0)
+  for (const source of ['{', 'null', '[]', '{"cards":[]}', '{"cards":null}', '{"cards":{}}']) expect(parseImport(source, [1]).errors.length).toBeGreaterThan(0)
   const result = parseImport(JSON.stringify({ cards: [exampleImport(1).cards[0], { ...exampleImport(1).cards[1], faction_id: 999 }] }), [1])
   expect(result.cards).toEqual([]); expect(result.errors).toContainEqual({ index: 1, field: 'faction_id', message: 'Faction does not exist' })
 })
@@ -30,4 +30,18 @@ test('equivalent JSON integer forms validate consistently with the backend', () 
     const source = JSON.stringify({ cards: [exampleImport(1).cards[0]] }).replace('"level":0', '"level":' + value)
     expect(parseImport(source, [1]).errors).toEqual([])
   }
+})
+
+
+test('import discards envelope metadata and extra fields across all card categories', () => {
+  const expected = exampleImport(1).cards
+  const cards = expected.map(card => ({ ...card, faction_name: 'Tau', source_file_name: 'deck.pdf', notes: { page: 1 }, unknown: null, ...(card.category === 'combat' ? { text: 'foreign text' } : { guns: 99 }) }))
+  expect(parseImport(JSON.stringify({ cards, source: 'deck.pdf' }), [1])).toEqual({ cards: expected, errors: [] })
+})
+
+test('extra metadata does not bypass required field validation', () => {
+  const card = { ...exampleImport(1).cards[0], guns: null, faction_name: 'Tau' }
+  const result = parseImport(JSON.stringify({ cards: [card] }), [1])
+  expect(result.cards).toEqual([])
+  expect(result.errors).toEqual([{ index: 0, field: 'guns', message: 'Must be an integer from 0 to 9007199254740991' }])
 })
