@@ -41,8 +41,8 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 			inputs = append(inputs, CardInput{FactionID: f, Name: "План", Category: "schema", Subtype: ptr(sub), Action: ptr(action), Text: ptr("")})
 		}
 	}
-	for _, kind := range []string{"deploy", "advance", "strategize", "upgrade"} {
-		inputs = append(inputs, CardInput{FactionID: f, Name: "Улучшение", Category: "upgrade", UpgradeType: ptr(kind), Text: ptr("Текст")})
+	for _, kind := range []string{"deploy", "advance", "strategize", "dominate"} {
+		inputs = append(inputs, CardInput{FactionID: f, Name: "Улучшение", Category: "upgrade", UpgradeType: ptr(kind), Level: ptr[int64](2), ResourceCost: ptr[int64](3), Text: ptr("Текст")})
 	}
 	for _, in := range inputs {
 		c, err := s.Create(in)
@@ -64,7 +64,7 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 		t.Fatal("faction filter")
 	}
 	c, err := s.Update(1, inputs[len(inputs)-1])
-	if err != nil || c.Level != nil || c.UpperText != nil || c.UpgradeType == nil {
+	if err != nil || c.Level == nil || c.UpperText != nil || c.UpgradeType == nil {
 		t.Fatalf("change category: %+v %v", c, err)
 	}
 	if err = s.db.Close(); err != nil {
@@ -162,5 +162,20 @@ func TestCardsMigrationPreservesExistingData(t *testing.T) {
 	}
 	if _, err = NewCardsStore(db).Create(combatCard(1)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUpgradeValidationNeedsLevelAndPrice(t *testing.T) {
+	in := CardInput{FactionID: 1, Name: "From the Warp", Category: "upgrade", UpgradeType: ptr("dominate"), Text: ptr("")}
+	got := map[string]bool{}
+	for _, e := range ValidateCard(in) {
+		got[e.Field] = true
+	}
+	if !got["level"] || !got["resource_cost"] || len(got) != 2 {
+		t.Fatalf("missing level/price not reported: %v", got)
+	}
+	in.Level, in.ResourceCost = ptr[int64](4), ptr[int64](2)
+	if e := ValidateCard(in); len(e) != 1 || e[0].Field != "level" {
+		t.Fatalf("level 4 must be rejected: %v", e)
 	}
 }

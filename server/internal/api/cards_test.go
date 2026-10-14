@@ -29,15 +29,15 @@ func TestCardsCRUDImportAndFactionDeletion(t *testing.T) {
 	for _, category := range []string{"schema", "upgrade"} {
 		extra := `"subtype":"tactic","action":"move_vertical"`
 		if category == "upgrade" {
-			extra = `"upgrade_type":"upgrade"`
+			extra = `"upgrade_type":"dominate","level":2,"resource_cost":1`
 		}
 		update := fmt.Sprintf(`{"faction_id":%d,"name":"Новое","category":"%s","text":"Текст",%s}`, id, category, extra)
 		rec, c = doJSON(t, h, "PUT", fmt.Sprintf("/api/cards/%d", cid), update)
-		if rec.Code != 200 || c["level"] != nil || c["text"] != "Текст" {
+		if rec.Code != 200 || (category == "schema" && c["level"] != nil) || c["text"] != "Текст" {
 			t.Fatalf("%d %v", rec.Code, c)
 		}
 	}
-	mixed := fmt.Sprintf(`{"cards":[%s,{"faction_id":%d,"name":"Plan","category":"schema","subtype":"schema","action":"rotate_clockwise","text":""},{"faction_id":%d,"name":"Upgrade","category":"upgrade","upgrade_type":"deploy","text":""}]}`, body, id, id)
+	mixed := fmt.Sprintf(`{"cards":[%s,{"faction_id":%d,"name":"Plan","category":"schema","subtype":"schema","action":"rotate_clockwise","text":""},{"faction_id":%d,"name":"Upgrade","category":"upgrade","upgrade_type":"deploy","level":1,"resource_cost":0,"text":""}]}`, body, id, id)
 	for i := 0; i < 2; i++ {
 		rec, c = doJSON(t, h, "POST", "/api/cards/import", mixed)
 		if rec.Code != 201 || c["count"] != float64(3) {

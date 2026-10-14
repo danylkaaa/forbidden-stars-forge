@@ -93,9 +93,7 @@ export default function SubtypesPage() {
     <CategoryTabs value={category} onChange={c => { create.reset(); select({ category: c }) }} badges={counts} />
     <details className="rounded-lg border border-divider bg-surface p-4" open>
       <summary className="cursor-pointer font-display text-lg text-accent-300">{label} text layout</summary>
-      <div className="mt-3">{category === 'combat'
-        ? <CardTypeLayoutEditor key={category} category={category} />
-        : <p className="m-0 text-sm text-ink/60">{label} cards are not rendered yet, so their text layout comes with their renderer.</p>}</div>
+      <div className="mt-3"><CardTypeLayoutEditor key={category} category={category} /></div>
     </details>
     <h2 className="m-0 font-display text-lg text-accent-300">{label} subtypes</h2>
     <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); if (name.trim()) create.mutate({ category, name: name.trim() }) }}>

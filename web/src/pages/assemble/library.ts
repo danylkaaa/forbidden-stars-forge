@@ -41,7 +41,7 @@ export function labLink(image: LibraryImage) {
 export function useTemplateLayout(category: Category = 'combat') {
   const layouts = useCardTypeLayouts()
   const saved = layouts.data?.find(l => l.category === category)?.layout
-  const layout = useMemo(() => assemblyLayout(saved ?? {}), [saved])
+  const layout = useMemo(() => assemblyLayout(saved ?? {}, category), [saved, category])
   return { layout, ready: !layouts.isPending, error: layouts.error }
 }
 

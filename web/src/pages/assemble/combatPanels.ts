@@ -11,7 +11,10 @@ const NO_INSETS: PanelInsets = { background: 0, dividerTop: 0, foreground: 0 }
 // equal padding above (below the border/bar) and below (to the divider bar or
 // the bottom decoration).
 export function combatPanels(width: number, height: number, bottomHeight: number, upper: TextBlock, lower: TextBlock, insets: PanelInsets = NO_INSETS) {
-  const padding = width * .04
+  // Padding above and below each block, as a percentage of card width.
+  const padTop = (b: TextBlock) => width * (b.placement.paddingTop ?? 4) / 100
+  const padBottom = (b: TextBlock) => width * (b.placement.paddingBottom ?? 4) / 100
+  const upperPad = padTop(upper), lowerPad = padTop(lower)
   const hasUpper = !!upper.text.trim(), hasLower = !!lower.text.trim()
   const upperHeight = hasUpper ? upper.height : 0, lowerHeight = hasLower ? lower.height : 0
   const bottomY = height - bottomHeight
@@ -19,13 +22,13 @@ export function combatPanels(width: number, height: number, bottomHeight: number
   const isAuto = (p: Placement, key: 'upper_text' | 'lower_text') => p.autoY ?? p.y === defaults[key].y
   const lowerAuto = isAuto(lower.placement, 'lower_text'), upperAuto = isAuto(upper.placement, 'upper_text')
   const foregroundY = !hasLower ? null
-    : lowerAuto ? bottomY - (insets.foreground + padding * 2 + lowerHeight)
-    : lower.placement.y * height / 100 - padding - insets.foreground
-  const lowerY = foregroundY !== null && lowerAuto ? foregroundY + insets.foreground + padding : lower.placement.y * height / 100
+    : lowerAuto ? bottomY - (insets.foreground + lowerPad + padBottom(lower) + lowerHeight)
+    : lower.placement.y * height / 100 - lowerPad - insets.foreground
+  const lowerY = foregroundY !== null && lowerAuto ? foregroundY + insets.foreground + lowerPad : lower.placement.y * height / 100
   const upperEnd = foregroundY !== null ? foregroundY + insets.dividerTop : bottomY
-  const upperTop = upperEnd - (insets.background + padding * 2 + upperHeight)
-  const upperY = upperAuto ? upperTop + insets.background + padding : upper.placement.y * height / 100
-  const backgroundY = hasUpper ? Math.min(upperTop, upperY - padding - insets.background) : foregroundY
+  const upperTop = upperEnd - (insets.background + upperPad + padBottom(upper) + upperHeight)
+  const upperY = upperAuto ? upperTop + insets.background + upperPad : upper.placement.y * height / 100
+  const backgroundY = hasUpper ? Math.min(upperTop, upperY - upperPad - insets.background) : foregroundY
   const end = Math.max(hasUpper ? upperY + upperHeight : 0, hasLower ? lowerY + lowerHeight : 0)
   return {
     backgroundY, foregroundY, bottomY,

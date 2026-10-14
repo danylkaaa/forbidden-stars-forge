@@ -3,7 +3,13 @@ import { apiGet, apiSend, apiSendForm } from '../../lib/api'
 import { defaultArtwork, type ArtworkTransform } from './artwork'
 import type { Layout } from './model'
 import type { Category } from '../cards/model'
-export type Assembly = { image_key: string; image_url: string; overlay_id: string; subtype_id: number; logo_scale?: number; transform: ArtworkTransform; layout: Partial<Layout>; card_id?: number; updated_at?: string }
+// A card's own tweaks: its title size as a multiple of the card type's size.
+export type AssemblyLayout = Partial<Layout> & { title_scale?: number }
+export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number): AssemblyLayout => {
+  const { title_scale: _, ...rest } = layout
+  return scale === 1 ? rest : { ...rest, title_scale: scale }
+}
+export type Assembly = { image_key: string; image_url: string; overlay_id: string; subtype_id: number; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
 export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', subtype_id: 0, logo_scale: 1, transform: defaultArtwork(), layout: {} })
 export function useCardAssembly(id: string) {
   return useQuery({ queryKey: ['card-assembly', id], enabled: !!id, queryFn: () => apiGet<Assembly>(`/api/cards/${id}/assembly`) })

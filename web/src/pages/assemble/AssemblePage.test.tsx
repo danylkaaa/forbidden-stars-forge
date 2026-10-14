@@ -14,7 +14,7 @@ import NewCardPage from './NewCardPage'
 import LibraryFactionsPage from './LibraryFactionsPage'
 vi.mock('./render', () => ({ renderCard: vi.fn(), pngBlob: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
 const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', level: 0, resource_cost: 2, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', lower_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
-const upgrade: Card = { id: 3, faction_id: 1, category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', text: 'Deploy one more unit.', created_at: '', updated_at: '' }
+const upgrade: Card = { id: 3, faction_id: 1, category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', level: 1, resource_cost: 2, text: 'Deploy one more unit.', created_at: '', updated_at: '' }
 let records: Card[], deleted: number[][], updates: unknown[], templates: AssemblyTemplate[], assemblies: Record<string, Assembly>, assemblyUpdates: unknown[]
 beforeEach(() => {
   useAssembly.setState({ factionId: null, category: 'combat', edits: {}, transforms: {}, logoScales: {} })
@@ -56,13 +56,15 @@ function mount(path: string) {
 }
 
 test('library renders every combat card of the faction on the chosen template', async () => {
+  templates = [...templates, { faction_id: 1, category: 'upgrade', side: 'front', image_key: 'test-5' }]
   mount('/assemble')
   await screen.findByRole('link', { name: 'Edit Second card' })
   await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Winged Horror' }), imageUrl: '/api/generations/5/image', overlayUrl: null, overlayUrls: ['/l0'] })))
   expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Second card' }) }))
   expect(screen.getByRole('link', { name: 'Edit in Faction Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
   await userEvent.click(screen.getByRole('tab', { name: /Upgrades/ }))
-  expect(await screen.findByText('Deploy one more unit.')).toBeInTheDocument()
+  expect(await screen.findByRole('link', { name: 'Edit Forge World' })).toBeInTheDocument()
+  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', level: 1, resource_cost: 2 }) })))
   expect(screen.queryByRole('link', { name: 'Edit Winged Horror' })).not.toBeInTheDocument()
 })
 
@@ -229,15 +231,16 @@ test('a new card starts from an empty form for the faction and tab, previews, an
   expect(records.at(-1)).toMatchObject({ name: 'Iron Will', faction_id: 1, category: 'combat', upper_text: 'Gain (B).' })
 })
 
-test('new event cards use the event fields and return to the Events tab', async () => {
+test('new event cards are created in the assembly editor with the event fields', async () => {
+  templates = [...templates, { faction_id: 1, category: 'schema', side: 'front', image_key: 'test-5' }]
   const router = mount('/assemble/cards/new?faction=1&tab=events')
   await userEvent.type(await screen.findByLabelText('Title'), 'Ambush')
-  expect(screen.getByText('Previews are available for combat cards only.')).toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Action'), 'rotate_clockwise')
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Move one unit.' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ category: 'schema', action: 'rotate_clockwise' }) })))
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
-  await waitFor(() => expect(router.state.location.pathname).toBe('/assemble'))
-  expect(records.at(-1)).toMatchObject({ name: 'Ambush', category: 'schema', subtype: 'schema', text: 'Move one unit.' })
-  expect(await screen.findByRole('tab', { name: /Events/ })).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
+  expect(records.at(-1)).toMatchObject({ name: 'Ambush', category: 'schema', subtype: 'schema', action: 'rotate_clockwise', text: 'Move one unit.' })
 })
 
 test('combat cards are grouped into a section per level', async () => {

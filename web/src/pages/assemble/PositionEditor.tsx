@@ -8,7 +8,8 @@ import { CardCanvas } from './CardCanvas'
 import { PlacementFields } from './LayerControls'
 import { usePreviewTemplate, useTemplateLayout } from './library'
 import { useFactionLogos } from './logos'
-import { DEMO_COMBAT, LAYER_LABELS, resourceBox, defaultLayout, type Layer, type Layout, type Placement } from './model'
+import { DEMO_COMBAT, DEMO_SCHEMA, DEMO_UPGRADE, layerLabel, resourceBox, defaultLayout, type Layer, type Layout, type Placement } from './model'
+import { ACTION_LABELS, UPGRADE_TYPES, type Category, type UpgradeType } from '../cards/model'
 import type { RenderInput } from './render'
 import { useAssembly } from './state'
 import { useRenderedCard } from './useCardView'
@@ -27,7 +28,7 @@ const isRules = (layer: Layer): layer is 'upper_text' | 'lower_text' => layer ==
 
 export type Composed = { layout: Layout; overlayUrls: string[] }
 type Props = {
-  id: string; label: string; saved: Partial<Layout>; initialLevel: number; note: string; resetLabel: string
+  id: string; category?: Category; label: string; saved: Partial<Layout>; initialLevel: number; note: string; resetLabel: string
   // Layers editable at a preview level, and the full preview for a draft.
   layersFor: (level: number) => Layer[]
   compose: (draft: Partial<Layout>, level: number, base: Layout) => Composed
@@ -36,13 +37,16 @@ type Props = {
 
 // Drag-and-drop layer positions on a demo card of the chosen faction, with
 // undo/redo. Used for card type text positions and subtype overlay positions.
-export function PositionEditor({ id: editorId, label, saved, initialLevel, note, resetLabel, layersFor, compose, onSave }: Props) {
+export function PositionEditor({ id: editorId, category = 'combat', label, saved, initialLevel, note, resetLabel, layersFor, compose, onSave }: Props) {
   const demoArtwork = useDemoArtwork()
   const factions = useFactions(), logos = useFactionLogos()
   const [factionId, setFactionId] = useState(() => useAssembly.getState().factionId)
   const previewFaction = factionId ?? factions.data?.[0]?.id ?? null
   const [level, setLevel] = useState(initialLevel)
-  const [price, setPrice] = useState(DEMO_COMBAT.resource_cost)
+  const upgrade = category === 'upgrade', schema = category === 'schema'
+  const [action, setAction] = useState(DEMO_SCHEMA.action), [kind, setKind] = useState<'schema' | 'tactic'>(DEMO_SCHEMA.subtype)
+  const [price, setPrice] = useState(upgrade ? DEMO_UPGRADE.resource_cost : DEMO_COMBAT.resource_cost)
+  const [order, setOrder] = useState<UpgradeType>(DEMO_UPGRADE.upgrade_type)
   const history = useUndoable<Partial<Layout>>(saved)
   const draft = history.value
   const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null)
@@ -56,13 +60,13 @@ export function PositionEditor({ id: editorId, label, saved, initialLevel, note,
   const layers = layersFor(level)
   const [layerChoice, setLayer] = useState<Layer>(layers[0])
   const layer = layers.includes(layerChoice) ? layerChoice : layers[0]
-  const template = usePreviewTemplate(previewFaction, 'combat')
-  const templateLayout = useTemplateLayout()
+  const template = usePreviewTemplate(previewFaction, category)
+  const templateLayout = useTemplateLayout(category)
   const { layout, overlayUrls } = useMemo(() => compose(draft, level, templateLayout.layout), [compose, draft, level, templateLayout.layout])
   const logoUrl = logos.data?.find(l => l.faction_id === previewFaction)?.url ?? null
   const input = useMemo<RenderInput | null>(() => !template.isPending && (templateLayout.ready || !template.image)
-    ? { card: { ...DEMO_COMBAT, level, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
-    : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, overlayUrls, logoUrl, demoArtwork])
+    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
+    : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, order, upgrade, schema, action, kind, overlayUrls, logoUrl, demoArtwork])
   const { result, error } = useRenderedCard(input)
   const save = useMutation({ mutationFn: () => onSave(draft) })
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
@@ -96,11 +100,11 @@ export function PositionEditor({ id: editorId, label, saved, initialLevel, note,
           ? <CardCanvas result={result} aria-label={`${label} position preview`} className="block h-auto w-full" />
           : <div className="grid aspect-[3/4] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
         {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key], stackCount, CARD_SIZE) : shown(key), selected = key === layer
-          return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${LAYER_LABELS[key]}`} title={LAYER_LABELS[key]}
+          return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${layerLabel(key, category)}`} title={layerLabel(key, category)}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
             className={`absolute cursor-move touch-none border ${selected ? 'z-10 border-accent bg-accent/10' : 'border-dashed border-white/40 hover:border-accent/70'}`}
             style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.width}%`, height: `${b.height}%` }}>
-            {selected && key !== 'resources' && <span aria-label={`Resize ${LAYER_LABELS[key]}`} role="button" tabIndex={-1}
+            {selected && key !== 'resources' && <span aria-label={`Resize ${layerLabel(key, category)}`} role="button" tabIndex={-1}
               onPointerDown={e => startDrag(e, key, 'resize')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
               className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize touch-none rounded-sm border border-bg bg-accent" />}
           </div> })}
@@ -111,21 +115,32 @@ export function PositionEditor({ id: editorId, label, saved, initialLevel, note,
       <p className="mt-1 text-[11px] text-ink/50">Drag a box to move it, its corner to resize (resource icons resize with Icon size). ⌘Z / Ctrl+Z undoes, ⇧⌘Z redoes.</p>
     </div>
     <div className="min-w-64 flex-1 space-y-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className={`grid gap-3 ${schema ? 'grid-cols-3' : upgrade ? 'grid-cols-2' : 'grid-cols-3'}`}>
         <Field label="Preview faction">{id => <SearchableSelect id={id} className={selectClass} value={previewFaction ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
           {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </SearchableSelect>}</Field>
-        <Field label="Preview level">{id => <SearchableSelect id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
+        {schema && <>
+          <Field label="Preview kind">{id => <SearchableSelect id={id} className={selectClass} value={kind} onChange={e => setKind(e.target.value as 'schema' | 'tactic')}>
+            <option value="schema">Scheme</option><option value="tactic">Tactic</option>
+          </SearchableSelect>}</Field>
+          <Field label="Preview action">{id => <SearchableSelect id={id} className={selectClass} value={action} onChange={e => setAction(e.target.value as typeof action)}>
+            {Object.entries(ACTION_LABELS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+          </SearchableSelect>}</Field>
+        </>}
+        {!schema && <Field label="Preview level">{id => <SearchableSelect id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
           {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l}</option>)}
-        </SearchableSelect>}</Field>
-        <Field label="Preview price">{id => <SearchableSelect id={id} className={selectClass} value={price} disabled={level === 0} title={level === 0 ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
+        </SearchableSelect>}</Field>}
+        {upgrade && <Field label="Preview order">{id => <SearchableSelect id={id} className={selectClass} value={order} onChange={e => setOrder(e.target.value as UpgradeType)}>
+          {UPGRADE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </SearchableSelect>}</Field>}
+        {!schema && <Field label="Preview price">{id => <SearchableSelect id={id} className={selectClass} value={price} disabled={level === 0 && category === 'combat'} title={level === 0 && category === 'combat' ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
           {Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>{n}</option>)}
-        </SearchableSelect>}</Field>
+        </SearchableSelect>}</Field>}
       </div>
       <Field label="Layer">{id => <SearchableSelect id={id} className={selectClass} value={layer} onChange={e => setLayer(e.target.value as Layer)}>
-        {layers.map(key => <option key={key} value={key}>{LAYER_LABELS[key]}</option>)}
+        {layers.map(key => <option key={key} value={key}>{layerLabel(key, category)}</option>)}
       </SearchableSelect>}</Field>
-      {isRules(layer) && <label className="flex items-center gap-2 text-xs text-ink/70"><input type="checkbox" checked={layout[layer].autoY ?? layout[layer].y === defaultLayout()[layer].y} onChange={e => move({ autoY: e.target.checked })} />Automatic vertical position (centred in its panel)</label>}
+      {isRules(layer) && category === 'combat' && <label className="flex items-center gap-2 text-xs text-ink/70"><input type="checkbox" checked={layout[layer].autoY ?? layout[layer].y === defaultLayout(category)[layer].y} onChange={e => move({ autoY: e.target.checked })} />Automatic vertical position (centred in its panel)</label>}
       <PlacementFields layer={layer} p={p} move={move} />
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save positions'}</Button>

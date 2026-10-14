@@ -11,7 +11,7 @@ import { ImportCardsDialog } from '../cards/ImportCardsDialog'
 import { zip } from '../../lib/zip'
 import { downloadName } from './model'
 import { pngBlob } from './render'
-import { ACTION_LABELS, type Card } from '../cards/model'
+import type { Card } from '../cards/model'
 import { useFactions } from '../factions/api'
 import { LIBRARY_TABS } from './model'
 import { backTypeName, labLink, useTemplate, useTemplateLayout, type LibraryImage } from './library'
@@ -24,7 +24,7 @@ import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
 import { BackImage } from './BackImage'
 import { CardContextMenu } from './CardContextMenu'
-import { DemoText, TemplateSettingsDialog } from './TemplateSettingsDialog'
+import { TemplateSettingsDialog } from './TemplateSettingsDialog'
 
 // Selection checkbox in a tile's top-left corner; always visible once
 // anything is selected, otherwise on hover.
@@ -53,7 +53,7 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
       {result
         ? <CardCanvas result={result} aria-hidden="true" className="block h-auto w-full" />
         : <div className="grid aspect-[816/1104] place-items-center bg-black/30 p-3 text-center text-xs text-ink/50">
-          {error || (!image ? 'Choose a combat template (top-left settings) to preview.' : issues.length ? 'Fix this card’s fields in the editor.' : 'Rendering…')}
+          {error || (!image ? `Choose ${{ combat: 'a combat', upgrade: 'an upgrade', schema: 'an event' }[card.category]} template (top-left settings) to preview.` : issues.length ? 'Fix this card’s fields in the editor.' : 'Rendering…')}
         </div>}
     </div>
     <span className={`${caption} group-hover:text-accent`}>
@@ -75,17 +75,6 @@ function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImag
   </div>
 }
 
-function TextTile({ card, image, ...select }: { card: Card; image: LibraryImage | undefined } & Selectable) {
-  const text = card.category === 'combat' ? '' : card.text
-  const subtitle = card.category === 'schema' ? `${card.subtype} · ${ACTION_LABELS[card.action] ?? card.action}` : card.category === 'upgrade' ? card.upgrade_type : ''
-  return <div className={`${tile} group/tile relative`} onContextMenu={select.onContextMenu}>
-    <SelectBox name={card.name} {...select} />
-    <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : ''}`}><DemoText image={image} title={card.name} text={text || '—'} /></div>
-    <span className={caption}><span className="truncate">{card.name}</span></span>
-    <span className="block px-0.5 text-[11px] text-ink/45">{subtitle} · full rendering coming soon</span>
-  </div>
-}
-
 export default function AssemblePage() {
   const factions = useFactions()
   const state = useAssembly()
@@ -102,7 +91,7 @@ export default function AssemblePage() {
   const [settingsOpen, setSettingsOpen] = useState<Side | null>(null)
   const cards = useCards(factionId ? String(factionId) : '', '')
   const template = useTemplate(factionId, category)
-  const layout = useTemplateLayout()
+  const layout = useTemplateLayout(category)
   const back = useTemplate(factionId, category, 'back')
   const backType = useCardTypes().data?.find(t => t.name === backTypeName(category))
   const faction = factions.data?.find(f => f.id === factionId)
@@ -139,7 +128,7 @@ export default function AssemblePage() {
     } catch (e) { setActionError(e instanceof Error ? e.message : 'Delete failed') }
     finally { setBusy(null) }
   }
-  // Rendered combat cards as PNGs, zipped. Cards without a render are skipped.
+  // Rendered cards as PNGs, zipped. Cards without a render are skipped.
   async function downloadSelected() {
     setBusy('download'); setActionError(null); setNotice(null)
     try {
@@ -157,7 +146,7 @@ export default function AssemblePage() {
       const link = document.createElement('a'); link.href = url; link.download = `${faction?.name ?? 'cards'} ${tabLabel}.zip`.replace(/[\\/:*?"<>|]/g, '-')
       document.body.append(link); link.click(); link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      if (entries.length < chosen.length) setNotice(`Downloaded ${entries.length} of ${chosen.length}; the others have no rendered image (only combat cards render for now).`)
+      if (entries.length < chosen.length) setNotice(`Downloaded ${entries.length} of ${chosen.length}; the others have no rendered image (they are still rendering or have no template).`)
     } catch (e) { setActionError(e instanceof Error ? e.message : 'Download failed') }
     finally { setBusy(null) }
   }
@@ -207,9 +196,7 @@ export default function AssemblePage() {
           Level {group.level}<span className="font-sans text-xs font-normal text-ink/45">{group.cards.length} card{group.cards.length === 1 ? '' : 's'}</span>
         </h2>}
         <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-          {group.cards.map(card => card.category === 'combat'
-            ? <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} onRendered={onRendered} {...selectProps(card)} />
-            : <TextTile key={card.id} card={card} image={template.image} {...selectProps(card)} />)}
+          {group.cards.map(card => <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} onRendered={onRendered} {...selectProps(card)} />)}
         </div>
       </section>)}
     {contextMenu && <CardContextMenu name={contextMenu.card.name} x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu}

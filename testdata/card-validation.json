@@ -182,6 +182,8 @@
       "name": "Upgrade",
       "category": "upgrade",
       "upgrade_type": "deploy",
+      "level": 2,
+      "resource_cost": 3,
       "text": "Текст"
     },
     "valid": true
@@ -193,6 +195,8 @@
       "name": "Upgrade",
       "category": "upgrade",
       "upgrade_type": "advance",
+      "level": 2,
+      "resource_cost": 3,
       "text": "Текст"
     },
     "valid": true
@@ -204,17 +208,21 @@
       "name": "Upgrade",
       "category": "upgrade",
       "upgrade_type": "strategize",
+      "level": 2,
+      "resource_cost": 3,
       "text": "Текст"
     },
     "valid": true
   },
   {
-    "name": "upgrade",
+    "name": "dominate",
     "card": {
       "faction_id": 1,
       "name": "Upgrade",
       "category": "upgrade",
-      "upgrade_type": "upgrade",
+      "upgrade_type": "dominate",
+      "level": 2,
+      "resource_cost": 3,
       "text": "Текст"
     },
     "valid": true
@@ -683,7 +691,7 @@
       "faction_id": 1,
       "name": "Up",
       "category": "upgrade",
-      "upgrade_type": "dominate",
+      "upgrade_type": "upgrade",
       "text": ""
     },
     "valid": false

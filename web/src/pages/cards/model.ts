@@ -1,10 +1,12 @@
 export const CATEGORIES = ['combat', 'schema', 'upgrade'] as const
 export type Category = typeof CATEGORIES[number]
+export const UPGRADE_TYPES = ['deploy', 'advance', 'strategize', 'dominate'] as const
+export type UpgradeType = typeof UPGRADE_TYPES[number]
 type Common = { faction_id: number; name: string; category: Category }
 export type CardInput = Common & (
   | { category: 'combat'; level: number; resource_cost: number; shields: number; guns: number; eagles: number; upper_text: string; lower_text: string }
   | { category: 'schema'; subtype: 'schema' | 'tactic'; text: string; action: 'rotate_clockwise' | 'rotate_counterclockwise' | 'move_vertical' | 'move_horizontal' }
-  | { category: 'upgrade'; upgrade_type: 'deploy' | 'advance' | 'strategize' | 'upgrade'; text: string }
+  | { category: 'upgrade'; upgrade_type: UpgradeType; level: number; resource_cost: number; text: string }
 )
 export type Card = CardInput & { id: number; created_at: string; updated_at: string }
 export type CardField = { key: string; label: string; kind: 'number' | 'text' | 'select'; options?: readonly string[]; max?: number }
@@ -25,7 +27,9 @@ export const FIELDS: Record<Category, CardField[]> = {
     { key: 'text', label: 'Text', kind: 'text' },
   ],
   upgrade: [
-    { key: 'upgrade_type', label: 'Upgrade type', kind: 'select', options: ['deploy', 'advance', 'strategize', 'upgrade'] },
+    { key: 'upgrade_type', label: 'Order', kind: 'select', options: UPGRADE_TYPES },
+    { key: 'level', label: 'Level', kind: 'select', options: ['0', '1', '2', '3'] },
+    { key: 'resource_cost', label: 'Resource price', kind: 'number' },
     { key: 'text', label: 'Text', kind: 'text' },
   ],
 }

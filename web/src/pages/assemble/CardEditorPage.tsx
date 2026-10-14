@@ -7,12 +7,12 @@ import { DiffPanel } from '../../components/DiffPanel'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { apiGet } from '../../lib/api'
 import { createCard, updateCard } from '../cards/api'
-import { CATEGORIES, newDraft, type Card, type CardInput, type Category } from '../cards/model'
+import { ACTION_LABELS, CATEGORIES, newDraft, UPGRADE_TYPES, type Card, type CardInput, type Category } from '../cards/model'
 import { draftInput } from '../cards/validation'
 import { useFactions } from '../factions/api'
-import { emptyAssembly, saveAssembly, uploadArtwork, type Assembly } from './api'
+import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, type Assembly } from './api'
 import { defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
-import { ART_WINDOW, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
+import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
 import { labLink, useTemplate, useTemplateLayout } from './library'
@@ -27,19 +27,19 @@ import { PositionNumber } from './LayerControls'
 const panel = 'space-y-4 rounded-lg border border-divider bg-surface p-4'
 const NUMBER_FIELDS = [['resource_cost', 'Resource price'], ['guns', 'Guns'], ['shields', 'Shields'], ['eagles', 'Morale / eagles']] as const
 
-export default function CardEditorPage({ newFactionId, onCategoryChange }: { newFactionId?: string; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
+export default function CardEditorPage({ newFactionId, newCategory = 'combat', onCategoryChange }: { newFactionId?: string; newCategory?: Category; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
   const creating = newFactionId !== undefined
   const { id: routeId = '' } = useParams()
   const id = creating ? '-1' : routeId
   const navigate = useNavigate()
   const factions = useFactions()
-  const [newSource] = useState<Card>(() => ({ ...draftInput(newDraft('combat', newFactionId ?? '')) as CardInput, id: -1, created_at: '', updated_at: '' }))
+  const [newSource] = useState<Card>(() => ({ ...draftInput(newDraft(newCategory, newFactionId ?? '')) as CardInput, id: -1, created_at: '', updated_at: '' }))
   const [localAssembly, setLocalAssembly] = useState(emptyAssembly)
   const [artworkFile, setArtworkFile] = useState<File | null>(null)
   useEffect(() => {
     if (!creating) return
-    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id)
-    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id) }
+    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id)
+    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id) }
   }, [creating, id])
   useEffect(() => {
     if (!creating) return
@@ -55,17 +55,21 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
   const state = useAssembly()
   const { saved, draft, issues, card, dirty } = useCardDraft(source, creating ? 'New card' : '')
   const factionId = Number(draft?.faction_id) || null
-  const template = useTemplate(factionId, source?.category ?? 'combat')
-  const templateLayout = useTemplateLayout()
-  const back = useTemplate(factionId, source?.category ?? 'combat', 'back')
-  const { input, assembly, logoScale, transform, subtypes, subtype: activeSubtype } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
+  const category = source?.category ?? newCategory
+  const upgrade = category === 'upgrade', schema = category === 'schema', framed = upgrade || schema
+  const ART_WINDOW = artWindow(category)
+  const template = useTemplate(factionId, category)
+  const templateLayout = useTemplateLayout(category)
+  const back = useTemplate(factionId, category, 'back')
+  const { input, assembly, logoScale, titleScale, transform, subtypes, subtype: activeSubtype } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
   const preview = useRef<HTMLCanvasElement | null>(null)
   const textTarget = useRef<{ key: string; element: HTMLInputElement | HTMLTextAreaElement } | null>(null)
-  const upperText = useRef<HTMLTextAreaElement>(null)
+  const firstText = useRef<HTMLTextAreaElement>(null), firstTextKey = framed ? 'text' : 'upper_text'
   const logoScaleDirty = state.logoScales[id] !== undefined
+  const titleScaleDirty = state.titleScales[id] !== undefined
   const transformDirty = !!state.transforms[id]
   const hasArtwork = !!assembly.data?.image_url
   // The artwork moves only while selected: click it on the preview (or use
@@ -82,13 +86,13 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
         let artworkError = ''
         try {
           const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
-          const assembled = await saveAssembly(String(created.id), { ...uploaded, subtype_id: localAssembly.subtype_id, logo_scale: logoScale, transform, layout: {} })
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, subtype_id: localAssembly.subtype_id, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale) })
           queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
         } catch (e) {
           artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
           // Keep the chosen position available for saving from the editor.
           useAssembly.getState().transform(String(created.id), transform)
-          useAssembly.getState().logoScale(String(created.id), logoScale)
+          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale)
         }
         queryClient.setQueryData(['cards', 'one', String(created.id)], created)
         useAssembly.getState().select({ factionId: created.faction_id, category: created.category })
@@ -100,11 +104,12 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
         queryClient.setQueryData(['cards', 'one', id], updated)
         useAssembly.getState().clearEdits(id)
       }
-      if ((transformDirty || logoScaleDirty) && assembly.data) {
+      if ((transformDirty || logoScaleDirty || titleScaleDirty) && assembly.data) {
         const value = { ...assembly.data, transform, logo_scale: logoScale }
-        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: {} }))
+        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale) }))
         useAssembly.getState().clearTransform(id)
         useAssembly.getState().clearLogoScale(id)
+        useAssembly.getState().clearTitleScale(id)
       }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['cards'] }),
@@ -117,14 +122,14 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
         setLocalAssembly(next)
         return next
       }
-      return file ? uploadArtwork(id, file) : saveAssembly(id, { ...(assembly.data as Assembly), image_key: '', transform: defaultArtwork(), layout: {} })
+      return file ? uploadArtwork(id, file) : saveAssembly(id, { ...(assembly.data as Assembly), image_key: '', transform: defaultArtwork() })
     },
     onSuccess: saved => { if (!creating) queryClient.setQueryData(['card-assembly', id], saved); useAssembly.getState().clearTransform(id) },
   })
 
   const subtype = useMutation({
     mutationFn: async (subtypeId: number) => {
-      const value = { ...(assembly.data as Assembly), subtype_id: subtypeId, layout: {} }
+      const value = { ...(assembly.data as Assembly), subtype_id: subtypeId }
       if (creating) { setLocalAssembly(value); return value }
       return saveAssembly(id, value)
     },
@@ -207,7 +212,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
   function edit(field: string, value: string) { save.reset(); state.edit(id, field, value) }
   function insertSymbol(token: string) {
     if (!draft) return
-    const target = textTarget.current?.element.isConnected ? textTarget.current : upperText.current ? { key: 'upper_text', element: upperText.current } : null
+    const target = textTarget.current?.element.isConnected ? textTarget.current : firstText.current ? { key: firstTextKey, element: firstText.current } : null
     if (!target) return
     const text = draft[target.key]
     const start = target.element.selectionStart ?? text.length, end = target.element.selectionEnd ?? start
@@ -215,7 +220,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
     requestAnimationFrame(() => { target.element.focus(); target.element.setSelectionRange(start + token.length, start + token.length) })
   }
   function discard() {
-    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id)
+    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id)
     if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
   }
   async function download() {
@@ -231,9 +236,8 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
 
   if (!creating && cardQuery.isError) return <div role="alert" className="text-danger">{cardQuery.error.message} <Link to="/assemble" className="text-accent underline">Back to library</Link></div>
   if (!source || !draft || !saved) return <p role="status" className="text-sm text-ink/60">Loading card…</p>
-  if (source.category !== 'combat') return <p className="text-sm text-ink/60">Only combat cards can be assembled for now. <Link to="/assemble" className="text-accent underline">Back to library</Link></p>
 
-  const anyDirty = creating || dirty || transformDirty || logoScaleDirty
+  const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty
   const busy = save.isPending || artwork.isPending || subtype.isPending
   const categorySubtypes = subtypes.data?.filter(st => st.category === source.category) ?? []
   const queryError = [assembly, ...template.queries].find(q => q.isError)?.error ?? templateLayout.error
@@ -283,7 +287,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
           </div>}
           </div>
           {!result && <p role="status" className="p-6 text-center text-sm text-ink/60">
-            {renderError || (issues.length ? 'Fix the card fields to update the preview.' : !template.isPending && !template.image ? 'No combat template chosen for this faction. Pick one with the settings button in the library.' : 'Rendering card…')}
+            {renderError || (issues.length ? 'Fix the card fields to update the preview.' : !template.isPending && !template.image ? `No ${upgrade ? 'upgrade' : schema ? 'event' : 'combat'} template chosen for this faction. Pick one with the settings button in the library.` : 'Rendering card…')}
           </p>}
         </div>
         {renderError && <Button onClick={retry}>Retry rendering</Button>}
@@ -299,7 +303,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
               <option value="">Choose a faction…</option>
               {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>}</Field>
-            <Field label="Type">{fid => <select id={fid} className={selectClass} value="combat" onChange={e => onCategoryChange?.(e.target.value as Category, draft.faction_id)}>
+            <Field label="Type">{fid => <select id={fid} className={selectClass} value={category} onChange={e => onCategoryChange?.(e.target.value as Category, draft.faction_id)}>
               {CATEGORIES.map(category => <option key={category} value={category}>{LIBRARY_TABS.find(t => t.category === category)!.label}</option>)}
             </select>}</Field>
           </div>}
@@ -311,29 +315,37 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
           {activeSubtype && !activeSubtype.overlays.length && <p className="m-0 text-xs text-ink/60">“{activeSubtype.name}” has no overlays yet, so the card type overlay is used. <Link to="/subtypes" className="text-accent underline">Upload overlays</Link>.</p>}
           {!subtypes.isPending && !categorySubtypes.length && <p className="m-0 text-xs text-ink/60"><Link to="/subtypes" className="text-accent underline">Create a subtype</Link> to give this card its own overlays.</p>}
           <Field label="Title">{fid => <input id={fid} autoFocus={creating} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />}</Field>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <Field label={`Title size (${Math.round(titleScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={titleScale} disabled={busy} className="w-full"
+            onChange={e => { save.reset(); state.titleScale(id, Number(e.target.value)) }} />}</Field>
+          {titleScale !== 1 && <Button disabled={busy} onClick={() => { save.reset(); state.titleScale(id, 1) }}>Reset title size</Button>}
+          {schema && <div className="grid grid-cols-2 gap-3">
+            <Field label="Kind">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.subtype} onChange={e => edit('subtype', e.target.value)}>{['schema', 'tactic'].map(t => <option key={t} value={t}>{t === 'schema' ? 'Scheme' : 'Tactic'}</option>)}</SearchableSelect>}</Field>
+            <Field label="Action">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.action} onChange={e => edit('action', e.target.value)}>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SearchableSelect>}</Field>
+          </div>}
+          {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}</SearchableSelect>}</Field>}
+          {!schema && <div className={`grid grid-cols-2 gap-3 ${upgrade ? 'sm:grid-cols-2' : 'sm:grid-cols-5'}`}>
             <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
-            {NUMBER_FIELDS.map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
-              disabled={key === 'resource_cost' && draft.level === '0'} title={key === 'resource_cost' && draft.level === '0' ? 'Level 0 cards have no resource price' : undefined} />}</Field>)}
-          </div>
-          {(['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === 'upper_text' ? upperText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
+            {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
+              disabled={!upgrade && key === 'resource_cost' && draft.level === '0'} title={!upgrade && key === 'resource_cost' && draft.level === '0' ? 'Level 0 cards have no resource price' : undefined} />}</Field>)}
+          </div>}
+          {(framed ? ['text'] as const : ['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={key === 'text' ? 'Text' : LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
           <SymbolPicker insert={insertSymbol} disabled={busy} />
           <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
-            simpleRows={['level', 'resource_cost', 'guns', 'shields', 'eagles'].filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
-            textDiffs={(['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: LAYER_LABELS[key], before: saved[key], after: draft[key] }))} /></details>}
+            simpleRows={(schema ? ['subtype', 'action'] : upgrade ? ['upgrade_type', 'level', 'resource_cost'] : ['level', 'resource_cost', 'guns', 'shields', 'eagles']).filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
+            textDiffs={(framed ? ['name', 'text'] as const : ['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : LAYER_LABELS[key], before: saved[key], after: draft[key] }))} /></details>}
         </section>
 
-        {draft.level === '0' && <section aria-label="C0 faction logo" className={panel}>
-          <h2 className="m-0 font-display text-accent-300">C0 faction logo</h2>
+        {(framed || draft.level === '0') && <section aria-label="C0 faction logo" className={panel}>
+          <h2 className="m-0 font-display text-accent-300">{framed ? 'Faction logo' : 'C0 faction logo'}</h2>
           <Field label={`Logo scale (${Math.round(logoScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.1} max={3} step={0.01} value={logoScale} disabled={busy} className="w-full"
             onChange={e => { save.reset(); state.logoScale(id, Number(e.target.value)) }} />}</Field>
           <Button disabled={busy || logoScale === 1} onClick={() => { save.reset(); state.logoScale(id, 1) }}>Reset logo scale</Button>
           <p className="m-0 text-xs text-ink/60">Resizes this card’s faction logo around the center of its badge. {creating ? 'Saved when you create the card.' : 'Click Save to keep the size.'}</p>
         </section>}
 
-        <section ref={artworkPanel} aria-label="Artwork" data-undo-scope className={panel}>
+        {!upgrade && <section ref={artworkPanel} aria-label="Artwork" data-undo-scope className={panel}>
           <h2 className="m-0 font-display text-accent-300">Artwork</h2>
           <div className="flex flex-wrap items-center gap-2">
             <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${busy ? 'pointer-events-none opacity-45' : ''}`}>
@@ -358,7 +370,7 @@ export default function CardEditorPage({ newFactionId, onCategoryChange }: { new
             </div>
             <Button onClick={() => setTransform(defaultArtwork())}>Reset position</Button>
           </> : <p className="m-0 text-xs text-ink/60">Upload a PNG or JPEG (up to 20 MiB). It is placed in the frame’s open art area.</p>}
-        </section>
+        </section>}
 
       </div>
     </div>

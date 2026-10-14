@@ -96,7 +96,9 @@ func ValidateCard(in CardInput) []CardFieldError {
 		text("text", in.Text)
 		enum("action", in.Action, "rotate_clockwise", "rotate_counterclockwise", "move_vertical", "move_horizontal")
 	case "upgrade":
-		enum("upgrade_type", in.UpgradeType, "deploy", "advance", "strategize", "upgrade")
+		enum("upgrade_type", in.UpgradeType, "deploy", "advance", "strategize", "dominate")
+		number("level", in.Level, 3)
+		number("resource_cost", in.ResourceCost, MaxCardInteger)
 		text("text", in.Text)
 	}
 	return out
@@ -110,7 +112,7 @@ func CardCategoryFields(category string) map[string]bool {
 	case "schema":
 		extra = []string{"subtype", "text", "action"}
 	case "upgrade":
-		extra = []string{"upgrade_type", "text"}
+		extra = []string{"upgrade_type", "level", "resource_cost", "text"}
 	}
 	for _, f := range extra {
 		fields[f] = true

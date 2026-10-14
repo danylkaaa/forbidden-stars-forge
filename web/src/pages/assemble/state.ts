@@ -6,7 +6,9 @@ import type { ArtworkTransform } from './artwork'
 // card id.
 type State = {
   factionId: number | null; category: Category
-  logoScales: Record<string, number>
+  logoScales: Record<string, number>; titleScales: Record<string, number>
+  titleScale: (id: string, value: number) => void
+  clearTitleScale: (id: string) => void
   logoScale: (id: string, value: number) => void
   clearLogoScale: (id: string) => void
   edits: Record<string, CardDraft>; transforms: Record<string, ArtworkTransform>
@@ -18,9 +20,11 @@ type State = {
 }
 const without = <T,>(record: Record<string, T>, key: string) => { const next = { ...record }; delete next[key]; return next }
 export const useAssembly = create<State>()(persist((set) => ({
-  factionId: null, category: 'combat', logoScales: {}, edits: {}, transforms: {},
+  factionId: null, category: 'combat', logoScales: {}, titleScales: {}, edits: {}, transforms: {},
   logoScale: (id, value) => set(s => ({ logoScales: { ...s.logoScales, [id]: value } })),
   clearLogoScale: id => set(s => ({ logoScales: without(s.logoScales, id) })),
+  titleScale: (id, value) => set(s => ({ titleScales: { ...s.titleScales, [id]: value } })),
+  clearTitleScale: id => set(s => ({ titleScales: without(s.titleScales, id) })),
   select: selection => set(selection),
   edit: (id, field, value) => set(s => ({ edits: { ...s.edits, [id]: { ...s.edits[id], [field]: value } } })),
   clearEdits: id => set(s => ({ edits: without(s.edits, id) })),
