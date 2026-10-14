@@ -180,3 +180,26 @@ func TestUpgradeValidationNeedsLevelAndPrice(t *testing.T) {
 		t.Fatalf("level 4 must be rejected: %v", e)
 	}
 }
+
+func TestUpgradeLimitationIsOptionalAndOnlyForUpgrades(t *testing.T) {
+	s, f, _ := setupCards(t)
+	upgrade := CardInput{FactionID: f, Name: "Forge World", Category: "upgrade", UpgradeType: ptr("deploy"), Level: ptr[int64](1), ResourceCost: ptr[int64](2), Text: ptr("Deploy.")}
+	plain, err := s.Create(upgrade)
+	if err != nil || plain.Limitation != nil {
+		t.Fatalf("an upgrade without a limitation: %+v %v", plain.Limitation, err)
+	}
+	upgrade.Limitation = ptr("Limit one per area.")
+	c, err := s.Create(upgrade)
+	if err != nil || c.Limitation == nil || *c.Limitation != "Limit one per area." {
+		t.Fatalf("limitation not stored: %+v %v", c.Limitation, err)
+	}
+	upgrade.Limitation = ptr("  ")
+	if c, err = s.Update(c.ID, upgrade); err != nil || c.Limitation != nil {
+		t.Fatalf("an empty limitation should be cleared: %+v %v", c.Limitation, err)
+	}
+	combat := combatCard(f)
+	combat.Limitation = ptr("nope")
+	if len(ValidateCard(combat)) == 0 {
+		t.Error("a combat card must not take a limitation")
+	}
+}

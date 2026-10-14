@@ -1,59 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { Field } from '../../components/Field'
 import { Magnifier } from '../../components/Magnifier'
-import { removeNebulaPicture, saveNebula, uploadNebulaPicture, useNebula, useNebulaPicture } from './api'
-import { BackImage } from './BackImage'
-import { nebulaTemplateUrl, type NebulaSettings } from './backDecor'
+import { removeNebulaPicture, saveNebula, useFactionColor, uploadNebulaPicture, useNebulaPicture } from './api'
+import { useNebulaDraft } from './useNebulaDraft'
+import { nebulaTemplateUrl } from './backDecor'
 import { useTemplate } from './library'
 import { Card3DViewer } from './Card3DViewer'
 import { CubeIcon } from '../../components/icons'
 import type { Category } from '../cards/model'
 import { useFactions } from '../factions/api'
-
-// Edits a faction's nebula settings as a draft: saved explicitly, discarded freely.
-function useNebulaDraft(factionId: number) {
-  const saved = useNebula(factionId)
-  const [draft, setDraft] = useState<NebulaSettings | null>(null)
-  const value = draft ?? saved
-  const queryClient = useQueryClient()
-  const save = useMutation({
-    mutationFn: () => saveNebula(factionId, value),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['nebulas'] }); setDraft(null) },
-  })
-  const change = (patch: Partial<NebulaSettings>) => { save.reset(); setDraft({ ...value, ...patch }) }
-  const discard = () => { save.reset(); setDraft(null) }
-  return { value, draft, save, change, discard }
-}
-type NebulaDraft = ReturnType<typeof useNebulaDraft>
-
-function NebulaControls({ nebula, colorHint }: { nebula: NebulaDraft; colorHint: string }) {
-  const { value, draft, save, change, discard } = nebula
-  return <>
-    <div className="flex flex-wrap items-center gap-3">
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!value.color} onChange={e => change({ color: e.target.checked ? '#6a3a8a' : '' })} />Custom colour</label>
-      <input type="color" aria-label="Nebula colour" disabled={!value.color} value={value.color || '#6a3a8a'} onChange={e => change({ color: e.target.value })} className="h-8 w-12 cursor-pointer" />
-      {!value.color && <span className="text-xs text-ink/50">{colorHint}</span>}
-    </div>
-    <div className="flex items-end gap-2">
-      <div className="w-40"><Field label="Seed">{id => <input id={id} type="number" min={0} max={2147483647} step={1} value={value.seed}
-        onChange={e => change({ seed: Math.min(2147483647, Math.max(0, Math.floor(Number(e.target.value)) || 0)) })}
-        className="w-full rounded border border-divider bg-transparent px-2 py-1 text-sm" />}</Field></div>
-      <Button onClick={() => change({ seed: Math.floor(Math.random() * 1000000) })}>Randomize</Button>
-    </div>
-    <Field label={`Brightness (${Math.round(value.density * 100)}%)`}>{id => <input id={id} type="range" min="20" max="200" step="5" value={Math.round(value.density * 100)}
-      className="w-full" onChange={e => change({ density: Number(e.target.value) / 100 })} />}</Field>
-    <div className="flex gap-2">
-      <Button disabled={!draft || save.isPending} onClick={() => save.mutate()}>Save nebula</Button>
-      <Button disabled={!draft || save.isPending} onClick={discard}>Discard</Button>
-    </div>
-    {save.isSuccess && <p role="status" className="m-0 text-sm text-ink/60">Saved.</p>}
-    {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
-  </>
-}
-
+import type { PlacementDraft } from './useNebulaPlacementDraft'
 
 type Spin = { front: string; back: string; logoUrl?: string; logoScale?: number; category?: Category }
 // A preview that opens full size on click, with a 3D button beside it.
@@ -98,14 +57,35 @@ function NebulaTile({ label, factionId, render, spin, picture }: { label: string
   </figure>
 }
 
+function PlacementControls({ placement, defaultBrightness, brightness }: { placement: PlacementDraft; defaultBrightness: number; brightness: boolean }) {
+  const { value, change, randomize } = placement
+  const lit = value.brightness || defaultBrightness
+  return <>
+    <p className="m-0 text-sm text-ink/70">Drag the card preview to move the nebula.</p>
+    <Field label={`Rotation (${Math.round(value.rotation)}°)`}>{id => <input id={id} type="range" min="-180" max="180" step="1" value={Math.round(value.rotation)}
+      className="w-full" onChange={e => change({ rotation: Number(e.target.value) })} />}</Field>
+    {brightness && <>
+      <Field label={`Nebula brightness (${Math.round(lit * 100)}%)`}>{id => <input id={id} type="range" min="20" max="200" step="5" value={Math.round(lit * 100)}
+        className="w-full" onChange={e => change({ brightness: Number(e.target.value) / 100 })} />}</Field>
+      {value.brightness ? <Button onClick={() => change({ brightness: 0 })}>Use the faction's brightness</Button> : <p className="m-0 text-xs text-ink/50">The faction's brightness.</p>}
+    </>}
+    <Button onClick={randomize}>Randomize</Button>
+  </>
+}
+
 // A faction's nebula, tuned in one place and shown three ways: alone, on the
 // combat back and on the event back. Saved per faction, so it stays when a
 // back image is replaced. The switch is saved at once; the look with the button.
-export function FactionNebulaSection({ factionId }: { factionId: number }) {
+// `scope` limits it: the faction alone (with the template switch), or the back of one card type.
+export function FactionNebulaSection({ factionId, scope = 'faction', placement }: { factionId: number; scope?: 'faction' | 'combat' | 'schema' | 'upgrade'; placement?: PlacementDraft }) {
   const nebula = useNebulaDraft(factionId), factions = useFactions()
-  const fallback = factions.data?.find(f => f.id === factionId)?.primary_color ?? ''
-  const combatPicture = useNebulaPicture('combat'), eventPicture = useNebulaPicture('schema')
+  const factionColor = useFactionColor(factionId), fallback = factionColor || (factions.data?.find(f => f.id === factionId)?.primary_color ?? '')
+  const combatPicture = useNebulaPicture('combat'), eventPicture = useNebulaPicture('schema'), upgradePicture = useNebulaPicture('upgrade')
+  const scopePicture = scope === 'schema' ? eventPicture : scope === 'upgrade' ? upgradePicture : combatPicture
   const combatBack = useTemplate(factionId, 'combat', 'back').image, eventBack = useTemplate(factionId, 'schema', 'back').image
+  const pv = placement?.value
+  // The event back may have its own brightness.
+  const drawn = useMemo(() => ({ ...nebula.value, color: nebula.value.color || factionColor, density: scope === 'schema' && pv?.brightness ? pv.brightness : nebula.value.density }), [nebula.value, factionColor, scope, pv?.brightness])
   const queryClient = useQueryClient()
   const toggle = useMutation({
     mutationFn: (on: boolean) => saveNebula(factionId, { ...nebula.value, as_template: on }),
@@ -114,30 +94,29 @@ export function FactionNebulaSection({ factionId }: { factionId: number }) {
   const [plain, setPlain] = useState('')
   useEffect(() => {
     let cancelled = false
-    nebulaTemplateUrl(nebula.value, fallback, { width: 612, height: 828 }, combatPicture).then(url => { if (!cancelled) setPlain(url) }).catch(() => {})
+    nebulaTemplateUrl(drawn, fallback, { width: 612, height: 828 }, scopePicture, pv).then(url => { if (!cancelled) setPlain(url) }).catch(() => {})
     return () => { cancelled = true }
-  }, [nebula.value, fallback, combatPicture])
-  // Without a chosen back image the nebula itself stands in for it.
-  const back = (category: 'combat' | 'schema', image: typeof combatBack) => (image?.url ?? plain)
-    ? <BackImage category={category} factionId={factionId} url={image?.url ?? plain} logoUrl={image?.logoUrl} scale={image?.logoScale} nebula={nebula.value} alt={`${category === 'combat' ? 'Combat' : 'Event'} back with nebula`} />
-    : null
-  return <details open className="rounded-md border border-divider p-3">
-    <summary className="cursor-pointer font-display text-sm font-semibold text-accent">Faction nebula</summary>
-    <section aria-label="Faction nebula" className="mt-3 flex flex-wrap gap-5">
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn, fallback, scopePicture, scope, pv?.x, pv?.y, pv?.rotation])
+  const plainImage = plain ? <img src={plain} alt={`${scope === 'combat' ? 'Combat' : scope === 'upgrade' ? 'Upgrade' : 'Event'} nebula`} className="block h-full w-full object-cover" /> : null
+  return <div>
+    <section aria-label={scope === 'faction' ? 'Faction nebula' : 'Back nebula'} className="flex flex-wrap gap-5">
       <div className="flex flex-wrap gap-3">
-        <NebulaTile label="Nebula alone" factionId={factionId} spin={plain ? { front: plain, back: plain } : null}
-          render={() => plain ? <img src={plain} alt="Nebula alone" className="block h-full w-full object-cover" /> : null} />
-        <NebulaTile label="Combat card back" factionId={factionId} picture={{ category: 'combat', custom: !!combatPicture }} render={() => back('combat', combatBack)}
-          spin={combatBack?.url ?? plain ? { front: plain, back: combatBack?.url ?? plain, logoUrl: combatBack?.logoUrl, logoScale: combatBack?.logoScale, category: 'combat' } : null} />
-        <NebulaTile label="Event card back" factionId={factionId} picture={{ category: 'schema', custom: !!eventPicture }} render={() => back('schema', eventBack)}
-          spin={eventBack?.url ?? plain ? { front: plain, back: eventBack?.url ?? plain, logoUrl: eventBack?.logoUrl, logoScale: eventBack?.logoScale, category: 'schema' } : null} />
+        {scope === 'faction' && <NebulaTile label="Nebula alone" factionId={factionId} spin={plain ? { front: plain, back: plain } : null}
+          render={() => plain ? <img src={plain} alt="Nebula alone" className="block h-full w-full object-cover" /> : null} />}
+        {scope === 'combat' && <NebulaTile label="Combat nebula" factionId={factionId} picture={{ category: 'combat', custom: !!combatPicture }} render={() => plainImage}
+          spin={combatBack?.url ?? plain ? { front: plain, back: combatBack?.url ?? plain, logoUrl: combatBack?.logoUrl, logoScale: combatBack?.logoScale, category: 'combat' } : null} />}
+        {scope === 'upgrade' && <NebulaTile label="Upgrade nebula" factionId={factionId} picture={{ category: 'upgrade', custom: !!upgradePicture }} render={() => plainImage} spin={null} />}
+        {scope === 'schema' && <NebulaTile label="Event nebula" factionId={factionId} picture={{ category: 'schema', custom: !!eventPicture }} render={() => plainImage}
+          spin={eventBack?.url ?? plain ? { front: plain, back: eventBack?.url ?? plain, logoUrl: eventBack?.logoUrl, logoScale: eventBack?.logoScale, category: 'schema' } : null} />}
       </div>
       <div className="min-w-56 flex-1 space-y-3">
-        <NebulaControls nebula={nebula} colorHint="Following the back image's colour (the faction's colour for the nebula alone)" />
-        <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={!!nebula.value.as_template} disabled={toggle.isPending} onChange={e => toggle.mutate(e.target.checked)} className="accent-[var(--color-accent)]" />Use nebula as template</label>
+        {scope === 'faction' ? <p className="m-0 text-xs text-ink/60">The nebula's colour and brightness are set in the banner above.</p> : placement && <PlacementControls placement={placement} defaultBrightness={nebula.value.density} brightness={scope === 'schema'} />}
+        {scope === 'faction' && <><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={!!nebula.value.as_template} disabled={toggle.isPending} onChange={e => toggle.mutate(e.target.checked)} className="accent-[var(--color-accent)]" />Use nebula as template</label>
         <p className="m-0 text-xs text-ink/60">With this on, the faction's cards of every type without a chosen template are drawn on this nebula.</p>
-        {toggle.isError && <p role="alert" className="m-0 text-sm text-danger">{toggle.error.message}</p>}
+        {toggle.isError && <p role="alert" className="m-0 text-sm text-danger">{toggle.error.message}</p>}</>}
+        {scope !== 'faction' && <p className="m-0 text-xs text-ink/60">Colour is the faction's (Faction config tab). Position, rotation and the nebula picture are for this card type only.</p>}
       </div>
     </section>
-  </details>
+  </div>
 }

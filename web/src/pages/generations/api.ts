@@ -10,7 +10,7 @@ export function useDoneBatchItems() {
   return useQuery({ queryKey: ['batch-items'], queryFn: () => apiGet<GalleryBatchItem[]>('/api/batch-items') })
 }
 
-// One image on the Generations page, from either Faction Lab or a batch.
+// One image on the Assets page, from either Faction Lab or a batch, or uploaded.
 export type GalleryEntry = {
   key: string
   name: string
@@ -20,6 +20,7 @@ export type GalleryEntry = {
   editInstruction: string
   compareSrc: string | null // image it was edited from
   source: 'test' | 'batch'
+  origin: 'generated' | 'uploaded' // made by the image model, or uploaded by you
   factionId: number
   cardTypeId: number
   mode: 'draft' | 'final'
@@ -37,6 +38,7 @@ export type GalleryFilters = {
   factionIds: number[]
   cardTypeIds: number[]
   sources: GalleryEntry['source'][]
+  origins: GalleryEntry['origin'][]
   modes: GalleryEntry['mode'][]
 }
 
@@ -44,7 +46,7 @@ const list = (v: string | null) => (v ? v.split(',').filter(Boolean) : [])
 const ids = (v: string | null) => list(v).map(Number).filter((n) => Number.isInteger(n) && n > 0)
 
 // Filters live in the URL (?q=…&fav=1&faction=1,2&card_type=3&dlc=…&source=…&mode=…)
-// so Factions / Card Types can link here with them prefilled.
+// so Factions / Card Templates can link here with them prefilled.
 export function parseFilters(p: URLSearchParams): GalleryFilters {
   return {
     q: p.get('q') ?? '',
@@ -53,6 +55,7 @@ export function parseFilters(p: URLSearchParams): GalleryFilters {
     factionIds: ids(p.get('faction')),
     cardTypeIds: ids(p.get('card_type')),
     sources: list(p.get('source')).filter((s): s is 'test' | 'batch' => s === 'test' || s === 'batch'),
+    origins: list(p.get('origin')).filter((o): o is 'generated' | 'uploaded' => o === 'generated' || o === 'uploaded'),
     modes: list(p.get('mode')).filter((m): m is 'draft' | 'final' => m === 'draft' || m === 'final'),
   }
 }
@@ -65,12 +68,16 @@ export function filtersToParams(f: GalleryFilters): URLSearchParams {
   if (f.factionIds.length) p.set('faction', f.factionIds.join(','))
   if (f.cardTypeIds.length) p.set('card_type', f.cardTypeIds.join(','))
   if (f.sources.length) p.set('source', f.sources.join(','))
+  if (f.origins.length) p.set('origin', f.origins.join(','))
   if (f.modes.length) p.set('mode', f.modes.join(','))
   return p
 }
 
 export function generationsLink(filters: Partial<GalleryFilters>): string {
-  const p = filtersToParams({ q: '', favorites: false, dlcs: [], factionIds: [], cardTypeIds: [], sources: [], modes: [], ...filters })
+  const p = filtersToParams({ q: '', favorites: false, dlcs: [], factionIds: [], cardTypeIds: [], sources: [], origins: [], modes: [], ...filters })
   const q = p.toString()
   return q ? `/generations?${q}` : '/generations'
 }
+
+// The prompt the server stores on an uploaded image, so it can tell it from a generated one.
+export const UPLOADED_PROMPT = '(uploaded)'

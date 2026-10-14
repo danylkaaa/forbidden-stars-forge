@@ -6,8 +6,9 @@ import { CubeIcon } from '../../components/icons'
 import { Card3DViewer } from './Card3DViewer'
 import { useTemplate } from './library'
 import type { Side } from './api'
-import { BackLogoScaleControls } from './BackLogoPreview'
-import { useBackLogo } from './backLogo'
+import { useFactionBanner } from './api'
+import { useFactionLogos } from './logos'
+import { useLibraryImages } from './library'
 
 // Assemble the front with a demo or saved card; keep generated backs untouched.
 export function GenerationPreview3D({ imageUrl, factionId, side, title }: {
@@ -27,16 +28,18 @@ function GenerationViewer({ imageUrl, factionId, side, title, onClose }: {
   imageUrl: string; factionId: number; side: Side; title: string; onClose: () => void
 }) {
   const opposite = useTemplate(factionId, 'combat', side === 'front' ? 'back' : 'front')
-  const logo = useBackLogo(factionId)
+  // The back is drawn as on a card: the faction's banner over the back image.
+  const banner = useFactionBanner(factionId), images = useLibraryImages()
+  const logoUrl = useFactionLogos().data?.find(l => l.faction_id === factionId)?.url
+  const elementUrl = banner.element_key ? images.data.find(i => i.key === banner.element_key)?.url : undefined
   const [cardId, setCardId] = useState(0)
   const { card, combat } = usePreviewCard(factionId, cardId)
   const frontImage = side === 'front' ? imageUrl : opposite.image?.url ?? null
   const { result, error, rendering } = useAssembledPreview(frontImage, factionId, card)
   const front = useMemo(() => result?.canvas.toDataURL('image/png') ?? null, [result])
-  return <Card3DViewer title={title} front={front}
-    back={side === 'back' ? imageUrl : opposite.image?.url ?? null} backLogoUrl={logo.logoUrl} backLogoScale={logo.scale} initialSide={side} onClose={onClose}
+  return <Card3DViewer category="combat" factionId={factionId} title={title} front={front}
+    back={side === 'back' ? imageUrl : opposite.image?.url ?? null} backLogoUrl={logoUrl} backLogoScale={banner.logo_scale} backElementUrl={elementUrl} initialSide={side} onClose={onClose}
     controls={<>
-      <BackLogoScaleControls logo={logo} />
       <Field label="Preview with card">{id => <SearchableSelect id={id} className={selectClass} value={card.id} onChange={e => setCardId(Number(e.target.value))}>
         <option value={0}>Demo card</option>
         {combat.map(c => <option key={c.id} value={c.id}>{c.name} (level {c.level})</option>)}

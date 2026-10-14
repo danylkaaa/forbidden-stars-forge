@@ -1,11 +1,12 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './AppLayout'
 
 function mount(path: string) {
-  const router = createMemoryRouter([{ element: <AppLayout />, children: ['factions', 'card-types', 'cards', 'assemble', 'faction-lab', 'generations', 'batches/:id', 'settings', 'subtypes'].map(path => ({ path: `/${path}`, element: <p>Page content</p> })) }], { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
+  const router = createMemoryRouter([{ element: <AppLayout />, children: ['factions', 'card-types', 'cards', 'assemble', 'faction-lab', 'generations', 'batches/:id', 'settings', 'card-templates'].map(path => ({ path: `/${path}`, element: <p>Page content</p> })) }], { initialEntries: [path] })
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
   return router
 }
 const sections = () => within(screen.getByRole('navigation', { name: 'Sections' }))
@@ -31,13 +32,13 @@ test('shared management pages preserve library mode through navigation and Back'
   await userEvent.click(sections().getByRole('link', { name: 'Factions' }))
   expect(router.state.location.search).toBe('?mode=library')
   expect(modes().getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
-  await userEvent.click(sections().getByRole('link', { name: 'Card Types' }))
-  expect(router.state.location.pathname).toBe('/subtypes')
+  await userEvent.click(sections().getByRole('link', { name: 'Card Templates' }))
+  expect(router.state.location.pathname).toBe('/card-templates')
   await userEvent.click(modes().getByRole('link', { name: 'AI Image Generation' }))
-  expect(sections().getByRole('link', { name: 'Card Types' })).toHaveAttribute('href', '/card-types')
+  expect(sections().getByRole('link', { name: 'Card Templates' })).toHaveAttribute('href', '/card-types')
   await act(() => router.navigate(-1))
   expect(modes().getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
-  expect(sections().getByRole('link', { name: 'Card Types' })).toHaveAttribute('aria-current', 'page')
+  expect(sections().getByRole('link', { name: 'Card Templates' })).toHaveAttribute('aria-current', 'page')
 })
 
 test.each([

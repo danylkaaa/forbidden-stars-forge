@@ -36,13 +36,17 @@ func EnsureBackTemplates(db *sql.DB, dataDir string) error {
 		}
 	}
 	for _, ct := range list {
-		faction := store.IsFactionCardType(ct.Name)
-		if !(store.IsBackCardType(ct.Name) || faction) || ct.TemplatePath != "" {
+		faction, element := store.IsFactionCardType(ct.Name), store.IsElementCardType(ct.Name)
+		if !(store.IsBackCardType(ct.Name) || faction || element) || ct.TemplatePath != "" || ct.NoTemplate {
 			continue
 		}
 		w, h := w, h
 		if faction {
 			w, h = fw, fh
+		}
+		if element {
+			// A strip as wide as the card, at the element's own proportions.
+			h = w * store.ElementCanvas[1] / store.ElementCanvas[0]
 		}
 		img := image.NewRGBA(image.Rect(0, 0, w, h))
 		green := color.RGBA{0, 255, 65, 255}

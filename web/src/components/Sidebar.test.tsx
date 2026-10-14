@@ -36,7 +36,7 @@ test('sidebar renders all five section links', () => {
     ),
   )
   renderAt('/settings')
-  for (const label of ['Factions', 'Card Types', 'Faction Lab', 'Generations', 'Batch Processing', 'Settings']) {
+  for (const label of ['Factions', 'Card Templates', 'Faction Lab', 'Assets', 'Batch Processing', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
 })
@@ -45,7 +45,7 @@ test('active route link is marked current', () => {
   // /card-types now renders CardTypesPage (Task 5), which fetches card types via react-query.
   server.use(http.get('/api/card-types', () => HttpResponse.json([])))
   renderAt('/card-types')
-  expect(screen.getByRole('link', { name: 'Card Types' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.getByRole('link', { name: 'Card Templates' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('link', { name: 'Factions' })).not.toHaveAttribute('aria-current')
 })
 

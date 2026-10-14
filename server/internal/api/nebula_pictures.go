@@ -14,7 +14,7 @@ import (
 )
 
 // One nebula picture per card type, shared by every faction (each recolours it).
-var nebulaPictureCategories = map[string]bool{"combat": true, "schema": true}
+var nebulaPictureCategories = map[string]bool{"combat": true, "schema": true, "upgrade": true}
 
 func (h *CardsHandler) nebulaPictureFile(category string) string {
 	for _, ext := range []string{".png", ".jpg"} {
@@ -38,7 +38,7 @@ func (h *CardsHandler) NebulaPictures(w http.ResponseWriter, r *http.Request) {
 		URL      string `json:"url"`
 	}
 	out := []picture{}
-	for _, category := range []string{"combat", "schema"} {
+	for _, category := range []string{"combat", "schema", "upgrade"} {
 		if path := h.nebulaPictureFile(category); path != "" {
 			version := ""
 			if info, err := os.Stat(path); err == nil {

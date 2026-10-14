@@ -4,6 +4,8 @@ import { Button } from '../../components/Button'
 import { buttonClass } from '../../components/buttonStyles'
 import { DlcTag } from './DlcTag'
 import type { Faction } from './api'
+import { useFactionColors } from '../assemble/api'
+import { ColorDot } from '../assemble/FactionIdentity'
 
 function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n) + '…' : s
@@ -20,6 +22,7 @@ export function FactionsTable({
   onHistory: (f: Faction) => void
   onDelete: (f: Faction) => void
 }) {
+  const colors = useFactionColors().data
   return (
     <div className="overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
       <table className="w-full border-collapse text-sm">
@@ -37,8 +40,8 @@ export function FactionsTable({
           {factions.map((f) => (
             <tr key={f.id} className="border-t border-ink/8 hover:bg-ink/4">
               <td className="whitespace-nowrap px-4 py-3 font-medium">
-                <Link to={generationsLink({ factionIds: [f.id] })} title="Show this faction's generations"
-                  className="text-ink no-underline hover:text-accent hover:underline">{f.name}</Link>
+                <Link to={generationsLink({ factionIds: [f.id] })} title="Show this faction's assets"
+                  className="inline-flex items-center gap-2 text-ink no-underline hover:text-accent hover:underline"><ColorDot color={colors?.find(c => c.faction_id === f.id)?.color} />{f.name}</Link>
               </td>
               <td className="px-4 py-3"><DlcTag dlc={f.dlc} /></td>
               <td className="max-w-64 px-4 py-3 text-[13px] text-ink/70">

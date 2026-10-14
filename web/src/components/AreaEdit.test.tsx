@@ -81,10 +81,10 @@ test('undo/clear, protect toggle, Escape leaves edit mode before closing', async
   fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, pointerId: 1 })
   fireEvent.pointerUp(canvas, { pointerId: 1 })
   expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled()
-  await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
-  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
   await userEvent.click(screen.getByLabelText('Keep unpainted area exactly as is'))
   expect(screen.getByLabelText('Keep unpainted area exactly as is')).not.toBeChecked()
+  await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
 
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByTestId('mask-canvas')).not.toBeInTheDocument()
@@ -100,4 +100,21 @@ test('Original toggle shows the image it was edited from', async () => {
   expect(shown()).toBe('/api/generations/9/image')
   await userEvent.click(screen.getByRole('button', { name: 'Original' }))
   expect(shown()).toBe('/api/generations/4/image')
+})
+
+test('with nothing painted an instruction changes the whole image: no mask is sent', async () => {
+  let body: Record<string, unknown> | null = null
+  server.use(
+    http.post('/api/image-edits', async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json({ id: 11, name: '3-tau-combat-low', status: 'pending' }, { status: 201 })
+    }),
+    http.get('/api/generations', () => HttpResponse.json([])),
+  )
+  renderPopup()
+  await openEditor()
+  expect(screen.getByLabelText('Keep unpainted area exactly as is')).toBeDisabled()
+  await userEvent.type(screen.getByLabelText('Edit instruction'), 'make it darker')
+  await userEvent.click(screen.getByRole('button', { name: 'Send edit' }))
+  await waitFor(() => expect(body).toEqual({ parent: { kind: 'generation', id: 9 }, instruction: 'make it darker', protect: false }))
 })

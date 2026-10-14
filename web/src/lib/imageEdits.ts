@@ -5,9 +5,9 @@ import type { Generation } from '../pages/test-generation/api'
 
 export type EditRequest = {
   target: ImageRef
-  mask: string // PNG data URL, transparent = edit here
+  mask?: string // PNG data URL, transparent = edit here; left out to change the whole image
   instruction: string
-  protect: boolean // keep original pixels outside the mask
+  protect: boolean // keep original pixels outside the mask (needs a mask)
 }
 
 // Starts an area edit; the result is a new (pending) generation.

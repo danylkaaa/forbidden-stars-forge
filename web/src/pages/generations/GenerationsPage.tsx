@@ -16,11 +16,11 @@ import { previewLayers, useCardTypes } from '../card-types/api'
 import { useFactions } from '../factions/api'
 import { DLC_VALUES } from '../factions/dlc'
 import { useGenerations } from '../test-generation/api'
-import { filtersToParams, parseFilters, useDoneBatchItems, type GalleryEntry, type GalleryFilters } from './api'
+import { UPLOADED_PROMPT, filtersToParams, parseFilters, useDoneBatchItems, type GalleryEntry, type GalleryFilters } from './api'
 
 const PER_PAGE_OPTIONS = [24, 48, 96]
 
-// Every finished image — Faction Lab and batches — in one filterable
+// Every asset — finished Faction Lab and batch images, and your uploads — in one filterable
 // grid. Filters are kept in the URL so other pages can deep-link here.
 export default function GenerationsPage() {
   const [params, setParams] = useSearchParams()
@@ -43,13 +43,13 @@ export default function GenerationsPage() {
 
   const entries: GalleryEntry[] = [
     ...(gens ?? []).filter((g) => g.status === 'done').map((g): GalleryEntry => ({
-      key: `test-${g.id}`, name: g.name, favorite: g.favorite, ref: { kind: 'generation', id: g.id }, source: 'test',
+      key: `test-${g.id}`, name: g.name, favorite: g.favorite, ref: { kind: 'generation', id: g.id }, source: 'test', origin: g.prompt === UPLOADED_PROMPT ? 'uploaded' : 'generated',
       parentName: g.parent_name, editInstruction: g.edit_instruction, compareSrc: parentImageUrl(g), factionId: g.faction_id, cardTypeId: g.card_type_id,
       mode: g.mode, model: g.model, imageUrl: `/api/generations/${g.id}/image`, costUsd: g.cost_usd, createdAt: g.created_at,
     })),
     ...(batchItems ?? []).map((it): GalleryEntry => ({
       key: `batch-${it.id}`, name: it.name, favorite: it.favorite,
-      ref: { kind: 'batch-item', batchId: it.batch_id, itemId: it.id }, source: 'batch',
+      ref: { kind: 'batch-item', batchId: it.batch_id, itemId: it.id }, source: 'batch', origin: 'generated',
       parentName: '', editInstruction: '', compareSrc: null, factionId: it.faction_id, cardTypeId: it.card_type_id,
       mode: it.mode, model: it.model, imageUrl: `/api/batches/${it.batch_id}/items/${it.id}/image`,
       costUsd: it.cost_usd, createdAt: it.completed_at, batchId: it.batch_id,
@@ -58,7 +58,7 @@ export default function GenerationsPage() {
 
   const factionById = new Map((factions ?? []).map((f) => [f.id, f]))
   const cardTypeById = new Map((cardTypes ?? []).map((c) => [c.id, c]))
-  const { q, favorites, dlcs, factionIds, cardTypeIds, sources, modes } = filters
+  const { q, favorites, dlcs, factionIds, cardTypeIds, sources, origins, modes } = filters
   // Every whitespace-separated term must appear in the name.
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean)
   const shown = entries.filter((e) => {
@@ -69,10 +69,11 @@ export default function GenerationsPage() {
       (factionIds.length === 0 || factionIds.includes(e.factionId)) &&
       (cardTypeIds.length === 0 || cardTypeIds.includes(e.cardTypeId)) &&
       (sources.length === 0 || sources.includes(e.source)) &&
+      (origins.length === 0 || origins.includes(e.origin)) &&
       (modes.length === 0 || modes.includes(e.mode))
   })
   const selection = useImageSelection(shown, filtersToParams(filters).toString())
-  const filtering = terms.length > 0 || favorites || dlcs.length + factionIds.length + cardTypeIds.length + sources.length + modes.length > 0
+  const filtering = terms.length > 0 || favorites || dlcs.length + factionIds.length + cardTypeIds.length + sources.length + origins.length + modes.length > 0
   const total = shown.reduce((sum, e) => sum + e.costUsd, 0)
   const pages = Math.max(1, Math.ceil(shown.length / perPage))
   const page = Math.min(pages, Math.max(1, Number(params.get('page')) || 1))
@@ -101,8 +102,8 @@ export default function GenerationsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Generations</h1>
-          <p className="m-0 text-sm text-ink/60">Every finished image from Faction Lab and batches</p>
+          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Assets</h1>
+          <p className="m-0 text-sm text-ink/60">Every finished image from Faction Lab and batches, and your uploads</p>
         </div>
         <span className="text-sm text-ink/60">{filtering ? 'Filtered total' : 'Total'}: {formatCost(total)}</span>
       </div>
@@ -127,6 +128,8 @@ export default function GenerationsPage() {
           options={(cardTypes ?? []).map((c) => ({ value: c.id, label: c.name }))} />
         <MultiSelect label="Source" selected={sources} onChange={(next) => setFilters({ sources: next })}
           options={[{ value: 'test' as const, label: 'Faction Lab' }, { value: 'batch' as const, label: 'Batch' }]} />
+        <MultiSelect label="Origin" selected={origins} onChange={(next) => setFilters({ origins: next })}
+          options={[{ value: 'generated' as const, label: 'Generated' }, { value: 'uploaded' as const, label: 'Uploaded' }]} />
         <MultiSelect label="Mode" selected={modes} onChange={(next) => setFilters({ modes: next })}
           options={[{ value: 'draft' as const, label: 'Draft' }, { value: 'final' as const, label: 'Final' }]} />
         {filtering && (
@@ -139,10 +142,10 @@ export default function GenerationsPage() {
       </div>
 
       {loading && <p className="text-ink/60">Loading…</p>}
-      {error && <p role="alert" className="text-danger">Failed to load generations: {error instanceof Error ? error.message : 'unknown'}</p>}
+      {error && <p role="alert" className="text-danger">Failed to load assets: {error instanceof Error ? error.message : 'unknown'}</p>}
       {!loading && !error && shown.length === 0 && (
         <p className="m-0 text-sm text-ink/50">
-          {entries.length === 0 ? 'No generated images yet.' : 'No generations match the filters.'}
+          {entries.length === 0 ? 'No assets yet.' : 'No assets match the filters.'}
         </p>
       )}
 
@@ -174,7 +177,8 @@ export default function GenerationsPage() {
                 {e.name && <div className="truncate font-mono text-[11px] text-ink/60" title={e.name}>{e.name}</div>}
                 {e.parentName && <div className="truncate"><EditOf gen={{ parent_name: e.parentName, edit_instruction: e.editInstruction }} /></div>}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Tag variant={e.mode === 'final' ? 'solid-accent' : 'neutral'}>{e.mode}</Tag>
+                  <Tag variant={e.origin === 'uploaded' ? 'solid-accent' : 'neutral'}>{e.origin === 'uploaded' ? 'Uploaded' : 'Generated'}</Tag>
+                  {e.origin === 'generated' && <Tag variant={e.mode === 'final' ? 'solid-accent' : 'neutral'}>{e.mode}</Tag>}
                   {e.source === 'batch' && e.batchId !== undefined ? (
                     <Link to={`/batches/${e.batchId}`} className="text-[11px] text-accent no-underline hover:underline">batch #{e.batchId}</Link>
                   ) : (

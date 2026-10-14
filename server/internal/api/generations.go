@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -67,14 +68,15 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if ct.OpenAIFileID == "" {
+	// A type with no template is generated from its prompt alone.
+	if ct.OpenAIFileID == "" && !ct.NoTemplate {
 		writeError(w, http.StatusConflict, "card type has no OpenAI file — upload it first")
 		return
 	}
 
 	p := req.PromptOverride
 	if p == "" {
-		p = prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f))
+		p = promptFor(ct, factionStyle(f))
 	}
 	var frontURL string
 	if req.FrontImage != nil {
@@ -88,7 +90,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		frontType, err := h.CardTypes.Get(front.cardTypeID)
-		if err != nil || front.factionID != f.ID || frontType.Name != strings.TrimSuffix(ct.Name, " back") {
+		if err != nil || front.factionID != f.ID || !backMatchesFront(ct.Name, frontType.Name) {
 			writeError(w, http.StatusBadRequest, "front image must match the faction and front card type")
 			return
 		}
@@ -194,6 +196,9 @@ func (h *GenerationsHandler) run(id int64, req openai.ImageEditRequest, postProc
 	defer cancel()
 	start := time.Now()
 	req.Size, req.InputFidelity, req.Background = all["image_size"], all["input_fidelity"], all["background"]
+	if req.NoInput() {
+		req.Size = newImageSize(req.Size)
+	}
 	res, err := client.EditImage(ctx, req)
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
@@ -298,7 +303,7 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	if req.CardTypeConstraints != nil {
 		ct.Constraints = *req.CardTypeConstraints
 	}
-	p := prompt.ImageEdit(ct.Description, ct.Constraints, prompt.FactionStyle{
+	p := promptFor(ct, prompt.FactionStyle{
 		Name: strings.TrimSpace(req.Name), PrimaryColor: strings.TrimSpace(req.PrimaryColor),
 		Texture: strings.TrimSpace(req.Texture), Description: req.Description,
 	})
@@ -307,7 +312,7 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"prompt":   p,
-		"has_file": ct.OpenAIFileID != "",
+		"has_file": ct.OpenAIFileID != "" || ct.NoTemplate,
 	})
 }
 
@@ -332,9 +337,37 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		model = all["openai_model"]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"prompt":        prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f)),
-		"has_file":      ct.OpenAIFileID != "",
+		"prompt":        promptFor(ct, factionStyle(f)),
+		"has_file":      ct.OpenAIFileID != "" || ct.NoTemplate,
 		"est_draft_usd": estimatePerImage(h.Usage, all, model, "draft"),
 		"est_final_usd": estimatePerImage(h.Usage, all, model, "final"),
 	})
 }
+
+// backMatchesFront reports whether a front card type may be the reference for a
+// back: the card back serves both combat and event cards.
+func backMatchesFront(back, front string) bool {
+	if back == "card back" {
+		return front == "combat" || front == "events"
+	}
+	return front == strings.TrimSuffix(back, " back")
+}
+
+// promptFor is the image prompt of a card type: it edits the template, or, with no template, paints from the text.
+func promptFor(ct store.CardType, f prompt.FactionStyle) string {
+	if ct.NoTemplate {
+		return prompt.ImageNew(ct.Description, ct.Constraints, f)
+	}
+	return prompt.ImageEdit(ct.Description, ct.Constraints, f)
+}
+
+// newImageSize is the size of a picture made without a template: the Settings size when it is a fixed one
+// (the edit endpoint infers its size from the template, so the setting may be empty), else portrait.
+func newImageSize(configured string) string {
+	if sizePattern.MatchString(configured) {
+		return configured
+	}
+	return "1024x1536"
+}
+
+var sizePattern = regexp.MustCompile(`^\d{3,4}x\d{3,4}$`)

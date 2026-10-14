@@ -1,3 +1,5 @@
+import { BUNDLED_ICONS } from '../faction-card/bundled'
+import { combatRibbon } from './ribbons'
 import { defaultArtwork, type ArtworkTransform } from './artwork'
 import backgroundSrc from '../../images/combat/background.png?url'
 import foregroundSrc from '../../images/combat/foreground.png?url'
@@ -154,10 +156,16 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
       const free = p.width * w / 100 - line.reduce((sum, atom) => sum + atom.width, 0)
       x += free / 2
     } else if (align === 'digit') {
-      // Centred on where a "2" would sit when started at x, so a narrower "1"
-      // lands on the same centre and the badge position stays as laid out.
-      ctx.font = font({ text: '2', icon: false, italic: false }, size, family)
-      x += (ctx.measureText('2').width - line.reduce((sum, atom) => sum + atom.width, 0)) / 2
+      // Centre the visible digits in the box: the font's "1" has uneven side
+      // bearings, so its advance width is no guide to where its ink is.
+      let left = Infinity, right = -Infinity, cursor = 0
+      for (const atom of line) {
+        ctx.font = font(atom, size, family)
+        const m = ctx.measureText(atom.text)
+        left = Math.min(left, cursor - m.actualBoundingBoxLeft); right = Math.max(right, cursor + m.actualBoundingBoxRight)
+        cursor += atom.width
+      }
+      if (Number.isFinite(left)) x += p.width * w / 200 - (left + right) / 2
     }
     for (const atom of line) {
       ctx.font = font(atom, size, family)
@@ -201,17 +209,17 @@ function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Plac
 // Layers, bottom first: the card's artwork (positioned by `artwork` inside
 // ART_WINDOW), the faction template (generated image), overlays, panels, text.
 // The artwork only shows where the template is transparent.
-export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; overlayUrl: string | null; overlayUrls?: string[]; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
+export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
 export type RenderOutput = { canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }
 // Upgrade and event cards. Layers, bottom first: the card's artwork (events
 // only, inside its window), the faction template, overlays, then the icon,
 // logo and text. The frame supplies the panels.
-async function renderFramed({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
-  const stack = overlayUrls?.length ? overlayUrls : overlayUrl ? [overlayUrl] : []
+async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
   const iconUrl = card.category === 'upgrade' ? ORDER_ICONS[card.upgrade_type] : ACTION_ICONS[card.action]
-  const [template, overlays, icon, logo, art] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, loadFonts()])
-  const w = overlays[0]?.naturalWidth ?? outputSize?.width ?? template.naturalWidth
-  const h = overlays[0]?.naturalHeight ?? outputSize?.height ?? template.naturalHeight
+  const upgrade = card.category === 'upgrade'
+  const [template, icon, logo, levelBadge, gear, art] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, loadFonts()])
+  const w = outputSize?.width ?? template.naturalWidth
+  const h = outputSize?.height ?? template.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
@@ -225,10 +233,9 @@ async function renderFramed({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   }
   const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
   ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
-  for (const layer of overlays) ctx.drawImage(layer, 0, 0, w, h)
   const colors = defaultLayout(card.category), warnings: string[] = []
   const texts: Partial<Record<typeof LAYERS[number], string>> = card.category === 'upgrade'
-    ? { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.text }
+    ? { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.text, limitation: card.limitation ?? '' }
     : { name: card.name.toUpperCase(), subtype: card.subtype === 'tactic' ? 'TACTIC' : 'SCHEME', upper_text: card.text }
   const fit = (image: HTMLImageElement, p: Placement, scale = 1) => {
     const bw = p.width * w / 100, bh = p.height * h / 100, f = Math.min(bw / image.naturalWidth, bh / image.naturalHeight) * scale
@@ -237,13 +244,18 @@ async function renderFramed({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   for (const layer of framedLayers(card.category)) {
     const p = { ...layout[layer], color: colors[layer].color }
     if (layer === 'order_icon') { if (icon) fit(icon, p); continue }
+    if (layer === 'level_icon' || layer === 'cost_icon') {
+      const image = layer === 'level_icon' ? levelBadge : gear
+      if (image) { ctx.save(); setCardShadow(ctx, h); fit(image, p); ctx.restore() }
+      continue
+    }
     if (layer === 'logo') {
       if (!logo) continue
       ctx.save(); setCardShadow(ctx, h); fit(logo, p, logoScale); ctx.restore(); continue
     }
     const shadowed = layer === 'resource_cost' || layer === 'level'
     if (shadowed) { ctx.save(); setCardShadow(ctx, h) }
-    const overflow = paintText(ctx, texts[layer] ?? '', p, layer === 'upper_text' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' ? 'center' : layer === 'level' ? 'digit' : 'left')
+    const overflow = paintText(ctx, texts[layer] ?? '', p, layer === 'upper_text' || layer === 'limitation' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' || layer === 'limitation' || (layer === 'name' && card.category === 'upgrade') ? 'center' : layer === 'level' || layer === 'resource_cost' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${layerLabel(layer, card.category)} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
@@ -253,14 +265,11 @@ export async function renderCard(input: RenderInput): Promise<RenderOutput> {
   if (input.card.category !== 'combat') return renderFramed({ ...input, card: input.card })
   return renderCombat({ ...input, card: input.card })
 }
-async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
-  // A subtype's overlay stack (bottom first) replaces the card type overlay.
-  const stack = overlayUrls?.length ? overlayUrls : overlayUrl ? [overlayUrl] : []
-  const [template, overlays, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
-  // Overlay dimensions define the finished card when supplied.
-  const overlay = overlays[0]
-  const w = overlay?.naturalWidth ?? outputSize?.width ?? template.naturalWidth
-  const h = overlay?.naturalHeight ?? outputSize?.height ?? template.naturalHeight
+async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork() }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
+  // The ribbon for the card's type; its size is the finished card's.
+  const [template, ribbon, levelBadge, gear, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), loadImage(combatRibbon(card)), card.starting ? null : loadImage(BUNDLED_ICONS.tech), card.starting ? null : loadImage(BUNDLED_ICONS.gear), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
+  const w = ribbon.naturalWidth
+  const h = ribbon.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
@@ -274,7 +283,14 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   }
   const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
   ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
-  for (const layer of overlays) ctx.drawImage(layer, 0, 0, w, h)
+  ctx.drawImage(ribbon, 0, 0, w, h)
+  // The level badge and the resource gear, on the round badge and the plate of the ribbon (starting cards have the logo instead).
+  for (const [image, p] of [[levelBadge, layout.level_icon], [gear, layout.cost_icon]] as const) {
+    if (!image) continue
+    const bw = p.width * w / 100, bh = p.height * h / 100, f = Math.min(bw / image.naturalWidth, bh / image.naturalHeight)
+    ctx.save(); setCardShadow(ctx, h)
+    ctx.drawImage(image, p.x * w / 100 + (bw - image.naturalWidth * f) / 2, p.y * h / 100 + (bh - image.naturalHeight * f) / 2, image.naturalWidth * f, image.naturalHeight * f); ctx.restore()
+  }
   // Fonts are fixed: headline for the title and numbers, rules font for text.
   const familyFor = (_p: Placement, layer: string) => layer === 'name' || layer === 'level' || layer === 'resource_cost' ? 'CardHeadline' : 'CardRules'
   const upperBlock = measureBlock(ctx, card.upper_text, layout.upper_text, familyFor(layout.upper_text, 'upper_text'), w, h)
@@ -304,7 +320,7 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   for (const layer of LAYERS) {
     // Starting cards have no level requirement and no resource price; the
     // faction logo takes the level badge.
-    if (layer === 'logo' || layer === 'order_icon' || layer === 'subtype' || (card.starting && (layer === 'level' || layer === 'resource_cost'))) continue
+    if (layer === 'logo' || layer === 'order_icon' || layer === 'subtype' || layer === 'level_icon' || layer === 'cost_icon' || layer === 'limitation' || (card.starting && (layer === 'level' || layer === 'resource_cost'))) continue
     const p = paintLayout[layer]
     const family = familyFor(p, layer)
     const stack = RESOURCES.flatMap(r => Array.from({ length: card[r] }, () => PLAIN_GLYPHS[r]))
@@ -316,7 +332,7 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
     const overflow = layer === 'resources'
       ? paintResources(ctx, stack, p, w, h)
       // A narrow level "1" is centred where a "2" would be, so it sits in the badge like one.
-      : paintText(ctx, texts[layer], p, family, w, h, layer === 'level' ? 'digit' : 'left')
+      : paintText(ctx, texts[layer], p, family, w, h, layer === 'level' || layer === 'resource_cost' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${LAYER_LABELS[layer]} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }

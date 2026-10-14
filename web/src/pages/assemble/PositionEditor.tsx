@@ -2,18 +2,20 @@ import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
-import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { SafeAreaLines } from '../../components/SafeArea'
 import { useCutMm } from '../print/layout'
 import { Field, selectClass } from '../../components/Field'
-import { useFactions } from '../factions/api'
+import { StepperInput } from '../../components/StepperInput'
+import { usePreviewFaction } from './usePreviewFaction'
+import { ReferenceOverlay } from './ReferenceOverlay'
+import { ReferenceField } from './ReferenceCards'
 import { CardCanvas } from './CardCanvas'
 import { PlacementFields } from './LayerControls'
 import { usePreviewTemplate, useTemplateLayout } from './library'
 import { useFactionLogos } from './logos'
-import { DEMO_COMBAT, DEMO_SCHEMA, DEMO_UPGRADE, layerLabel, resourceBox, defaultLayout, type Layer, type Layout, type Placement } from './model'
+import { DEMO_COMBAT, DEMO_SCHEMA, DEMO_UPGRADE, assemblyLayout, layerLabel, resourceBox, defaultLayout, type Layer, type Layout, type Placement } from './model'
 import { ACTION_LABELS, orderLabel, UPGRADE_TYPES, type Category, type UpgradeType } from '../cards/model'
 import type { RenderInput } from './render'
-import { useAssembly } from './state'
 import { useRenderedCard } from './useCardView'
 import { undoShortcut, useUndoable } from './useUndoable'
 import { useDemoArtwork } from './demoArtwork'
@@ -28,23 +30,22 @@ const round = (n: number) => Math.round(n * 10) / 10
 let activeEditor = ''
 const isRules = (layer: Layer): layer is 'upper_text' | 'lower_text' => layer === 'upper_text' || layer === 'lower_text'
 
-export type Composed = { layout: Layout; overlayUrls: string[] }
 type Props = {
   id: string; category?: Category; label: string; saved: Partial<Layout>; initialLevel: number; note: string; resetLabel: string
-  // Layers editable at a preview level, and the full preview for a draft.
-  layersFor: (level: number) => Layer[]
-  compose: (draft: Partial<Layout>, level: number, base: Layout) => Composed
+  // Layers editable for the previewed kind of card (combat: starting or advanced) and level.
+  layersFor: (level: number, starting: boolean) => Layer[]
   onSave: (draft: Partial<Layout>) => Promise<unknown>
 }
 
 // Drag-and-drop layer positions on a demo card of the chosen faction, with
-// undo/redo. Used for card type text positions and subtype overlay positions.
-export function PositionEditor({ id: editorId, category = 'combat', label, saved, initialLevel, note, resetLabel, layersFor, compose, onSave }: Props) {
+// undo/redo. Used for the positions of everything on a card type.
+export function PositionEditor({ id: editorId, category = 'combat', label, saved, initialLevel, note, resetLabel, layersFor, onSave }: Props) {
   const demoArtwork = useDemoArtwork()
-  const factions = useFactions(), logos = useFactionLogos()
-  const [factionId, setFactionId] = useState(() => useAssembly.getState().factionId)
-  const previewFaction = factionId ?? factions.data?.[0]?.id ?? null
+  const logos = useFactionLogos()
+  const { factionId: previewFaction } = usePreviewFaction()
   const [level, setLevel] = useState(initialLevel)
+  // Combat cards come in two kinds, each with its own ribbon: starting (the faction logo) and advanced (a level and a price).
+  const [starting, setStarting] = useState(false)
   const upgrade = category === 'upgrade', schema = category === 'schema'
   const cutMm = useCutMm()
   const [action, setAction] = useState(DEMO_SCHEMA.action), [kind, setKind] = useState<'schema' | 'tactic'>(DEMO_SCHEMA.subtype)
@@ -60,16 +61,17 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [editorId, undo, redo])
-  const layers = layersFor(level)
+  const combat = category === 'combat', isStarting = combat && starting, shownLevel = isStarting ? 0 : level
+  const layers = layersFor(shownLevel, isStarting)
   const [layerChoice, setLayer] = useState<Layer>(layers[0])
   const layer = layers.includes(layerChoice) ? layerChoice : layers[0]
   const template = usePreviewTemplate(previewFaction, category)
   const templateLayout = useTemplateLayout(category)
-  const { layout, overlayUrls } = useMemo(() => compose(draft, level, templateLayout.layout), [compose, draft, level, templateLayout.layout])
+  const layout = useMemo(() => assemblyLayout(draft, category), [draft, category])
   const logoUrl = logos.data?.find(l => l.faction_id === previewFaction)?.url ?? null
   const input = useMemo<RenderInput | null>(() => !template.isPending && (templateLayout.ready || !template.image)
-    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level, starting: level === 0, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
-    : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, order, upgrade, schema, action, kind, overlayUrls, logoUrl, demoArtwork])
+    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level: shownLevel, starting: isStarting, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
+    : null, [template.isPending, templateLayout.ready, template.image, layout, level, shownLevel, isStarting, price, order, upgrade, schema, action, kind, logoUrl, demoArtwork])
   const { result, error } = useRenderedCard(input)
   const save = useMutation({ mutationFn: () => onSave(draft) })
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
@@ -103,6 +105,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
           ? <CardCanvas result={result} aria-label={`${label} position preview`} className="block h-auto w-full" />
           : <div className="grid aspect-[3/4] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
         {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
+        {result && <ReferenceOverlay category={category} side="front" />}
         {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key], stackCount, CARD_SIZE) : shown(key), selected = key === layer
           return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${layerLabel(key, category)}`} title={layerLabel(key, category)}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
@@ -113,7 +116,6 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
               className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize touch-none rounded-sm border border-bg bg-accent" />}
           </div> })}
       </div>
-      <SafeAreaToggle className="mt-1" />
       <p className="mt-1 text-[11px] text-ink/50">{template.image
         ? <>Template: {template.image.name}{template.chosen ? '' : ' (newest image of this faction; choose one with the Library settings)'}.</>
         : 'This faction has no generated images yet, so the preview has no template.'}</p>
@@ -121,9 +123,6 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
     </div>
     <div className="min-w-64 flex-1 space-y-3">
       <div className={`grid gap-3 ${schema ? 'grid-cols-3' : upgrade ? 'grid-cols-2' : 'grid-cols-3'}`}>
-        <Field label="Preview faction">{id => <SearchableSelect id={id} className={selectClass} value={previewFaction ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
-          {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </SearchableSelect>}</Field>
         {schema && <>
           <Field label="Preview kind">{id => <SearchableSelect id={id} className={selectClass} value={kind} onChange={e => setKind(e.target.value as 'schema' | 'tactic')}>
             <option value="schema">Scheme</option><option value="tactic">Tactic</option>
@@ -132,15 +131,15 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
             {Object.entries(ACTION_LABELS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </SearchableSelect>}</Field>
         </>}
-        {!schema && <Field label="Preview level">{id => <SearchableSelect id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
-          {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l === 0 && category === 'combat' ? '0 (starting)' : l}</option>)}
-        </SearchableSelect>}</Field>}
+        {combat && <div role="tablist" aria-label="Card kind" className="col-span-full inline-flex w-fit overflow-hidden rounded-md border border-divider text-sm">
+          {([['Advanced', false], ['Starting', true]] as const).map(([name, value]) => <button key={name} type="button" role="tab" aria-selected={starting === value} onClick={() => setStarting(value)}
+            className={`cursor-pointer border-0 px-4 py-1.5 ${starting === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
+        </div>}
+        {!schema && !isStarting && <Field label="Preview level">{id => <StepperInput id={id} label="Preview level" value={level} min={0} max={3} onChange={setLevel} />}</Field>}
         {upgrade && <Field label="Preview order">{id => <SearchableSelect id={id} className={selectClass} value={order} onChange={e => setOrder(e.target.value as UpgradeType)}>
           {UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}
         </SearchableSelect>}</Field>}
-        {!schema && <Field label="Preview price">{id => <SearchableSelect id={id} className={selectClass} value={price} disabled={level === 0 && category === 'combat'} title={level === 0 && category === 'combat' ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
-          {Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>{n}</option>)}
-        </SearchableSelect>}</Field>}
+        {!schema && <Field label="Preview price">{id => <StepperInput id={id} label="Preview price" value={price} min={0} max={12} disabled={isStarting} title={isStarting ? 'Starting cards have no resource price' : undefined} onChange={setPrice} />}</Field>}
       </div>
       <Field label="Layer">{id => <SearchableSelect id={id} className={selectClass} value={layer} onChange={e => setLayer(e.target.value as Layer)}>
         {layers.map(key => <option key={key} value={key}>{layerLabel(key, category)}</option>)}
@@ -157,6 +156,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
       {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
       {save.isSuccess && !dirty && <p role="status" className="m-0 text-sm text-success">Positions saved.</p>}
       <p className="m-0 text-xs text-ink/50">{note}</p>
+      <ReferenceField category={category} side="front" />
     </div>
   </div>
 }

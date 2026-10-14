@@ -60,9 +60,12 @@ test('create flow posts multipart with staged file', async () => {
   let gotName: unknown, gotFile: File | null = null
   server.use(
     http.post('/api/card-types', async ({ request }) => {
-      const form = await request.formData()
-      gotName = form.get('name')
-      gotFile = form.get('template') as File | null
+      // request.formData() throws inside the jsdom + undici harness on a
+      // File body, so the multipart text is read directly.
+      const body = await request.text()
+      gotName = /name="name"\r\n\r\n([^\r]*)/.exec(body)?.[1]
+      const mime = /name="template"[^]*?Content-Type: ([^\r]*)/.exec(body)?.[1]
+      gotFile = mime ? new File(['png'], 'blob', { type: mime }) : null
       return HttpResponse.json({ id: 3, name: gotName, description: '', constraints: '', template_path: 'templates/x.png', openai_file_id: '', overlay_path: '', created_at: 'a', updated_at: 'u' }, { status: 201 })
     }),
   )

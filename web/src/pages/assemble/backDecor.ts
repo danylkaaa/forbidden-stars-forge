@@ -4,12 +4,21 @@ import combatBackSrc from '../../images/combat/combat-back.png?url'
 import edgeSrc from '../../images/upgrades/upgrade-edge.png?url'
 import type { Category } from '../cards/model'
 
+// Decoded images are kept, so redrawing a back (while a nebula is dragged, say)
+// does not decode the same pictures again.
+const images = new Map<string, Promise<HTMLImageElement>>()
 function load(url: string, message = 'Could not load the card back image.') {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img); img.onerror = () => reject(new Error(message))
-    img.src = url
-  })
+  let known = images.get(url)
+  if (!known) {
+    if (images.size >= 40) images.delete(images.keys().next().value!)
+    known = new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img); img.onerror = () => reject(new Error(message))
+      img.src = url
+    })
+    images.set(url, known); known.catch(() => images.delete(url))
+  }
+  return known
 }
 
 // Rows of an overlay that contain pixels: the overlays have transparent space
@@ -64,7 +73,7 @@ function frameWindow(img: HTMLImageElement, key: string) {
 
 // The faction's colour: the back image's pixels averaged, the more saturated
 // ones counting for more, then pushed a little away from grey.
-function factionTint(img: HTMLImageElement): [number, number, number] {
+function factionTint(img: HTMLImageElement | HTMLCanvasElement): [number, number, number] {
   const c = document.createElement('canvas'); c.width = c.height = 24
   const ctx = c.getContext('2d', { willReadFrequently: true })
   if (!ctx) return [90, 60, 120]
@@ -91,6 +100,10 @@ function seeded(seed: number) {
 // `as_template` makes it the front template of card types without a chosen one.
 export type NebulaSettings = { color: string; seed: number; density: number; as_template: boolean }
 export const DEFAULT_NEBULA: NebulaSettings = { color: '', seed: 7, density: 1, as_template: false }
+// Where a card type's back shows the nebula: its offset from the centre as a
+// share of the nebula area, and its turn in degrees.
+export type NebulaPlacement = { x: number; y: number; rotation: number; brightness?: number }
+export const NO_PLACEMENT: NebulaPlacement = { x: 0, y: 0, rotation: 0 }
 export function parseColor(hex: string): [number, number, number] | null {
   return /^#[0-9a-f]{6}$/i.test(hex) ? [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number] : null
 }
@@ -210,30 +223,135 @@ function recolouredNebula(source: HTMLImageElement, width: number, height: numbe
   return c
 }
 
-// The faction's nebula at `width` × `height`: your picture recoloured, or
-// generated when there is no picture.
-async function nebula(width: number, height: number, tint: [number, number, number], settings: NebulaSettings, picture?: string) {
-  const source = await loadNebulaSource(picture)
-  return source ? recolouredNebula(source, width, height, tint, settings) : proceduralNebula(width, height, tint, settings)
+// The nebula is made larger than the area it fills (cached, since only its
+// placement changes while it is dragged), then moved and turned into place.
+const NEBULA_MARGIN = 2
+const bases = new Map<string, Promise<HTMLCanvasElement>>()
+async function nebula(width: number, height: number, tint: [number, number, number], settings: NebulaSettings, picture?: string, place: NebulaPlacement = NO_PLACEMENT) {
+  const bw = Math.ceil(width * NEBULA_MARGIN), bh = Math.ceil(height * NEBULA_MARGIN)
+  const key = JSON.stringify([bw, bh, tint, settings.seed, settings.density, picture ?? ''])
+  let base = bases.get(key)
+  if (!base) {
+    if (bases.size >= 8) bases.delete(bases.keys().next().value!)
+    base = loadNebulaSource(picture).then(source => source ? recolouredNebula(source, bw, bh, tint, settings) : proceduralNebula(bw, bh, tint, settings))
+    bases.set(key, base); base.catch(() => bases.delete(key))
+  }
+  const out = document.createElement('canvas'); out.width = width; out.height = height
+  const ctx = out.getContext('2d')
+  if (!ctx) return out
+  ctx.imageSmoothingQuality = 'high'
+  ctx.translate(width / 2 + place.x * width, height / 2 + place.y * height); ctx.rotate(place.rotation * Math.PI / 180)
+  ctx.drawImage(await base, -bw / 2, -bh / 2)
+  return out
+}
+
+// A flat-topped hexagon `width` wide (points left and right).
+function hexPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, width: number, append = false) {
+  const r = width / 2
+  if (!append) ctx.beginPath()
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx[i ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a)) }
+  ctx.closePath()
+}
+// Event backs: a hexagonal groove pressed into the card around the logo. The outer hexagon is `size` × 80% of the card
+// width; the inner hexagon is left flush with the card. The groove is darkened, shadowed from its upper-left outer edge,
+// and rimmed: dark upper left / light lower right outside, the reverse on the inner lip.
+function hexFrame(ctx: CanvasRenderingContext2D, w: number, h: number, size: number) {
+  const outer = Math.min(w * 0.8 * size, w * 0.96), inner = outer * 0.815, cx = w / 2, cy = h / 2, line = Math.max(1, w * 0.004)
+  const R = outer / 2, big = R * 2
+  const ring = () => { hexPath(ctx, cx, cy, outer); hexPath(ctx, cx, cy, inner, true) }
+  const shadow = () => {
+    ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = w * 0.03; ctx.shadowOffsetX = w * 0.012; ctx.shadowOffsetY = w * 0.014; ctx.fillStyle = '#000'
+  }
+  ctx.save()
+  ring(); ctx.clip('evenodd')
+  ctx.fillStyle = 'rgba(10,0,0,0.3)'; ctx.fillRect(cx - R, cy - R, outer, outer)
+  // The card around the groove casts a shadow into it.
+  shadow(); ctx.beginPath(); ctx.rect(cx - big, cy - big, big * 2, big * 2); hexPath(ctx, cx, cy, outer, true); ctx.fill('evenodd')
+  ctx.restore()
+  const rim = (width: number, flip: boolean) => {
+    const r = width / 2
+    const g = ctx.createLinearGradient(cx - r, cy - r * 0.87, cx + r, cy + r * 0.87)
+    const stops: [number, string][] = [[0, 'rgba(0,0,0,0.65)'], [0.45, 'rgba(0,0,0,0.15)'], [0.55, 'rgba(255,225,215,0.12)'], [1, 'rgba(255,225,215,0.4)']]
+    for (const [o, c] of stops) g.addColorStop(flip ? 1 - o : o, c)
+    ctx.save(); hexPath(ctx, cx, cy, width)
+    ctx.lineJoin = 'round'; ctx.lineWidth = line * 1.8; ctx.strokeStyle = g; ctx.stroke(); ctx.restore()
+  }
+  rim(outer, false)
+  rim(inner, true)
 }
 
 // Event backs: the teeth sit this far down from the top (and up from the
 // bottom) as a share of the card height; space nebula fills beyond them.
 const TEETH_AT = 0.107
 
+// A generated element comes on a plain chroma-green canvas; the green is
+// removed (softly at the edges) so the ornament sits on the frame. Pictures
+// that already have transparency are used as they are.
+const keyedElements = new Map<string, Promise<HTMLCanvasElement>>()
+function keyedElement(url: string) {
+  let known = keyedElements.get(url)
+  if (!known) {
+    if (keyedElements.size >= 12) keyedElements.delete(keyedElements.keys().next().value!)
+    known = load(url, 'Could not load the frame element.').then(img => {
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      if (!ctx) return c
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, c.width, c.height), d = data.data
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 255) continue
+        const green = (d[i + 1] - Math.max(d[i], d[i + 2])) / 255
+        const alpha = green > 0.45 ? 0 : green > 0.2 ? (0.45 - green) / 0.25 : 1
+        if (alpha < 1) { d[i + 3] = Math.round(alpha * 255); d[i + 1] = Math.min(d[i + 1], Math.max(d[i], d[i + 2])) }
+      }
+      ctx.putImageData(data, 0, 0)
+      return c
+    })
+    keyedElements.set(url, known); known.catch(() => keyedElements.delete(url))
+  }
+  return known
+}
+
+// The ornament sits on the frame's top edge and, turned over, on the bottom one. Its
+// width and offsets are shares of the frame's, so it follows the frame's size.
+const NO_ELEMENT_PLACE = { x: 0, y: 0, scale: 0.42 }
+export type ElementPlace = typeof NO_ELEMENT_PLACE
+
+// The centred frame overlay (`overlayScale` × the card width, the same for every
+// faction) with the faction's nebula in its window, running a little under it.
+type Banner = { logo: HTMLImageElement | null; logoScale: number; elementUrl?: string; elementPlace: ElementPlace }
+async function frame(ctx: CanvasRenderingContext2D, base: HTMLImageElement | HTMLCanvasElement, w: number, h: number, settings: NebulaSettings, overlayScale: number, picture: string | undefined, place: NebulaPlacement, banner: Banner) {
+  const { elementUrl, elementPlace } = banner
+  const overlay = await load(combatBackSrc, 'Could not load the combat back overlay.')
+  const ow = w * overlayScale, oh = overlay.naturalHeight * (ow / overlay.naturalWidth)
+  const ox = (w - ow) / 2, oy = (h - oh) / 2
+  const win = frameWindow(overlay, 'combat-back'), grow = ow * 0.01
+  const nx = ox + win.x * ow - grow, ny = oy + win.y * oh - grow, nw = Math.ceil(win.w * ow + grow * 2), nh = Math.ceil(win.h * oh + grow * 2)
+  ctx.drawImage(await nebula(nw, nh, parseColor(settings.color) ?? factionTint(base), settings, picture, place), nx, ny)
+  ctx.drawImage(overlay, ox, oy, ow, oh)
+  // The logo, inside the frame's window; its size is a share of the frame, so it follows the banner's size.
+  if (banner.logo) {
+    const side = ow * banner.logoScale, fit = Math.min(side / banner.logo.naturalWidth, side / banner.logo.naturalHeight)
+    const cx = ox + (win.x + win.w / 2) * ow, cy = oy + (win.y + win.h / 2) * oh
+    ctx.drawImage(banner.logo, cx - banner.logo.naturalWidth * fit / 2, cy - banner.logo.naturalHeight * fit / 2, banner.logo.naturalWidth * fit, banner.logo.naturalHeight * fit)
+  }
+  if (elementUrl) {
+    const element = await keyedElement(elementUrl), rows = contentRows(overlay, 'combat-back-frame')
+    const ew = ow * elementPlace.scale, eh = element.height * (ew / element.width), k = oh / overlay.naturalHeight
+    const top = oy + rows.top * k, bottom = oy + rows.bottom * k, ex = (w - ew) / 2 + elementPlace.x * ow, down = elementPlace.y * oh
+    ctx.drawImage(element, ex, top + down - eh / 2, ew, eh)
+    // Turned over about the bottom edge, so a move inward is mirrored.
+    ctx.save(); ctx.translate(0, bottom * 2); ctx.scale(1, -1)
+    ctx.drawImage(element, ex, bottom + down - eh / 2, ew, eh)
+    ctx.restore()
+  }
+}
+
 // Combat backs get a centred frame overlay with the nebula in its window. Upgrade and event backs are symmetrical:
 // the decoration at the top is repeated turned over at the bottom.
-async function decorate(ctx: CanvasRenderingContext2D, base: HTMLImageElement, w: number, h: number, category: Category, settings: NebulaSettings, overlayScale: number, picture?: string) {
+async function decorate(ctx: CanvasRenderingContext2D, base: HTMLImageElement, w: number, h: number, category: Category, settings: NebulaSettings, overlayScale: number, picture: string | undefined, place: NebulaPlacement, banner: Banner) {
   if (category === 'combat') {
-    // Centred, `overlayScale` × the card width; the same for every faction.
-    const overlay = await load(combatBackSrc, 'Could not load the combat back overlay.')
-    const ow = w * overlayScale, oh = overlay.naturalHeight * (ow / overlay.naturalWidth)
-    const ox = (w - ow) / 2, oy = (h - oh) / 2
-    // The faction's nebula fills the frame's window, running a little under the frame.
-    const win = frameWindow(overlay, 'combat-back'), grow = ow * 0.01
-    const nx = ox + win.x * ow - grow, ny = oy + win.y * oh - grow, nw = Math.ceil(win.w * ow + grow * 2), nh = Math.ceil(win.h * oh + grow * 2)
-    ctx.drawImage(await nebula(nw, nh, parseColor(settings.color) ?? factionTint(base), settings, picture), nx, ny)
-    ctx.drawImage(overlay, ox, oy, ow, oh)
+    await frame(ctx, base, w, h, settings, overlayScale, picture, place, banner)
   } else if (category === 'upgrade') {
     const edge = await load(edgeSrc, 'Could not load the upgrade edge.'), rows = contentRows(edge, 'edge')
     const scale = w / edge.naturalWidth, bandH = (rows.bottom - rows.top) * scale
@@ -243,32 +361,38 @@ async function decorate(ctx: CanvasRenderingContext2D, base: HTMLImageElement, w
       ctx.drawImage(edge, 0, rows.top, edge.naturalWidth, rows.bottom - rows.top, 0, 0, w, bandH)
       ctx.restore()
     }
+    // The combat frame again, smaller, with the nebula in its window.
+    await frame(ctx, base, w, h, settings, overlayScale, picture, place, banner)
   } else if (category === 'schema') {
     const teeth = await load(teethSrc, 'Could not load the event teeth.'), rows = contentRows(teeth, 'teeth')
     const scale = w / teeth.naturalWidth, bandH = (rows.bottom - rows.top) * scale, at = h * TEETH_AT
-    const space = await nebula(w, Math.ceil(at), parseColor(settings.color) ?? factionTint(base), settings, picture)
+    // One card-sized nebula; its top band fills the strip at the top and, turned over, the one at the bottom.
+    const space = await nebula(w, h, parseColor(settings.color) ?? factionTint(base), settings, picture, place)
     for (const flip of [false, true]) {
       ctx.save()
       if (flip) { ctx.translate(0, h); ctx.scale(1, -1) }
-      ctx.drawImage(space, 0, 0)
+      ctx.drawImage(space, 0, 0, w, Math.ceil(at), 0, 0, w, Math.ceil(at))
       ctx.drawImage(teeth, 0, rows.top, teeth.naturalWidth, rows.bottom - rows.top, 0, at - bandH / 2, w, bandH)
       ctx.restore()
     }
+    if (banner.logo) hexFrame(ctx, w, h, overlayScale)
   }
 }
 
-// Mirrors BackImage: the image covers the card, the logo is contained in a
-// centred square of `scale` × the card width and height. Event and upgrade
-// backs also get their symmetrical decoration.
-export async function renderBack(url: string, logoUrl: string | undefined, scale: number, category: Category = 'combat', size = { width: 816, height: 1104 }, settings: NebulaSettings = DEFAULT_NEBULA, overlayScale = 1, picture?: string): Promise<HTMLCanvasElement> {
+// Mirrors BackImage: the image covers the card. The logo is contained in a centred
+// square of `scale` × the card width and height; on combat and upgrade backs it is
+// part of the banner instead, `scale` × the banner's width. Backs also get their
+// decoration.
+export async function renderBack(url: string, logoUrl: string | undefined, scale: number, category: Category = 'combat', size = { width: 816, height: 1104 }, settings: NebulaSettings = DEFAULT_NEBULA, overlayScale = 1, picture?: string, place: NebulaPlacement = NO_PLACEMENT, elementUrl?: string, elementPlace: ElementPlace = NO_ELEMENT_PLACE): Promise<HTMLCanvasElement> {
   const [img, logo] = await Promise.all([load(url), logoUrl ? load(logoUrl) : null])
   const canvas = document.createElement('canvas'); canvas.width = size.width; canvas.height = size.height
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create a canvas.')
   const cover = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
   ctx.drawImage(img, (canvas.width - img.naturalWidth * cover) / 2, (canvas.height - img.naturalHeight * cover) / 2, img.naturalWidth * cover, img.naturalHeight * cover)
-  await decorate(ctx, img, canvas.width, canvas.height, category, settings, overlayScale, picture)
-  if (logo) {
+  await decorate(ctx, img, canvas.width, canvas.height, category, settings, overlayScale, picture, place, { logo, logoScale: scale, elementUrl, elementPlace })
+  // Combat and upgrade backs draw the logo inside their banner; the others at the centre.
+  if (logo && category !== 'combat' && category !== 'upgrade') {
     const bw = canvas.width * scale, bh = canvas.height * scale, fit = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight)
     ctx.drawImage(logo, (canvas.width - logo.naturalWidth * fit) / 2, (canvas.height - logo.naturalHeight * fit) / 2, logo.naturalWidth * fit, logo.naturalHeight * fit)
   }
@@ -279,28 +403,40 @@ export const hasBackDecor = (category?: Category) => category === 'combat' || ca
 
 // A finished decorated back for on-screen previews; undefined while it is being
 // made, for plain backs, or if it cannot be drawn (the plain image shows then).
-export function useDecoratedBack(url: string, logoUrl: string | undefined, scale: number, category?: Category, settings: NebulaSettings = DEFAULT_NEBULA, overlayScale = 1, picture?: string) {
+export function useDecoratedBack(url: string, logoUrl: string | undefined, scale: number, category?: Category, settings: NebulaSettings = DEFAULT_NEBULA, overlayScale = 1, picture?: string, place: NebulaPlacement = NO_PLACEMENT, elementUrl?: string, elementPlace: ElementPlace = NO_ELEMENT_PLACE) {
   const [state, setState] = useState<{ base: string; url: string } | null>(null)
   const current = useRef('')
+  // One picture is made at a time; while it is, only the newest request waits,
+  // so dragging does not queue up a render for every pointer move.
+  const busy = useRef(false), next = useRef<(() => Promise<void>) | null>(null), alive = useRef(true)
   const base = `${url}|${category}`
+  // Set again on mount: React's strict mode runs the cleanup once before the real mount.
+  useEffect(() => { alive.current = true; return () => { alive.current = false; if (current.current) URL.revokeObjectURL(current.current) } }, [])
   useEffect(() => {
     if (!hasBackDecor(category)) return
-    let cancelled = false
-    renderBack(url, logoUrl, scale, category, { width: 612, height: 828 }, settings, overlayScale, picture)
-      .then(canvas => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9)))
-      .then(blob => {
-        if (!blob || cancelled) return
+    const job = async () => {
+      try {
+        const canvas = await renderBack(url, logoUrl, scale, category, { width: 612, height: 828 }, settings, overlayScale, picture, place, elementUrl, elementPlace)
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+        if (!blob || !alive.current) return
         const made = URL.createObjectURL(blob), old = current.current
         current.current = made
         setState({ base, url: made })
         // The previous picture stays on screen until the new one is shown.
         if (old) setTimeout(() => URL.revokeObjectURL(old), 1000)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
+      } catch { /* the plain image shows */ }
+    }
+    const run = async (work: () => Promise<void>) => {
+      if (busy.current) { next.current = work; return }
+      busy.current = true
+      try { await work() } finally { busy.current = false }
+      const waiting = next.current
+      next.current = null
+      if (waiting && alive.current) void run(waiting)
+    }
+    void run(job)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, logoUrl, scale, category, settings.color, settings.seed, settings.density, overlayScale, picture])
-  useEffect(() => () => { if (current.current) URL.revokeObjectURL(current.current) }, [])
+  }, [url, logoUrl, scale, category, settings.color, settings.seed, settings.density, overlayScale, picture, place.x, place.y, place.rotation, elementUrl, elementPlace.x, elementPlace.y, elementPlace.scale])
   // While a new picture is made the last one for this back stays up, so
   // edits (randomize, sliders) do not flash the plain back.
   return hasBackDecor(category) && state?.base === base ? state.url : undefined
@@ -308,7 +444,19 @@ export function useDecoratedBack(url: string, logoUrl: string | undefined, scale
 
 // A faction's nebula alone as a card-sized image, for factions with no
 // generated template. An empty colour uses `fallback` (the faction's colour).
-export async function nebulaTemplateUrl(settings: NebulaSettings, fallback: string, size = { width: 816, height: 1104 }, picture?: string): Promise<string> {
+export async function nebulaTemplateUrl(settings: NebulaSettings, fallback: string, size = { width: 816, height: 1104 }, picture?: string, place: NebulaPlacement = NO_PLACEMENT): Promise<string> {
   const tint = parseColor(settings.color) ?? parseColor(fallback) ?? [90, 60, 120]
-  return (await nebula(size.width, size.height, tint, settings, picture)).toDataURL('image/jpeg', 0.9)
+  return (await nebula(size.width, size.height, tint, settings, picture, place)).toDataURL('image/jpeg', 0.9)
+}
+
+// A faction's banner alone, on a dark ground, at the size of the card (for its settings page).
+export async function renderBanner(size: { width: number; height: number }, settings: NebulaSettings, picture: string | undefined, place: NebulaPlacement, banner: { logoUrl?: string; logoScale: number; elementUrl?: string; elementPlace: ElementPlace }, overlayScale = 1): Promise<HTMLCanvasElement> {
+  const canvas = document.createElement('canvas'); canvas.width = size.width; canvas.height = size.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Your browser could not create a canvas.')
+  ctx.fillStyle = '#181410'; ctx.fillRect(0, 0, size.width, size.height)
+  const logo = banner.logoUrl ? await load(banner.logoUrl) : null
+  const base = document.createElement('canvas'); base.width = base.height = 1
+  await frame(ctx, base, size.width, size.height, settings, overlayScale, picture, place, { logo, logoScale: banner.logoScale, elementUrl: banner.elementUrl, elementPlace: banner.elementPlace })
+  return canvas
 }

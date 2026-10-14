@@ -190,7 +190,7 @@ test('a finished run can be previewed as a card with an existing card of the fac
 
 
 test('back generation attaches a selected lab or batch front and clears it when the pair changes', async () => {
-  const back = { ...cardTypes[0], id: 2, name: 'combat back' }
+  const back = { ...cardTypes[0], id: 2, name: 'card back' }
   gens = [
     { ...gen, id: 41, name: 'lab-front', status: 'done', image_path: 'front' },
     { ...gen, id: 42, status: 'pending' },
@@ -247,7 +247,7 @@ test('back generation attaches a selected lab or batch front and clears it when 
 })
 
 
-test.each(['combat', 'combat back'])('%s opens a 3D preview on the generated side', async (name) => {
+test.each(['combat', 'card back'])('%s opens a 3D preview on the generated side', async (name) => {
   vi.mocked(renderCard).mockReset().mockImplementation(async () => ({ canvas: document.createElement('canvas'), warnings: [], textPositions: {} as never }))
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,assembled-front')
 

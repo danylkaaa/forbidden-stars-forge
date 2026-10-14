@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
-import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { SafeAreaLines } from '../../components/SafeArea'
 import { Field, selectClass } from '../../components/Field'
 import { SearchableSelect } from '../../components/SearchableSelect'
 import { CardCanvas } from '../assemble/CardCanvas'
 import { useLibraryImages } from '../assemble/library'
+import { usePreviewFaction } from '../assemble/usePreviewFaction'
 import { PositionNumber } from '../assemble/LayerControls'
 import { undoShortcut, useUndoable } from '../assemble/useUndoable'
 import { useFactions } from '../factions/api'
@@ -41,8 +42,7 @@ export function FactionCardLayoutEditor() {
   const queryClient = useQueryClient()
   const factions = useFactions(), images = useLibraryImages(), defaults = useFactionCardDefaults()
   const stored = useFactionCardLayout()
-  const [factionId, setFactionId] = useState<number | null>(null)
-  const preview = factionId ?? factions.data?.[0]?.id ?? null
+  const { factionId: preview } = usePreviewFaction()
   const faction = factions.data?.find(f => f.id === preview)
   const record = useFactionCard(preview)
   const logoUrl = useFactionLogoUrl(preview)
@@ -134,13 +134,9 @@ export function FactionCardLayoutEditor() {
               className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize touch-none rounded-sm border border-bg bg-accent" />}
           </div> })}
       </div>
-      <SafeAreaToggle className="mt-1" />
       <p className="mt-1 text-[11px] text-ink/50">Drag a box to move it, its corner to resize (groups scale). ⌘Z / Ctrl+Z undoes, ⇧⌘Z redoes. Empty texts show samples here.</p>
     </div>
     <div className="min-w-64 flex-1 space-y-3">
-      <Field label="Preview faction">{id => <SearchableSelect id={id} className={selectClass} value={preview ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
-        {factions.data.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-      </SearchableSelect>}</Field>
       <Field label="Element">{id => <SearchableSelect id={id} className={selectClass} value={selected} onChange={e => setSelected(e.target.value as ElementKey)}>
         {sideElements.map(e => <option key={e.key} value={e.key}>{e.label}</option>)}
       </SearchableSelect>}</Field>

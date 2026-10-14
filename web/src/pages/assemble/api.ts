@@ -3,19 +3,19 @@ import { apiGet, apiSend, apiSendForm } from '../../lib/api'
 import { defaultArtwork, type ArtworkTransform } from './artwork'
 import type { Layout } from './model'
 import type { Category } from '../cards/model'
-import { DEFAULT_NEBULA, type NebulaSettings } from './backDecor'
+import { DEFAULT_NEBULA, NO_PLACEMENT, type NebulaPlacement, type NebulaSettings } from './backDecor'
 // A card's own tweaks: its title size as a multiple of the card type's size.
 export type AssemblyLayout = Partial<Layout> & { title_scale?: number }
 export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number): AssemblyLayout => {
   const { title_scale: _, ...rest } = layout
   return scale === 1 ? rest : { ...rest, title_scale: scale }
 }
-export type Assembly = { image_key: string; image_url: string; overlay_id: string; subtype_id: number; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
-export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', subtype_id: 0, logo_scale: 1, transform: defaultArtwork(), layout: {} })
+export type Assembly = { image_key: string; image_url: string; overlay_id: string; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
+export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', logo_scale: 1, transform: defaultArtwork(), layout: {} })
 export function useCardAssembly(id: string) {
   return useQuery({ queryKey: ['card-assembly', id], enabled: !!id, queryFn: () => apiGet<Assembly>(`/api/cards/${id}/assembly`) })
 }
-export const saveAssembly = (id: string, a: Assembly) => apiSend<Assembly>('PUT', `/api/cards/${id}/assembly`, { image_key: a.image_key, overlay_id: a.overlay_id, subtype_id: a.subtype_id ?? 0, logo_scale: a.logo_scale ?? 1, transform: a.transform, layout: a.layout })
+export const saveAssembly = (id: string, a: Assembly) => apiSend<Assembly>('PUT', `/api/cards/${id}/assembly`, { image_key: a.image_key, overlay_id: a.overlay_id, logo_scale: a.logo_scale ?? 1, transform: a.transform, layout: a.layout })
 export function uploadArtwork(id: string, image: File) {
   const form = new FormData(); form.set('image', image)
   return apiSendForm<Assembly>('POST', `/api/cards/${id}/artwork`, form)
@@ -23,9 +23,12 @@ export function uploadArtwork(id: string, image: File) {
 
 // Title and rules text positions per card category, shared by every card.
 // `back` holds settings shared by every faction's card back.
+// `overlay_scale`: the size of the banner (combat, upgrade) or hexagon (event) on this card type's back, the same for every faction.
 export type CardTypeBack = { overlay_scale?: number }
 export type CardTypeLayout = { category: Category; layout: Partial<Layout> & { back?: CardTypeBack } }
-export const backOverlayScale = (layouts: CardTypeLayout[] | undefined, category: Category) => layouts?.find(l => l.category === category)?.layout.back?.overlay_scale ?? 1
+// The upgrade back's frame is drawn smaller than the combat one unless set.
+export const DEFAULT_UPGRADE_FRAME = 0.8
+export const backOverlayScale = (layouts: CardTypeLayout[] | undefined, category: Category) => layouts?.find(l => l.category === category)?.layout.back?.overlay_scale ?? (category === 'upgrade' ? DEFAULT_UPGRADE_FRAME : 1)
 export function useBackOverlayScale(category?: Category) {
   const layouts = useCardTypeLayouts()
   return category ? backOverlayScale(layouts.data, category) : 1
@@ -42,11 +45,6 @@ export function useAssemblyTemplates() {
   return useQuery({ queryKey: ['assembly-templates'], queryFn: () => apiGet<AssemblyTemplate[]>('/api/assembly-templates') })
 }
 export const saveAssemblyTemplate = (t: AssemblyTemplate) => apiSend<AssemblyTemplate>('PUT', '/api/assembly-templates', t)
-export function uploadBackLogo(factionId: number, category: Category, file: File) {
-  const form = new FormData(); form.set('logo', file)
-  return apiSendForm<undefined>('PUT', `/api/assembly-templates/${factionId}/${category}/logo`, form)
-}
-export const removeBackLogo = (factionId: number, category: Category) => apiSend<undefined>('DELETE', `/api/assembly-templates/${factionId}/${category}/logo`, undefined)
 
 // How a faction's event card back draws its nebula; saved per faction.
 export type Nebula = NebulaSettings & { faction_id: number }
@@ -57,6 +55,40 @@ export function useNebula(factionId: number | undefined): NebulaSettings {
   const nebulas = useNebulas()
   return nebulas.data?.find(n => n.faction_id === factionId) ?? DEFAULT_NEBULA
 }
+export type FactionColor = { faction_id: number; color: string }
+export function useFactionColors() {
+  return useQuery({ queryKey: ['faction-colors'], queryFn: () => apiGet<FactionColor[]>('/api/faction-colors') })
+}
+// The faction's own colour as #rrggbb, or '' while it has none.
+export function useFactionColor(factionId: number | null | undefined) {
+  return useFactionColors().data?.find(c => c.faction_id === factionId)?.color ?? ''
+}
+// The nebula as drawn: with no colour of its own it takes the faction's colour.
+export function useDrawnNebula(factionId: number | undefined): NebulaSettings {
+  const nebula = useNebula(factionId), color = useFactionColor(factionId)
+  return nebula.color || !color ? nebula : { ...nebula, color }
+}
+// Where each card type's back shows the nebula (per faction and type).
+export type NebulaPlacementRow = NebulaPlacement & { faction_id: number; category: Category; logo_scale: number; banner_scale?: number; brightness?: number }
+export function useNebulaPlacements() {
+  return useQuery({ queryKey: ['nebula-placements'], queryFn: () => apiGet<NebulaPlacementRow[]>('/api/nebula-placements') })
+}
+export function useNebulaPlacement(factionId: number | undefined, category?: Category): NebulaPlacement {
+  const rows = useNebulaPlacements().data
+  const row = rows?.find(r => r.faction_id === factionId && r.category === category)
+  return row ? { x: row.x, y: row.y, rotation: row.rotation, brightness: row.brightness || undefined } : NO_PLACEMENT
+}
+// The faction logo's size on a card type's back, per faction; undefined until saved.
+export function useBackLogoScale(factionId: number | null | undefined, category: Category) {
+  return useNebulaPlacements().data?.find(r => r.faction_id === factionId && r.category === category)?.logo_scale
+}
+// How much larger or smaller than the card template's banner size a faction's back draws its banner (1 = the template's).
+export function useBannerScale(factionId: number | null | undefined, category?: Category) {
+  return useNebulaPlacements().data?.find(r => r.faction_id === factionId && r.category === category)?.banner_scale ?? 1
+}
+export const saveNebulaPlacement = (factionId: number, category: Category, p: NebulaPlacement & { logo_scale?: number; banner_scale?: number }) => apiSend<NebulaPlacementRow>('PUT', `/api/nebula-placements/${factionId}/${category}`, p)
+export const saveFactionColor = (factionId: number, color: string) => apiSend<FactionColor>('PUT', `/api/faction-colors/${factionId}`, { color })
+
 export const saveNebula = (factionId: number, n: NebulaSettings) => apiSend<Nebula>('PUT', `/api/nebulas/${factionId}`, n)
 
 // A card type's own nebula picture (shared by every faction, recoloured per
@@ -74,3 +106,32 @@ export function uploadNebulaPicture(category: Category, file: File) {
   return apiSendForm<undefined>('PUT', `/api/nebula-pictures/${category}`, form)
 }
 export const removeNebulaPicture = (category: Category) => apiSend<undefined>('DELETE', `/api/nebula-pictures/${category}`, undefined)
+
+// Pictures of real or sample cards per card type and side (and the faction card),
+// to compare against while editing or to lay over a preview.
+export type ReferenceCategory = Category | 'faction'
+export type ReferenceCard = { id: number; category: ReferenceCategory; side: Side; name: string; url: string }
+export function useReferenceCards(category?: ReferenceCategory, side?: Side) {
+  const query = useQuery({ queryKey: ['reference-cards'], queryFn: () => apiGet<ReferenceCard[]>('/api/reference-cards') })
+  return { ...query, cards: (query.data ?? []).filter(c => (!category || c.category === category) && (!side || c.side === side)) }
+}
+export function uploadReferenceCard(category: ReferenceCategory, file: File, side: Side = 'front') {
+  const form = new FormData(); form.set('image', file); form.set('side', side)
+  return apiSendForm<ReferenceCard>('POST', `/api/reference-cards/${category}`, form)
+}
+export const deleteReferenceCard = (id: number) => apiSend<undefined>('DELETE', `/api/reference-cards/${id}`, undefined)
+
+// A faction's banner, assembled once in its settings: the frame with the logo
+// inside and an ornament over the frame's edges (a library image, its place and
+// width as shares of the frame). Combat and upgrade backs draw it.
+export type BannerSettings = { logo_scale: number; element_key: string; element_x: number; element_y: number; element_scale: number }
+export type FactionBanner = BannerSettings & { faction_id: number }
+export const DEFAULT_BANNER: BannerSettings = { logo_scale: 0.5, element_key: '', element_x: 0, element_y: 0, element_scale: 0.42 }
+export function useFactionBanners() {
+  return useQuery({ queryKey: ['faction-banners'], queryFn: () => apiGet<FactionBanner[]>('/api/faction-banners') })
+}
+export function useFactionBanner(factionId: number | null | undefined): BannerSettings {
+  const { faction_id: _faction, ...banner } = useFactionBanners().data?.find(b => b.faction_id === factionId) ?? { faction_id: 0, ...DEFAULT_BANNER }
+  return banner
+}
+export const saveFactionBanner = (factionId: number, b: BannerSettings) => apiSend<FactionBanner>('PUT', `/api/faction-banners/${factionId}`, b)

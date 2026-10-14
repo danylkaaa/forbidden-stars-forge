@@ -37,17 +37,3 @@ func TestAssemblyTemplatesSaveReplaceAndClear(t *testing.T) {
 		t.Fatalf("not cleared: %+v", got)
 	}
 }
-
-func TestAssemblyKeepsSubtype(t *testing.T) {
-	s, f, _ := setupCards(t)
-	c, err := s.Create(combatCard(f))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.SaveAssembly(CardAssembly{CardID: c.ID, OverlayID: "auto", SubtypeID: 7, Transform: ArtworkTransform{Scale: 1}, Layout: []byte(`{}`)}); err != nil {
-		t.Fatal(err)
-	}
-	if a, err := s.Assembly(c.ID); err != nil || a.SubtypeID != 7 {
-		t.Fatalf("subtype: %+v %v", a, err)
-	}
-}

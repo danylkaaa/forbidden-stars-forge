@@ -30,7 +30,7 @@ export default function CardTypesPage() {
     <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Card Types</h1>
+          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Card Templates</h1>
           <p className="m-0 text-sm text-ink/60">{data?.length ?? 0} card types · each holds one chromakey template</p>
         </div>
         <Button variant="primary" onClick={ui.openCreate}>New Card Type</Button>

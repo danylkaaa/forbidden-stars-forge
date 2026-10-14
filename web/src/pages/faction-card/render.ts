@@ -118,6 +118,20 @@ export function unitIconRect(slot: SlotKey, layout: FactionCardLayout = defaultL
   const cy = e.y / 100 * CARD_SIZE.height + UNIT_SLOTS.findIndex(u => u.key === slot) * (e.pitch ?? 0) / 100 * CARD_SIZE.height
   return { x: e.x / 100 * CARD_SIZE.width, y: cy - S(52) * k, w: X(140) * k, h: S(104) * k }
 }
+// The portrait window's outline: chamfered corners, and a pointed tab in the
+// middle of the top and bottom edges, as the back frame is drawn. The tabs sit
+// inside the box.
+export function portraitPath(ctx: CanvasRenderingContext2D, b: Box) {
+  const tab = b.h * 0.1, chamfer = Math.min(b.w, b.h) * 0.06, mid = b.x + b.w / 2, base = b.w * 0.14, tip = b.w * 0.05
+  const top = b.y + tab, bottom = b.y + b.h - tab, left = b.x, right = b.x + b.w
+  ctx.beginPath()
+  ctx.moveTo(left + chamfer, top); ctx.lineTo(mid - base, top); ctx.lineTo(mid - tip, b.y); ctx.lineTo(mid + tip, b.y); ctx.lineTo(mid + base, top)
+  ctx.lineTo(right - chamfer, top); ctx.lineTo(right, top + chamfer)
+  ctx.lineTo(right, bottom - chamfer); ctx.lineTo(right - chamfer, bottom)
+  ctx.lineTo(mid + base, bottom); ctx.lineTo(mid + tip, b.y + b.h); ctx.lineTo(mid - tip, b.y + b.h); ctx.lineTo(mid - base, bottom)
+  ctx.lineTo(left + chamfer, bottom); ctx.lineTo(left, bottom - chamfer); ctx.lineTo(left, top + chamfer)
+  ctx.closePath()
+}
 export async function renderFactionCard(input: FactionCardInput): Promise<FactionCardResult> {
   const { side, data, unitColor, assets, defaults } = input
   const layout = input.layout ?? defaultLayout()
@@ -242,7 +256,10 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
     paintParagraph(ctx, [{ text: data.signature }], { x: sig.x, y: sig.y, width: sig.width, size: sig.size, lineHeight: 1, color: SCRIPT_INK, family: 'CardEvent', italic: true, align: 'right' })
     paintParagraph(ctx, [{ text: data.signature_title }], { x: sigTitle.x, y: sigTitle.y, width: sigTitle.width, size: sigTitle.size, lineHeight: 1, color: SCRIPT_INK, family: 'CardEvent', italic: true, align: 'right' })
     const pb = box(layout.portrait)
-    if (portrait) fit(ctx, portrait, { x: pb.x, y: pb.y, w: pb.width, h: pb.height ?? 0 }, 'cover')
+    if (portrait) {
+      const area = { x: pb.x, y: pb.y, w: pb.width, h: pb.height ?? 0 }
+      ctx.save(); portraitPath(ctx, area); ctx.clip(); fit(ctx, portrait, area, 'cover'); ctx.restore()
+    }
     const og = group(layout.objectives)
     data.objectives.forEach((o, i) => {
       const x = og.ox + (i % 2) * og.gap, y = og.oy + Math.floor(i / 2) * og.pitch, pic = objectiveImages[i]

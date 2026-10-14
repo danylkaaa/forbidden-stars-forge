@@ -71,7 +71,7 @@ test('changing filters updates the URL; clear resets', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Source: All' }))
   await userEvent.click(within(screen.getByRole('group', { name: 'Source' })).getByLabelText('Batch'))
   expect(screen.getByTestId('search')).toHaveTextContent('?card_type=1&source=batch')
-  expect(screen.getByText('No generations match the filters.')).toBeInTheDocument()
+  expect(screen.getByText('No assets match the filters.')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
   expect(screen.getByTestId('search')).toBeEmptyDOMElement()
   expect(cards()).toHaveLength(3)

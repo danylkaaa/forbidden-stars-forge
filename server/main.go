@@ -27,9 +27,6 @@ func main() {
 	if err := store.NewCardTypesStore(db).EnsureBuiltins(); err != nil {
 		log.Fatalf("seed card types: %v", err)
 	}
-	if err := store.NewSubtypesStore(db).EnsureBuiltins(); err != nil {
-		log.Fatalf("seed subtypes: %v", err)
-	}
 
 	dist, err := fs.Sub(webFS, "webdist")
 	if err != nil {

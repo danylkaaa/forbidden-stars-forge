@@ -3,9 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
-import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { SafeAreaLines } from '../../components/SafeArea'
 import { useCutMm } from '../print/layout'
 import { DiffPanel } from '../../components/DiffPanel'
+import { ReferenceCards, ReferenceField } from './ReferenceCards'
+import { ReferenceOverlay } from './ReferenceOverlay'
+import { StepperInput } from '../../components/StepperInput'
+import { BUNDLED_ICONS } from '../faction-card/bundled'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { apiGet } from '../../lib/api'
 import { createCard, updateCard } from '../cards/api'
@@ -18,7 +22,6 @@ import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
 import { labLink, useTemplate, useTemplateLayout } from './library'
-import { displaySubtypeName, levelSubtypeName } from './subtypes'
 import { undoShortcut } from './useUndoable'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
@@ -27,7 +30,9 @@ import { Preview3DButton } from './Card3DViewer'
 import { PositionNumber } from './LayerControls'
 
 const panel = 'space-y-4 rounded-lg border border-divider bg-surface p-4'
-const NUMBER_FIELDS = [['resource_cost', 'Resource price'], ['guns', 'Guns'], ['shields', 'Shields'], ['eagles', 'Morale / eagles']] as const
+const NUMBER_FIELDS = [['resource_cost', 'Resource price', 'gear'], ['guns', 'Guns', 'dice'], ['shields', 'Shields', 'health'], ['eagles', 'Morale / eagles', 'morale']] as const
+// A field name with the icon of what it counts, as on the faction card.
+const iconLabel = (label: string, icon: string) => <span className="inline-flex items-center gap-1.5"><img src={BUNDLED_ICONS[icon]} alt="" className="h-4 w-4 object-contain" />{label}</span>
 
 export default function CardEditorPage({ newFactionId, newCategory = 'combat', onCategoryChange }: { newFactionId?: string; newCategory?: Category; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
   const creating = newFactionId !== undefined
@@ -64,7 +69,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const template = useTemplate(factionId, category)
   const templateLayout = useTemplateLayout(category)
   const back = useTemplate(factionId, category, 'back')
-  const { input, assembly, logoScale, titleScale, transform, subtypes, subtype: activeSubtype } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
+  const { input, assembly, logoScale, titleScale, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
@@ -89,7 +94,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         let artworkError = ''
         try {
           const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
-          const assembled = await saveAssembly(String(created.id), { ...uploaded, subtype_id: localAssembly.subtype_id, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale) })
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale) })
           queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
         } catch (e) {
           artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
@@ -128,15 +133,6 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
       return file ? uploadArtwork(id, file) : saveAssembly(id, { ...(assembly.data as Assembly), image_key: '', transform: defaultArtwork() })
     },
     onSuccess: saved => { if (!creating) queryClient.setQueryData(['card-assembly', id], saved); useAssembly.getState().clearTransform(id) },
-  })
-
-  const subtype = useMutation({
-    mutationFn: async (subtypeId: number) => {
-      const value = { ...(assembly.data as Assembly), subtype_id: subtypeId }
-      if (creating) { setLocalAssembly(value); return value }
-      return saveAssembly(id, value)
-    },
-    onSuccess: saved => { if (!creating) queryClient.setQueryData(['card-assembly', id], saved) },
   })
 
   // Undo history for artwork position (text fields keep the browser's own
@@ -243,8 +239,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   if (!source || !draft || !saved) return <p role="status" className="text-sm text-ink/60">Loading card…</p>
 
   const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty
-  const busy = save.isPending || artwork.isPending || subtype.isPending
-  const categorySubtypes = subtypes.data?.filter(st => st.category === source.category) ?? []
+  const busy = save.isPending || artwork.isPending
   const queryError = [assembly, ...template.queries].find(q => q.isError)?.error ?? templateLayout.error
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -252,7 +247,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         <Link to="/assemble" className="text-sm text-accent no-underline hover:underline">← Library</Link>
         <h1 className="m-0 font-display text-2xl text-accent-300">{creating ? 'New card' : draft.name || 'Untitled card'}</h1>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {template.image && <Link to={labLink(template.image)} className="inline-flex items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-ink no-underline hover:border-accent/60">Edit template in Faction Lab</Link>}
         <Button title="Undo position change (⌘Z)" disabled={!undoStack.current.length} onClick={undo}>Undo</Button>
         <Button title="Redo (⇧⌘Z)" disabled={!redoStack.current.length} onClick={redo}>Redo</Button>
@@ -263,7 +258,6 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
     </div>
     {queryError && <p role="alert" className="text-danger">{queryError.message}</p>}
     {save.isError && <p role="alert" className="text-danger">{save.error.message}</p>}
-    {subtype.isError && <p role="alert" className="text-danger">{subtype.error.message}</p>}
     {createdArtworkError && !save.isSuccess && !artwork.isSuccess && <p role="alert" className="text-danger">The card was created, but its artwork or position could not be saved: {createdArtworkError}. Retry below.</p>}
     {artwork.isError && <p role="alert" className="text-danger">{artwork.error.message}</p>}
     {downloadError && <p role="alert" className="text-danger">{downloadError}</p>}
@@ -286,7 +280,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
             className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
           {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
-          {result && !movable && <Preview3DButton category={category} factionId={factionId ?? undefined} title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} className="absolute right-2 top-2 z-10" />}
+          {result && <ReferenceOverlay category={source.category} side="front" />}
+          {result && !movable && <Preview3DButton category={category} factionId={factionId ?? undefined} title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} backElementUrl={back.image?.elementUrl} className="absolute right-2 top-2 z-10" />}
           {result && movable && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]"
             style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
             <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-accent-100">Drag to move · scroll to zoom · Enter applies · Esc cancels</span>
@@ -296,10 +291,11 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             {renderError || (issues.length ? 'Fix the card fields to update the preview.' : !template.isPending && !template.image ? `No ${upgrade ? 'upgrade' : schema ? 'event' : 'combat'} template chosen for this faction. Pick one with the settings button in the library.` : 'Rendering card…')}
           </p>}
         </div>
-        <SafeAreaToggle />
         {renderError && <Button onClick={retry}>Retry rendering</Button>}
         {!!result?.warnings.length && <div role="status" className="space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w} className="m-0">{w}</p>)}</div>}
         {!template.image && !template.isPending && <Link to="/assemble" className="text-sm text-accent underline">Choose a template in the library</Link>}
+        <ReferenceField category={source.category} side="front" />
+        <details className="text-sm"><summary className="cursor-pointer text-accent">All reference cards</summary><div className="mt-2"><ReferenceCards category={source.category} compact /></div></details>
       </section>
 
       <div className="space-y-5">
@@ -314,13 +310,6 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               {CATEGORIES.map(category => <option key={category} value={category}>{LIBRARY_TABS.find(t => t.category === category)!.label}</option>)}
             </select>}</Field>
           </div>}
-          <Field label="Subtype">{fid => <SearchableSelect id={fid} className={selectClass} value={assembly.data?.subtype_id ?? 0} disabled={busy || !assembly.data}
-            onChange={e => subtype.mutate(Number(e.target.value))}>
-            <option value={0}>{source.category === 'combat' ? `Automatic by level (${displaySubtypeName(levelSubtypeName(draft.starting === 'true'))})` : 'None (card type overlay)'}</option>
-            {categorySubtypes.map(st => <option key={st.id} value={st.id}>{st.name} · {st.overlays.length} overlay{st.overlays.length === 1 ? '' : 's'}</option>)}
-          </SearchableSelect>}</Field>
-          {activeSubtype && !activeSubtype.overlays.length && <p className="m-0 text-xs text-ink/60">“{activeSubtype.name}” has no overlays yet, so the card type overlay is used. <Link to="/subtypes" className="text-accent underline">Upload overlays</Link>.</p>}
-          {!subtypes.isPending && !categorySubtypes.length && <p className="m-0 text-xs text-ink/60"><Link to="/subtypes" className="text-accent underline">Create a subtype</Link> to give this card its own overlays.</p>}
           <Field label="Title">{fid => <input id={fid} autoFocus={creating} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />}</Field>
           <Field label={`Title size (${Math.round(titleScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={titleScale} disabled={busy} className="w-full"
             onChange={e => { save.reset(); state.titleScale(id, Number(e.target.value)) }} />}</Field>
@@ -330,34 +319,27 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             <Field label="Action">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.action} onChange={e => edit('action', e.target.value)}>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SearchableSelect>}</Field>
           </div>}
           {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
-          {!schema && <div className={`grid grid-cols-2 gap-3 ${upgrade ? 'sm:grid-cols-2' : 'sm:grid-cols-5'}`}>
+          {!schema && <div className="max-w-48 space-y-3">
             {category === 'combat'
-              ? <div className="col-span-2 space-y-1 sm:col-span-2">
+              ? <div className="space-y-2">
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-ink/70" title="Starting cards have no level requirement or price and show the faction logo instead of a level number.">
                   <input type="checkbox" checked={draft.starting === 'true'} onChange={e => setStarting(e.target.checked)} className="accent-[var(--color-accent)]" />Starting card</label>
-                <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} disabled={draft.starting === 'true'} onChange={e => edit('level', e.target.value)}>
-                  {['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
+                <Field label="Level">{fid => <StepperInput id={fid} label="Level" value={Number(draft.level) || 0} min={0} max={3} disabled={draft.starting === 'true'} onChange={n => edit('level', String(n))} />}</Field>
               </div>
-              : <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>}
-            {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
-              disabled={!upgrade && key === 'resource_cost' && draft.starting === 'true'} title={!upgrade && key === 'resource_cost' && draft.starting === 'true' ? 'Starting cards have no resource price' : undefined} />}</Field>)}
+              : <Field label="Level">{fid => <StepperInput id={fid} label="Level" value={Number(draft.level) || 0} min={0} max={3} onChange={n => edit('level', String(n))} />}</Field>}
+            {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label, icon]) => { const locked = !upgrade && key === 'resource_cost' && draft.starting === 'true'
+              return <Field key={key} label={iconLabel(label, icon)}>{fid => <StepperInput id={fid} label={label} value={Number(draft[key]) || 0} disabled={locked} title={locked ? 'Starting cards have no resource price' : undefined} onChange={n => edit(key, String(n))} />}</Field> })}
           </div>}
-          {(framed ? ['text'] as const : ['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={key === 'text' ? 'Text' : LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
+          {(upgrade ? ['text', 'limitation'] as const : framed ? ['text'] as const : ['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation (optional)' : LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={key === 'limitation' ? 2 : 4} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key] ?? ''} onChange={e => edit(key, e.target.value)} />}</Field>)}
           <SymbolPicker insert={insertSymbol} disabled={busy} />
           <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={(schema ? ['subtype', 'action'] : upgrade ? ['upgrade_type', 'level', 'resource_cost'] : ['level', 'resource_cost', 'guns', 'shields', 'eagles']).filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
-            textDiffs={(framed ? ['name', 'text'] as const : ['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : LAYER_LABELS[key], before: saved[key], after: draft[key] }))} /></details>}
+            textDiffs={(upgrade ? ['name', 'text', 'limitation'] as const : framed ? ['name', 'text'] as const : ['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation' : LAYER_LABELS[key], before: saved[key] ?? '', after: draft[key] ?? '' }))} /></details>}
         </section>
 
-        {(framed || draft.starting === 'true') && <section aria-label="Faction logo" className={panel}>
-          <h2 className="m-0 font-display text-accent-300">{framed ? 'Faction logo' : 'Faction logo (starting card)'}</h2>
-          <Field label={`Logo scale (${Math.round(logoScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.1} max={3} step={0.01} value={logoScale} disabled={busy} className="w-full"
-            onChange={e => { save.reset(); state.logoScale(id, Number(e.target.value)) }} />}</Field>
-          <Button disabled={busy || logoScale === 1} onClick={() => { save.reset(); state.logoScale(id, 1) }}>Reset logo scale</Button>
-          <p className="m-0 text-xs text-ink/60">Resizes this card’s faction logo around the center of its badge. {creating ? 'Saved when you create the card.' : 'Click Save to keep the size.'}</p>
-        </section>}
+        {(framed || draft.starting === 'true') && <p className="m-0 text-xs text-ink/60">The faction logo on this card is the same for every card of the faction. Change it on Library → Faction config.</p>}
 
         {!upgrade && <section ref={artworkPanel} aria-label="Artwork" data-undo-scope className={panel}>
           <h2 className="m-0 font-display text-accent-300">Artwork</h2>

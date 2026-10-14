@@ -8,7 +8,7 @@ import { MaskEditor } from './MaskEditor'
 import { exportMask, type Stroke } from '../lib/mask'
 import { QuickCardPreview } from '../pages/assemble/QuickCardPreview'
 import { GenerationPreview3D } from '../pages/assemble/GenerationPreview3D'
-import { BackLogoFlatPreview } from '../pages/assemble/BackLogoPreview'
+import { BackFlatPreview } from '../pages/assemble/BackLogoPreview'
 
 type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
@@ -149,7 +149,7 @@ export function ImageLightbox({
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackLogoFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc}
+          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc}
             imgClassName="max-h-[80vh] max-w-full rounded-md object-contain" /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
             imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />}
         </div>
@@ -178,7 +178,7 @@ function AreaEditor({ src, alt, target, onCancel, onStarted }: {
     setSending(true)
     setError(null)
     try {
-      const g = await startEdit({ target, mask: exportMask(size.w, size.h, strokes), instruction: instruction.trim(), protect })
+      const g = await startEdit({ target, mask: painted ? exportMask(size.w, size.h, strokes) : undefined, instruction: instruction.trim(), protect: painted && protect })
       onStarted(g)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'edit failed')
@@ -213,20 +213,20 @@ function AreaEditor({ src, alt, target, onCancel, onStarted }: {
             className={`${tool(false)} disabled:cursor-not-allowed disabled:opacity-45`}>Undo</button>
           <button type="button" disabled={strokes.length === 0} onClick={() => setStrokes([])}
             className={`${tool(false)} disabled:cursor-not-allowed disabled:opacity-45`}>Clear</button>
-          <span className="ml-auto text-[11px] text-ink/45">Paint over the parts to change</span>
+          <span className="ml-auto text-[11px] text-ink/45">Paint over the parts to change, or paint nothing to change the whole image</span>
         </div>
         <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} aria-label="Edit instruction"
-          placeholder="What should change in the painted area? e.g. replace the skull with a cog emblem"
+          placeholder="What should change? e.g. replace the skull with a cog emblem (in the painted area), or make everything darker (nothing painted)"
           className="min-h-16 w-full resize-y rounded-md border border-divider bg-bg px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-ink/70" title="Paste the original pixels back everywhere you didn't paint">
-            <input type="checkbox" checked={protect} onChange={(e) => setProtect(e.target.checked)} />
+            <input type="checkbox" checked={protect && painted} disabled={!painted} onChange={(e) => setProtect(e.target.checked)} />
             Keep unpainted area exactly as is
           </label>
           {error && <span role="alert" className="text-xs text-danger">{error}</span>}
           <span className="ml-auto flex gap-2">
             <button type="button" onClick={onCancel} className={tool(false)}>Cancel</button>
-            <button type="button" disabled={!painted || !instruction.trim() || sending || !size} onClick={send}
+            <button type="button" disabled={!instruction.trim() || sending || !size} title={painted ? undefined : 'Nothing is painted: the whole image is changed'} onClick={send}
               className="cursor-pointer rounded-md border border-accent bg-transparent px-3 py-1 text-xs font-medium text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-45">
               {sending ? 'Sending…' : 'Send edit'}
             </button>

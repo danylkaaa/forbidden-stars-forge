@@ -25,6 +25,7 @@ export function validateCard(value: unknown, factionIds: readonly number[]): Val
   }
   for (const f of fields) {
     const x = effective[f.key]
+    if (f.optional && x === undefined) continue
     if (f.kind === 'number' || f.key === 'level') {
       const max = f.key === 'level' ? 3 : Number.MAX_SAFE_INTEGER
       if (typeof x !== 'number' || !Number.isSafeInteger(x) || x < 0 || x > max) add(f.key, `Must be an integer from 0 to ${max}`)
@@ -37,7 +38,11 @@ export function validateCard(value: unknown, factionIds: readonly number[]): Val
 export function draftInput(draft: CardDraft): unknown {
   const category = draft.category as Category
   const input: Record<string, unknown> = { faction_id: numeric(draft.faction_id), name: draft.name.trim(), category }
-  for (const f of FIELDS[category] ?? []) input[f.key] = f.kind === 'number' || f.key === 'level' ? numeric(draft[f.key]) : draft[f.key]
+  for (const f of FIELDS[category] ?? []) {
+    // An optional field left empty is not sent at all.
+    if (f.optional && !(draft[f.key] ?? '').trim()) continue
+    input[f.key] = f.kind === 'number' || f.key === 'level' ? numeric(draft[f.key]) : draft[f.key]
+  }
   if (category === 'combat') input.starting = draft.starting === 'true'
   return input
 }

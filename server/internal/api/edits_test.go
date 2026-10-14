@@ -108,12 +108,58 @@ func TestAreaEditValidation(t *testing.T) {
 		code int
 	}{
 		"no instruction": {`{"parent":{"kind":"generation","id":1},"mask":"data:image/png;base64,` + mask + `"}`, 400},
-		"no mask":        {`{"parent":{"kind":"generation","id":1},"instruction":"x"}`, 400},
 		"bad kind":       {`{"parent":{"kind":"nope","id":1},"mask":"data:image/png;base64,` + mask + `","instruction":"x"}`, 400},
 		"missing parent": {`{"parent":{"kind":"generation","id":99},"mask":"data:image/png;base64,` + mask + `","instruction":"x"}`, 404},
 	} {
 		if rec, out := doJSON(t, h, http.MethodPost, "/api/image-edits", c.body); rec.Code != c.code {
 			t.Errorf("%s: %d %v", name, rec.Code, out)
 		}
+	}
+}
+
+func TestAnEditWithNoMaskChangesTheWholeImage(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	h, _, dataDir := newTestRouterWithStore(t)
+	fid, ctid := setupGenFixtures(t, h)
+	original := pngOf(40, 10, func(int, int) color.NRGBA { return red })
+	edited := pngOf(40, 10, func(int, int) color.NRGBA { return blue })
+	var last map[string]any
+	var calls int
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		calls++
+		out := original
+		if calls > 1 {
+			last, out = body, edited
+		}
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}]}`, base64.StdEncoding.EncodeToString(out))
+	}))
+	defer fake.Close()
+	old := openAIBaseURL
+	openAIBaseURL = fake.URL
+	defer func() { openAIBaseURL = old }()
+	_, g := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft"}`, fid, ctid))
+	parentID := int64(g["id"].(float64))
+	pollGeneration(t, h, parentID)
+	rec, out := doJSON(t, h, http.MethodPost, "/api/image-edits", fmt.Sprintf(`{"parent":{"kind":"generation","id":%d},"instruction":"make it darker","protect":true}`, parentID))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("edit: %d %v", rec.Code, out)
+	}
+	done := pollGeneration(t, h, int64(out["id"].(float64)))
+	if done["status"] != "done" {
+		t.Fatalf("edit result: %v", done)
+	}
+	if _, masked := last["mask"]; masked {
+		t.Fatalf("a whole-image edit sends no mask: %v", last)
+	}
+	if p := last["prompt"].(string); !strings.Contains(p, "make it darker") || !strings.Contains(p, "Change the provided image as described") || strings.Contains(p, "masked") {
+		t.Fatalf("prompt:\n%s", p)
+	}
+	// Nothing is protected: the whole new picture replaces the old.
+	saved, _ := os.ReadFile(filepath.Join(dataDir, done["image_path"].(string)))
+	res, _ := png.Decode(bytes.NewReader(saved))
+	if got := color.NRGBAModel.Convert(res.At(37, 5)).(color.NRGBA); got != blue {
+		t.Fatalf("pixel = %v, want the edited colour", got)
 	}
 }

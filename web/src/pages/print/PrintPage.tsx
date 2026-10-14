@@ -53,7 +53,7 @@ function CardRenderer({ card, template, onAsset }: { card: Card; template: Retur
 type FactionStatus = { template: 'loading' | 'missing' | 'ok'; back: 'loading' | 'none' | 'ready' | 'error'; backAsset: PrintAsset | null; error: string }
 function FactionRenderer({ factionId, imagePx, onStatus }: { factionId: number; imagePx: { width: number; height: number }; onStatus: (id: number, status: FactionStatus | null) => void }) {
   const template = useTemplate(factionId, 'combat'), back = useTemplate(factionId, 'combat', 'back')
-  const { asset, error } = useBackAsset(back.image?.url, back.image?.logoUrl, back.image?.logoScale, imagePx)
+  const { asset, error } = useBackAsset(back.image?.url, back.image?.logoUrl, back.image?.logoScale, imagePx, 'combat', factionId, back.image?.elementUrl)
   const templateState = template.isPending ? 'loading' : template.image ? 'ok' : 'missing'
   const backState = back.isPending ? 'loading' : !back.image ? 'none' : error ? 'error' : asset ? 'ready' : 'loading'
   useEffect(() => { onStatus(factionId, { template: templateState, back: backState, backAsset: asset, error }) }, [factionId, templateState, backState, asset, error, onStatus])

@@ -70,13 +70,13 @@ export function textRuns(text: string): Run[] {
   })
 }
 export type Placement = { x: number; y: number; width: number; height: number; size: number; lineHeight: number; color: string; font: 'rules' | 'event' | 'headline'; iconStyle?: IconStyle; autoY?: boolean; align?: 'left' | 'center' | 'right'; verticalAlign?: 'top' | 'center'; paddingTop?: number; paddingBottom?: number }
-export const LAYERS = ['name', 'level', 'resource_cost', 'resources', 'upper_text', 'lower_text', 'logo', 'order_icon', 'subtype'] as const
+export const LAYERS = ['name', 'level', 'resource_cost', 'resources', 'upper_text', 'lower_text', 'logo', 'order_icon', 'subtype', 'level_icon', 'cost_icon', 'limitation'] as const
 export type Layer = typeof LAYERS[number]
 export type Layout = Record<Layer, Placement>
-export const LAYER_LABELS: Record<Layer, string> = { name: 'Title', level: 'Level', resource_cost: 'Resource price', resources: 'Resource icons (guns, shields, morale)', upper_text: 'Upper text', lower_text: 'Lower text', logo: 'Faction logo (starting cards)', order_icon: 'Order icon', subtype: 'Scheme / tactic label' }
+export const LAYER_LABELS: Record<Layer, string> = { name: 'Title', level: 'Level', resource_cost: 'Resource price', resources: 'Resource icons (guns, shields, morale)', upper_text: 'Upper text', lower_text: 'Lower text', logo: 'Faction logo (starting cards)', order_icon: 'Order icon', subtype: 'Scheme / tactic label', level_icon: 'Level icon', cost_icon: 'Resource gear icon', limitation: 'Limitation' }
 // Upgrade cards use the same layers with their own names: the rules text
 // is the card's text, and only these layers are painted.
-export const UPGRADE_LAYERS = ['name', 'level', 'resource_cost', 'order_icon', 'logo', 'upper_text'] as const satisfies readonly Layer[]
+export const UPGRADE_LAYERS = ['name', 'level_icon', 'level', 'cost_icon', 'resource_cost', 'order_icon', 'logo', 'upper_text', 'limitation'] as const satisfies readonly Layer[]
 export const SCHEMA_LAYERS = ['name', 'order_icon', 'logo', 'subtype', 'upper_text'] as const satisfies readonly Layer[]
 export const SCHEMA_LAYER_LABELS: Record<Layer, string> = { ...LAYER_LABELS, order_icon: 'Action icon', upper_text: 'Description', logo: 'Faction logo' }
 export const framedLayers = (category: Category): readonly Layer[] => category === 'schema' ? SCHEMA_LAYERS : UPGRADE_LAYERS
@@ -89,14 +89,14 @@ export function defaultLayout(category: Category = 'combat'): Layout {
   if (category === 'upgrade') return upgradeLayout()
   if (category === 'schema') return schemaLayout()
   return {
-    name: { ...box(27, 6.1, 60, 5.5, 4.8), font: 'headline', align: 'left', verticalAlign: 'center' }, level: { ...box(12.2, 5.2, 6, 5.7, 5.1), font: 'headline' },
+    name: { ...box(27, 6.1, 60, 5.5, 4.8), font: 'headline', align: 'left', verticalAlign: 'center' }, level: { ...box(10.8, 4.2, 6, 5.7, 5.1), font: 'headline' },
     resource_cost: { ...box(7.2, 17.4, 4, 5, 4.7, '#ffffff'), font: 'headline' },
     // One column: guns, then shields, then morale, each icon one line apart.
     resources: { ...box(10, 27, 9, 45, 6.4, '#ffffff'), iconStyle: 'plain' },
     upper_text: { ...box(11, 77.1, 80, 7.3, 2.9), autoY: true, align: 'left' }, lower_text: { ...box(10.5, 87.2, 80, 10.7, 2.9), autoY: true, align: 'left' },
     // The square badge at the top left; the logo is fitted inside, centred.
     logo: box(5.9, 5.3, 15.6, 11.5, 10),
-    order_icon: box(28, 26.5, 44, 28, 10),
+    order_icon: box(28, 26.5, 44, 28, 10), level_icon: box(4.6, 1.2, 18.8, 13.8, 10), cost_icon: box(11.8, 16.4, 10, 7.4, 10), limitation: { ...box(17, 75, 66, 5, 2.6), align: 'center' },
     subtype: { ...box(15, 54, 70, 4.5, 3.4), font: 'headline', align: 'center', verticalAlign: 'center' },
   }
 }
@@ -122,10 +122,17 @@ function upgradeLayout(): Layout {
   const base = defaultLayout('combat')
   return {
     ...base,
-    name: { ...box(33.5, 17.9, 44, 6.4, 2.7), font: 'headline', align: 'left', verticalAlign: 'center' },
-    level: { ...box(7, 5.2, 8, 7, 5.2, white), font: 'headline' },
-    resource_cost: { ...box(3.4, 17.8, 5, 6.6, 3.9, white), font: 'headline' },
-    upper_text: { ...box(12, 58, 76, 22, 3.1), autoY: false, align: 'left' },
+    name: { ...box(30, 17.9, 52, 6.4, 2.7), font: 'headline', align: 'center', verticalAlign: 'center' },
+    // The yellow level badge over the round vent at the top left (the level in its dome), and
+    // the resource gear on the dark plate under it, with the price to its left.
+    level_icon: box(6.3, 3.4, 19, 13.9, 10),
+    level: { ...box(11.5, 5.4, 8.2, 6.4, 5.2, white), font: 'headline', color: '#141510' },
+    cost_icon: box(15.2, 18.3, 9.5, 7.1, 10),
+    resource_cost: { ...box(10.2, 18.8, 5, 6.2, 3.9, white), font: 'headline' },
+    // Inside the parchment panel of front.png (about 14–86% across).
+    upper_text: { ...box(17, 58, 66, 16, 3.1), autoY: false, align: 'left' },
+    // An optional line centred at the bottom of the parchment, after the rules text.
+    limitation: { ...box(17, 75, 66, 5, 2.6), align: 'center', verticalAlign: 'center' },
     order_icon: box(28, 26, 44, 28, 10),
     // The round badge at the top right.
     logo: box(77.5, 2.5, 20, 14.5, 10),
@@ -133,21 +140,11 @@ function upgradeLayout(): Layout {
 }
 export function downloadName(name: string): string { return `${name.trim().replace(/[\\/:*?"<>|]/g, '-').split('').map(c => c.charCodeAt(0) < 32 ? '-' : c).join('').slice(0, 120) || 'battle-card'}.png` }
 
-// Layers that sit on the overlay's badges. A subtype stores their positions,
-// since each subtype has its own overlays.
-export const OVERLAY_LAYERS = ['level', 'resource_cost', 'resources', 'logo'] as const satisfies readonly Layer[]
-export const isOverlayLayer = (layer: Layer) => (OVERLAY_LAYERS as readonly Layer[]).includes(layer)
 // The resource column's footprint in card %: it follows icon size and
 // spacing for `count` icons rather than an editable box.
 export function resourceBox(p: Placement, count: number, card = { width: 816, height: 1104 }) {
   const n = Math.max(1, count)
   return { x: p.x, y: p.y, width: p.size * .9 * card.height / card.width, height: p.size * ((n - 1) * p.lineHeight + 1) }
-}
-
-export function withSubtypeLayout(layout: Layout, subtype: Partial<Layout> | undefined): Layout {
-  if (!subtype) return layout
-  const saved = withLegacyResources(subtype)
-  return { ...layout, ...Object.fromEntries(OVERLAY_LAYERS.map(key => [key, { ...layout[key], ...saved[key] }])) }
 }
 
 // Layouts saved before the single resource stack kept the gun column's box.
@@ -178,7 +175,7 @@ export const ART_WINDOW = { x: 21, y: 14.5, width: 79, height: 85.5 }
 export const SCHEMA_ART_WINDOW = { x: 0, y: 12.9, width: 73.5, height: 37.6 }
 export const artWindow = (category: Category) => category === 'schema' ? SCHEMA_ART_WINDOW : ART_WINDOW
 export const DEMO_UPGRADE: UpgradeCard = {
-  id: 0, faction_id: 0, category: 'upgrade', name: 'From the Warp', upgrade_type: 'dominate', level: 1, resource_cost: 2,
+  id: 0, faction_id: 0, category: 'upgrade', name: 'From the Warp', upgrade_type: 'dominate', level: 1, resource_cost: 2, limitation: 'Limit one per area.',
   text: 'While resolving this order, your ships can move through Warp Storms.', created_at: '', updated_at: '',
 }
 export const DEMO_SCHEMA: SchemaCard = {

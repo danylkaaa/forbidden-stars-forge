@@ -26,8 +26,8 @@ func TestNebulaPicturesAPI(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	if code := upload("upgrade", img.Bytes()); code != 400 {
-		t.Fatalf("upgrade upload = %d, want 400", code)
+	if code := upload("base", img.Bytes()); code != 400 {
+		t.Fatalf("base upload = %d, want 400", code)
 	}
 	if code := upload("combat", []byte("not an image")); code != 400 {
 		t.Fatalf("bad image = %d, want 400", code)

@@ -21,7 +21,7 @@ func TestBackLogoUploadScaleReplaceAndClear(t *testing.T) {
 	h := NewRouter(db, nil, dir)
 	f := createFaction(t, h, "Tau")
 	fid := int64(f["id"].(float64))
-	ct, err := store.NewCardTypesStore(db).Create("combat back", "", "", "")
+	ct, err := store.NewCardTypesStore(db).Create("card back", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

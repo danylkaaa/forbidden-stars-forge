@@ -40,7 +40,7 @@ export function CardTypesTable({
             return (
               <tr key={ct.id} className="border-t border-ink/8 align-top hover:bg-ink/4">
                 <td className="whitespace-nowrap px-4 py-3 font-medium">
-                  <Link to={generationsLink({ cardTypeIds: [ct.id] })} title="Show this card type's generations"
+                  <Link to={generationsLink({ cardTypeIds: [ct.id] })} title="Show this card type's assets"
                     className="text-ink no-underline hover:text-accent hover:underline">{ct.name}</Link>
                   {isBuiltinCardType(ct.name) && <span className="ml-2 text-[10px] uppercase tracking-wider text-ink/40">built-in</span>}
                 </td>

@@ -15,8 +15,7 @@ import { parentImageUrl } from '../../lib/imageEdits'
 import { useDoneBatchItems } from '../generations/api'
 import { QuickCardPreview } from '../assemble/QuickCardPreview'
 import { GenerationPreview3D } from '../assemble/GenerationPreview3D'
-import { BackLogoScaleControls } from '../assemble/BackLogoPreview'
-import { useBackLogo } from '../assemble/backLogo'
+import { BackFlatPreview } from '../assemble/BackLogoPreview'
 import { Tag } from '../../components/Tag'
 import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
@@ -76,14 +75,17 @@ export default function FactionLabPage() {
   const faction = factions?.find((f) => f.id === lab.factionId) ?? null
   const cardType = cardTypes?.find((c) => c.id === lab.cardTypeId) ?? null
   const isBack = cardType?.name.endsWith(' back') ?? false
-  const frontType = isBack ? cardTypes?.find((c) => c.name === cardType!.name.slice(0, -5)) : undefined
+  // The card back serves combat and event cards; other backs pair with the type of the same name.
+  const frontNames = !isBack ? [] : cardType!.name === 'card back' ? ['combat', 'events'] : [cardType!.name.slice(0, -5)]
+  const frontTypes = cardTypes?.filter((c) => frontNames.includes(c.name)) ?? []
+  const isFrontType = (id: number) => frontTypes.some((t) => t.id === id)
   const frontOptions: FrontImageOption[] = [
-    ...(gens ?? []).filter((g) => g.status === 'done' && g.faction_id === faction?.id && g.card_type_id === frontType?.id).map((g) => ({
+    ...(gens ?? []).filter((g) => g.status === 'done' && g.faction_id === faction?.id && isFrontType(g.card_type_id)).map((g) => ({
       key: `generation-${g.id}`, name: g.name || `Generation #${g.id}`, url: `/api/generations/${g.id}/image`,
       libraryKey: `test-${g.id}`, source: 'Lab' as const,
       ref: { kind: 'generation' as const, id: g.id },
     })),
-    ...(batchImages.data ?? []).filter((b) => b.faction_id === faction?.id && b.card_type_id === frontType?.id).map((b) => ({
+    ...(batchImages.data ?? []).filter((b) => b.faction_id === faction?.id && isFrontType(b.card_type_id)).map((b) => ({
       key: `batch-${b.batch_id}-${b.id}`, name: b.name || `Batch image #${b.id}`, url: `/api/batches/${b.batch_id}/items/${b.id}/image`,
       libraryKey: `batch-${b.id}`, source: 'Batch' as const,
       ref: { kind: 'batch-item' as const, id: b.id, batch_id: b.batch_id },
@@ -213,7 +215,7 @@ export default function FactionLabPage() {
                 <SearchableSelect id={id} className={selectClass} value={lab.cardTypeId ?? ''}
                   onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
                   <option value="">Select…</option>
-                  {cardTypes?.map((c) => <option key={c.id} value={c.id}>{c.openai_file_id ? c.name : `${c.name} (no file)`}</option>)}
+                  {cardTypes?.filter((c) => c.name !== 'upgrade').map((c) => <option key={c.id} value={c.id}>{c.openai_file_id ? c.name : c.no_template ? `${c.name} (no template)` : `${c.name} (no file)`}</option>)}
                 </SearchableSelect>
               )}
             </Field>
@@ -233,7 +235,7 @@ export default function FactionLabPage() {
 
           {isBack && (
             <FrontImagePicker key={`${lab.factionId}-${lab.cardTypeId}`} options={frontOptions} selectedKey={frontImage?.key ?? ''}
-              onSelect={setFrontKey} factionId={lab.factionId} frontTypeName={frontType?.name ?? ''}
+              onSelect={setFrontKey} factionId={lab.factionId} frontTypeName={frontNames.join(' or ')}
               loading={gensLoading || batchImages.isPending} error={!!gensError || !!batchImages.error} />
           )}
 
@@ -366,13 +368,13 @@ export default function FactionLabPage() {
             className={`m-0 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12px] leading-normal text-ink/75 ${promptReady ? '' : 'opacity-60'}`}>
             {!fields ? 'Pick a faction' : lab.cardTypeId === null ? 'Select a card type' : assembled.data?.prompt ?? 'Loading…'}
           </pre>
-          {cardType && !cardType.openai_file_id && (
+          {cardType && !cardType.openai_file_id && !cardType.no_template && (
             <p className="m-0 text-[13px] text-warn">This card type has no OpenAI file uploaded yet.</p>
           )}
           {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
           <div className="flex items-center gap-3">
             <Button variant="primary" type="button" onClick={onGenerate}
-              disabled={!promptReady || !cardType?.openai_file_id || busy !== null}>
+              disabled={!promptReady || !(cardType?.openai_file_id || cardType?.no_template) || busy !== null}>
               {busy === 'generate' ? 'Starting…' : 'Generate'}
             </Button>
             <span className="text-xs text-ink/45">
@@ -438,9 +440,8 @@ function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdi
   // text and artwork (or the demo card).
   const [asCard, setAsCard] = useState(false)
   const [previewCardId, setPreviewCardId] = useState(0)
-  const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'combat back' ? 'back' : undefined
-  const backCategory = cardTypeName === 'combat back' ? 'combat' : cardTypeName === 'events back' ? 'schema' : cardTypeName === 'upgrade back' ? 'upgrade' : undefined
-  const backLogo = useBackLogo(backCategory ? gen.faction_id : undefined, backCategory)
+  const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'card back' ? 'back' : undefined
+  const backCategory = cardTypeName === 'card back' ? 'combat' : undefined
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
@@ -450,14 +451,13 @@ function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdi
         </div>}
         {combatSide && <GenerationPreview3D imageUrl={imageUrl} factionId={gen.faction_id} side={combatSide} title={alt} />}
         {!asCard && <LayerControls maskSrc={maskSrc} />}
-        {backCategory && <BackLogoScaleControls logo={backLogo} />}
       </div>}
       {imageUrl && asCard ? <QuickCardPreview imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
           <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={combatSide === 'front' ? gen.faction_id : undefined} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            {backCategory && backLogo.logoUrl ? <div className="mx-auto aspect-[816/1104] h-full max-w-full"><LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="natural" imgClassName="h-full w-full object-contain" logoUrl={backLogo.logoUrl} logoScale={backLogo.scale} /></div> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
+            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} imgClassName="h-full w-full object-contain" /> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>

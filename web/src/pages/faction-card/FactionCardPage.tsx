@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
-import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { SafeAreaLines } from '../../components/SafeArea'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { useCards } from '../cards/api'
 import { SearchableSelect } from '../../components/SearchableSelect'
@@ -11,6 +11,8 @@ import { FactionSelect } from '../assemble/FactionSelect'
 import { useLibraryImages } from '../assemble/library'
 import { useAssembly } from '../assemble/state'
 import { CardCanvas } from '../assemble/CardCanvas'
+import { ReferenceOverlay } from '../assemble/ReferenceOverlay'
+import { ReferenceField } from '../assemble/ReferenceCards'
 import { ImagePickerField } from '../assemble/ImagePicker'
 import { useFactions } from '../factions/api'
 import { elementBox, useFactionCardLayout, type FactionCardLayout } from './layout'
@@ -63,7 +65,8 @@ function AssetPicker({ label, url, onPick, onRemove, disabled, builtIn }: { labe
   </div>
 }
 
-export default function FactionCardPage() {
+// `only` opens one side's own editor page: just that side's preview and fields.
+export default function FactionCardPage({ only }: { only?: Side } = {}) {
   const factions = useFactions(), state = useAssembly(), queryClient = useQueryClient()
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -128,12 +131,12 @@ export default function FactionCardPage() {
   if (factions.isPending) return <p role="status" className="text-sm text-ink/60">Loading…</p>
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center gap-3">
-      <Link to="/assemble" className="text-sm text-accent no-underline hover:underline">← Library</Link>
-      <h1 className="m-0 font-display text-2xl text-accent-300">Faction card</h1>
+      <Link to={only ? `/assemble/faction-card?faction=${factionId}` : '/assemble'} className="text-sm text-accent no-underline hover:underline">{only ? '← Faction card' : '← Library'}</Link>
+      <h1 className="m-0 font-display text-2xl text-accent-300">{only ? `Faction card ${only}` : 'Faction card'}</h1>
       <FactionSelect factions={factions.data ?? []} value={factionId} onChange={id => state.select({ factionId: id })} />
       <div className="ml-auto flex flex-wrap gap-2">
-        <Button disabled={!faces.front} onClick={() => void download('front')}>Download front PNG</Button>
-        <Button disabled={!faces.back} onClick={() => void download('back')}>Download back PNG</Button>
+        {only !== 'back' && <Button disabled={!faces.front} onClick={() => void download('front')}>Download front PNG</Button>}
+        {only !== 'front' && <Button disabled={!faces.back} onClick={() => void download('back')}>Download back PNG</Button>}
         <Button disabled={!dirty || save.isPending} onClick={() => { save.reset(); loaded.current = ''; record.refetch() }}>Discard changes</Button>
         <Button variant="primary" disabled={!dirty || save.isPending || !draft} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save'}</Button>
       </div>
@@ -153,12 +156,14 @@ export default function FactionCardPage() {
       onCost={n => edit(openSlot === 'city' ? { city_cost: n } : { factory_cost: n })} onClose={() => setOpenSlot(null)} />}
     {draft && <div className="grid items-start gap-5 xl:grid-cols-[minmax(320px,1.3fr)_minmax(360px,1fr)]">
       <section aria-label="Card preview" className="space-y-2 xl:sticky xl:top-3">
-        {(['front', 'back'] as const).map(side => { const result = faces[side]
+        {(['front', 'back'] as const).filter(side => !only || side === only).map(side => { const result = faces[side]
           return <div key={side} className="rounded-lg border border-divider bg-black/30 p-2">
             <div className="relative mx-auto" style={{ width: 'min(100%, calc((100vh - 200px) / 2 * 1.4888))', aspectRatio: `${CARD_SIZE.width} / ${CARD_SIZE.height}` }}>
               {result ? <>
                 <CardCanvas result={result} aria-label={`Faction card ${side}`} className="block h-full w-full" />
+                {side === 'back' && !only && <Link to={`/assemble/faction-card/back?faction=${factionId}`} aria-label="Edit card back" title="Edit card back" className="absolute inset-0 rounded border border-transparent hover:border-accent hover:bg-accent/10" />}
                 <SafeAreaLines px={CARD_SIZE} cutMm={FACTION_CARD_CUT_MM} />
+                <ReferenceOverlay category="faction" side={side} />
                 {side === 'front' && UNIT_SLOTS.map(({ key, label }) => { const r = unitRowBox(key, layout)
                   return <button key={key} type="button" aria-label={`Edit ${draft.data.units[key].name || label}`} title={`Edit ${draft.data.units[key].name || label}`} onClick={() => setOpenSlot(key)}
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
@@ -171,40 +176,40 @@ export default function FactionCardPage() {
                 })}
               </> : <p role="status" className="absolute inset-0 grid place-items-center text-sm text-ink/60">{faces.error || 'Rendering card…'}</p>}
             </div>
+            <div className="mt-2"><ReferenceField category="faction" side={side} /></div>
             {!!result?.warnings.length && <div role="status" className="mt-1 space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w} className="m-0">{w}</p>)}</div>}
           </div>
         })}
         {faces.error && (faces.front || faces.back) && <p role="alert" className="m-0 text-xs text-danger">{faces.error}</p>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <SafeAreaToggle />
           <span className="text-xs text-ink/55">258 × 170 mm cut + 5 mm bleed = 268 × 180 mm, {CARD_SIZE.width} × {CARD_SIZE.height} px per side (previews are half size). Fits A4 landscape.</span>
         </div>
       </section>
 
       <div className="space-y-3">
         <Section title="Generated front and back" label="Templates" open>
-          {(['front', 'back'] as const).map(s => <ImagePickerField key={s} label={`${s === 'front' ? 'Front' : 'Back'} image`} title={`Choose the ${s} image`} factionId={factionId} preferredType={s === 'front' ? 'faction card' : 'faction card back'}
+          {(['front', 'back'] as const).filter(s => !only || s === only).map(s => <ImagePickerField key={s} label={`${s === 'front' ? 'Front' : 'Back'} image`} title={`Choose the ${s} image`} factionId={factionId} preferredType={s === 'front' ? 'faction card' : 'faction card back'}
             selectedKey={s === 'front' ? draft.front : draft.back} onSelect={key => { save.reset(); setDraft(d => d && { ...d, [s]: key }) }}
             upload={{ url: assets[`${s}-image`], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: `${s}-image`, file }) }} />)}
           {!options.length && <p className="m-0 text-xs text-ink/60">No generated images for this faction yet. Generate the front with the “faction card” type and the back with “faction card back” in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">Faction Lab</Link>, or upload your own.</p>}
         </Section>
 
-        <Section title="Front text" label="Faction text" open>
+        {only !== 'back' && <Section title="Front text" label="Faction text" open>
           <Field label="Title">{id => <input id={id} className={inputClass} value={draft.data.title} onChange={e => edit({ title: e.target.value })} />}</Field>
           <Field label="Subtitle">{id => <input id={id} className={inputClass} value={draft.data.subtitle} onChange={e => edit({ subtitle: e.target.value })} />}</Field>
           <Field label="Faction text">{id => <textarea id={id} rows={5} className={inputClass} value={draft.data.text} onChange={e => edit({ text: e.target.value })} />}</Field>
           <p className="m-0 text-xs text-ink/55">Wrap a lead-in in **double asterisks** to make it bold, e.g. **Starkest Terror:** When you resolve…</p>
         
-        </Section>
+        </Section>}
 
-        <Section title="Units" label="Units">
+        {only !== 'back' && <Section title="Units" label="Units">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Faction unit colour">{id => <input id={id} type="color" className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.color} onChange={e => { save.reset(); setDraft(d => d && { ...d, color: e.target.value }) }} />}</Field>
           </div>
-          <p className="m-0 text-xs text-ink/55">Every model is painted in this colour. To change a unit's name, numbers or model, click it on the front preview; click the city or the factory to change its price. Model shadow and outline are shared by all factions: set them on <Link to="/subtypes" className="text-accent underline">Card Types → Faction card</Link>.</p>
-        </Section>
+          <p className="m-0 text-xs text-ink/55">Every model is painted in this colour. To change a unit's name, numbers or model, click it on the front preview; click the city or the factory to change its price. Model shadow and outline are shared by all factions: set them on <Link to="/card-templates" className="text-accent underline">Card Types → Faction card</Link>.</p>
+        </Section>}
 
-        <Section title="Back text" label="Back text">
+        {only !== 'front' && <Section title="Back text" label="Back text">
           <Field label="Story text">{id => <textarea id={id} rows={6} className={inputClass} value={draft.data.back_text} onChange={e => edit({ back_text: e.target.value })} />}</Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Signature">{id => <input id={id} className={inputClass} value={draft.data.signature} onChange={e => edit({ signature: e.target.value })} />}</Field>
@@ -213,9 +218,9 @@ export default function FactionCardPage() {
           <div><span className="mb-1 block text-xs text-ink/70">Portrait</span>
             <AssetPicker label="Portrait image" url={assets[assetKeys.portrait]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.portrait, file })} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.portrait })} /></div>
         
-        </Section>
+        </Section>}
 
-        <Section title="Initial forces" label="Initial forces">
+        {only !== 'front' && <Section title="Initial forces" label="Initial forces">
           {draft.data.initial.map((row, i) => <div key={i} className="space-y-2"><div className="grid grid-cols-[4rem_1fr_1fr_auto] items-end gap-2">
             <Field label="Count">{id => <input id={id} type="number" min={0} className={inputClass} value={row.count} onChange={e => setRow(i, { count: toNumber(e.target.value) })} />}</Field>
             <Field label="Icon">{id => <select id={id} className={selectClass} value={row.icon} onChange={e => { const icon = e.target.value as ForcesIcon, c = forcesChoices.find(x => x.value === icon); setRow(i, { icon, ...(icon === 'card' ? {} : { label: c?.label ?? row.label, card_id: undefined }) }) }}>{forcesChoices.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>}</Field>
@@ -229,9 +234,9 @@ export default function FactionCardPage() {
           </div>)}
           {draft.data.initial.length < 8 && <Button onClick={() => edit({ initial: [...draft.data.initial, { icon: 'materiel', count: 1, label: 'Materiel' }] })}>Add row</Button>}
         
-        </Section>
+        </Section>}
 
-        <Section title="Objectives" label="Objectives">
+        {only !== 'front' && <Section title="Objectives" label="Objectives">
           {draft.data.objectives.map((o, i) => <fieldset key={i} className="space-y-2 rounded border border-divider p-2">
             <legend className="px-1 text-xs text-ink/60">Objective {i + 1}</legend>
             <Field label={`Objective ${i + 1} name`}>{id => <input id={id} className={inputClass} value={o.name} onChange={e => edit({ objectives: draft.data.objectives.map((x, n) => n === i ? { ...x, name: e.target.value } : x) })} />}</Field>
@@ -239,14 +244,14 @@ export default function FactionCardPage() {
             <AssetPicker label={`Objective ${i + 1} image`} url={assets[assetKeys.objective(i)]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.objective(i), file })} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.objective(i) })} />
           </fieldset>)}
         
-        </Section>
+        </Section>}
 
-        <Section title="Shared icons (all factions)" label="Shared icons">
+        {only !== 'back' && <Section title="Shared icons (all factions)" label="Shared icons">
           <p className="text-xs text-ink/55">Structures, stat icons, forge and tech badge come with the app; upload one to override it.</p>
           <div className="space-y-2">{DEFAULT_ICONS.map(({ key, label }) => <div key={key}><span className="mb-1 block text-xs text-ink/70">{label}</span>
             <AssetPicker label={`${label} icon`} url={defaults[key]} builtIn={BUNDLED_ICONS[key]} disabled={busy} onPick={file => upload.mutate({ id: 0, key, file })} onRemove={() => remove.mutate({ id: 0, key })} /></div>)}</div>
         
-        </Section>
+        </Section>}
       </div>
     </div>}
   </div>

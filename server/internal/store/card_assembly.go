@@ -21,7 +21,6 @@ type CardAssembly struct {
 	ImageURL    string           `json:"image_url"`
 	OverlayID   string           `json:"overlay_id"`
 	LogoScale   float64          `json:"logo_scale"`
-	SubtypeID   int64            `json:"subtype_id"`
 	Transform   ArtworkTransform `json:"transform"`
 	Layout      json.RawMessage  `json:"layout"`
 	UpdatedAt   string           `json:"updated_at"`
@@ -34,9 +33,6 @@ func ValidateAssembly(a CardAssembly) error {
 	t := a.Transform
 	if math.IsNaN(t.Scale) || math.IsInf(t.Scale, 0) || t.Scale < .1 || t.Scale > 5 || math.IsNaN(t.X) || math.IsInf(t.X, 0) || math.Abs(t.X) > 200 || math.IsNaN(t.Y) || math.IsInf(t.Y, 0) || math.Abs(t.Y) > 200 {
 		return errors.New("artwork scale must be 0.1–5 and position must be -200–200")
-	}
-	if a.SubtypeID < 0 {
-		return errors.New("invalid subtype")
 	}
 	if a.OverlayID != "auto" && a.OverlayID != "none" {
 		n, e := strconv.ParseInt(a.OverlayID, 10, 64)
@@ -56,7 +52,7 @@ func (s *CardsStore) Assembly(id int64) (CardAssembly, error) {
 	}
 	a := CardAssembly{CardID: id, LogoScale: 1, OverlayID: "auto", Transform: ArtworkTransform{Scale: 1}, Layout: json.RawMessage(`{}`)}
 	var transform, layout string
-	err := s.db.QueryRow("SELECT image_key,artwork_path,overlay_id,subtype_id,logo_scale,transform,layout,updated_at FROM card_assemblies WHERE card_id=?", id).Scan(&a.ImageKey, &a.ArtworkPath, &a.OverlayID, &a.SubtypeID, &a.LogoScale, &transform, &layout, &a.UpdatedAt)
+	err := s.db.QueryRow("SELECT image_key,artwork_path,overlay_id,logo_scale,transform,layout,updated_at FROM card_assemblies WHERE card_id=?", id).Scan(&a.ImageKey, &a.ArtworkPath, &a.OverlayID, &a.LogoScale, &transform, &layout, &a.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, nil
 	}
@@ -83,7 +79,7 @@ func (s *CardsStore) SaveAssembly(a CardAssembly) (CardAssembly, error) {
 	if err != nil {
 		return a, err
 	}
-	_, err = s.db.Exec(`INSERT INTO card_assemblies(card_id,image_key,artwork_path,overlay_id,subtype_id,logo_scale,transform,layout) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(card_id) DO UPDATE SET image_key=excluded.image_key,artwork_path=excluded.artwork_path,overlay_id=excluded.overlay_id,subtype_id=excluded.subtype_id,logo_scale=excluded.logo_scale,transform=excluded.transform,layout=excluded.layout,updated_at=datetime('now')`, a.CardID, a.ImageKey, a.ArtworkPath, a.OverlayID, a.SubtypeID, a.LogoScale, string(t), string(a.Layout))
+	_, err = s.db.Exec(`INSERT INTO card_assemblies(card_id,image_key,artwork_path,overlay_id,logo_scale,transform,layout) VALUES(?,?,?,?,?,?,?) ON CONFLICT(card_id) DO UPDATE SET image_key=excluded.image_key,artwork_path=excluded.artwork_path,overlay_id=excluded.overlay_id,logo_scale=excluded.logo_scale,transform=excluded.transform,layout=excluded.layout,updated_at=datetime('now')`, a.CardID, a.ImageKey, a.ArtworkPath, a.OverlayID, a.LogoScale, string(t), string(a.Layout))
 	if err != nil {
 		return a, err
 	}

@@ -11,6 +11,7 @@ import { emptyAssembly, type Assembly, type AssemblyTemplate } from './api'
 import AssemblePage from './AssemblePage'
 import CardEditorPage from './CardEditorPage'
 import NewCardPage from './NewCardPage'
+import BackPage from './BackPage'
 import LibraryFactionsPage from './LibraryFactionsPage'
 vi.mock('./render', () => ({ renderCard: vi.fn(), pngBlob: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
 const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', starting: true, level: 0, resource_cost: 0, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', lower_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
@@ -25,8 +26,8 @@ beforeEach(() => {
   server.use(
     http.get('/api/card-type-layouts', () => HttpResponse.json([{ category: 'combat', layout: { upper_text: { x: 15 } } }])),
     http.get('/api/faction-logos', () => HttpResponse.json([{ faction_id: 1, url: '/api/factions/1/logo?v=a' }])),
-    http.get('/api/subtypes', () => HttpResponse.json([{ id: 1, category: 'combat', name: 'Level 0', overlays: [{ id: 7, url: '/l0' }] }, { id: 2, category: 'combat', name: 'Level 1+', layout: { resources: { x: 33 } }, overlays: [{ id: 8, url: '/l1' }] }, { id: 4, category: 'combat', name: 'Elite', overlays: [{ id: 9, url: '/api/subtypes/4/overlays/9' }] }])),
     http.get('/api/nebulas', () => HttpResponse.json([])),
+    http.get('/api/nebula-placements', () => HttpResponse.json([])),
     http.get('/api/assembly-templates', () => HttpResponse.json(templates)),
     http.put('/api/assembly-templates', async ({ request }) => { const input = await request.json() as AssemblyTemplate; const t = { ...templates.find(x => x.faction_id === input.faction_id && x.category === input.category && (x.side ?? 'front') === (input.side ?? 'front')), ...input }; templates = [...templates.filter(x => x.faction_id !== t.faction_id || x.category !== t.category || (x.side ?? 'front') !== (t.side ?? 'front')), t]; return HttpResponse.json(t) }),
     http.get('/api/cards/:id/assembly', ({ params }) => HttpResponse.json(assemblies[String(params.id)] ?? emptyAssembly())),
@@ -48,6 +49,7 @@ function mount(path: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createMemoryRouter([
     { path: '/assemble', element: <AssemblePage /> },
+    { path: '/assemble/back/:tab', element: <BackPage /> },
     { path: '/assemble/cards/new', element: <NewCardPage /> },
     { path: '/assemble/cards/:id', element: <CardEditorPage /> },
     { path: '/faction-lab', element: <p>Lab</p> },
@@ -60,7 +62,7 @@ test('library renders every combat card of the faction on the chosen template', 
   templates = [...templates, { faction_id: 1, category: 'upgrade', side: 'front', image_key: 'test-5' }]
   mount('/assemble')
   await screen.findByRole('link', { name: 'Edit Second card' })
-  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Winged Horror' }), imageUrl: '/api/generations/5/image', overlayUrl: null, overlayUrls: ['/l0'] })))
+  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Winged Horror' }), imageUrl: '/api/generations/5/image' })))
   expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Second card' }) }))
   expect(screen.getByRole('link', { name: 'Edit in Faction Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
   await userEvent.click(screen.getByRole('tab', { name: /Upgrades/ }))
@@ -127,8 +129,9 @@ test('editor previews text edits and saves card and artwork position together; t
   fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 12, y: 0 } })))
   expect(screen.queryByLabelText('Start X (%)')).not.toBeInTheDocument()
+  // The stepper never goes below zero, so a number field cannot hold an invalid value.
   fireEvent.change(screen.getByLabelText('Guns'), { target: { value: '-1' } })
-  expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled()
+  expect(screen.getByLabelText('Guns')).toHaveValue(0)
   fireEvent.change(screen.getByLabelText('Guns'), { target: { value: '3' } })
   await userEvent.click(screen.getByRole('button', { name: 'Save' }))
   await screen.findByText('Saved.')
@@ -164,17 +167,14 @@ test('library factions page counts cards per type and links to the library tab',
   await waitFor(() => expect(router.state.location.search).toBe(''))
 })
 
-test('combat cards use the level subtype until another subtype is chosen', async () => {
+test('the editor has no subtype choice: starting cards take the faction logo and regular ones the level and price', async () => {
   mount('/assemble/cards/1')
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ overlayUrls: ['/l0'], logoUrl: '/api/factions/1/logo?v=a' })))
-  expect(await screen.findByRole('option', { name: 'Automatic by level (Starting)' })).toBeInTheDocument()
-  await userEvent.click(screen.getByLabelText('Starting card'))
-  await userEvent.selectOptions(screen.getByLabelText('Level'), '2')
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ overlayUrls: ['/l1'], layout: expect.objectContaining({ resources: expect.objectContaining({ x: 33, y: 27 }) }) })))
-  expect(screen.queryByRole('option', { name: 'Resource icons (guns, shields, morale)' })).not.toBeInTheDocument()
-  await userEvent.selectOptions(await screen.findByLabelText('Subtype'), '4')
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ overlayUrls: ['/api/subtypes/4/overlays/9'] })))
-  expect(assemblyUpdates).toEqual([expect.objectContaining({ subtype_id: 4 })])
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ starting: true }), logoUrl: '/api/factions/1/logo?v=a' })))
+  expect(screen.queryByLabelText('Subtype')).not.toBeInTheDocument()
+  await userEvent.click(await screen.findByLabelText('Starting card'))
+  fireEvent.change(screen.getByLabelText('Level'), { target: { value: '2' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ starting: false, level: 2 }) })))
+  expect(assemblyUpdates).toEqual([])
 })
 
 test('Cmd+Z in the card editor undoes artwork position changes', async () => {
@@ -264,18 +264,17 @@ test('artwork chosen on the new card form previews immediately and is uploaded a
   await userEvent.upload(screen.getByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: 'blob:art' })))
   expect(screen.getByRole('region', { name: 'Artwork' })).toBeInTheDocument()
-  await userEvent.selectOptions(screen.getByLabelText('Subtype'), '4')
   fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
   fireEvent.change(screen.getByLabelText('Offset Y (%)'), { target: { value: '-8' } })
   fireEvent.change(screen.getByLabelText(/Scale/), { target: { value: '1.5' } })
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1.5, x: 18, y: -12 }, overlayUrls: ['/api/subtypes/4/overlays/9'] })))
-  expect(assemblyUpdates).toHaveLength(0) // Position and subtype stay local until creation.
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1.5, x: 18, y: -12 } })))
+  expect(assemblyUpdates).toHaveLength(0) // Position stays local until creation.
   await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
   expect(screen.getByLabelText('Offset X (%)')).toHaveValue('12')
   await userEvent.click(screen.getByRole('button', { name: 'Redo' }))
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
-  expect(assemblies['9']).toMatchObject({ image_key: 'upload', subtype_id: 4, transform: { scale: 1.5, x: 18, y: -12 } })
+  expect(assemblies['9']).toMatchObject({ image_key: 'upload', transform: { scale: 1.5, x: 18, y: -12 } })
   await waitFor(() => expect(useAssembly.getState().transforms['-1']).toBeUndefined())
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: '/api/cards/9/artwork?v=saved' })))
 })
@@ -285,44 +284,17 @@ test('cards use the card type text layout', async () => {
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ layout: expect.objectContaining({ upper_text: expect.objectContaining({ x: 15 }) }) })))
 })
 
-test('the deck back is listed first and chosen from the settings on the Back side', async () => {
+test('the deck back is listed first and chosen on its own page', async () => {
+  server.use(http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])), http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])))
   mount('/assemble')
   const backSection = await screen.findByRole('region', { name: 'Card back' })
-  await userEvent.click(within(backSection).getByRole('button', { name: 'Choose Combat back' }))
-  const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
-  expect(within(dialog).getByRole('tab', { name: 'back' })).toHaveAttribute('aria-selected', 'true')
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Use Generated art as back' }))
+  await userEvent.click(within(backSection).getByRole('link', { name: 'Configure Combat back' }))
+  expect(await screen.findByRole('heading', { name: 'Combat card back' })).toBeInTheDocument()
+  await userEvent.click(await screen.findByRole('button', { name: 'Choose back image' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Use Generated art as back' }))
   await waitFor(() => expect(templates).toContainEqual({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' }))
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-  expect(await within(backSection).findByRole('img', { name: 'Combat back' })).toHaveAttribute('src', '/api/generations/5/image')
-})
-
-test('card back logo uploads, scales at the center, and persists in library and 3D previews', async () => {
-  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,front')
-  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' })
-  server.use(http.put('/api/assembly-templates/:id/:category/logo', async ({ request }) => {
-    expect(request.headers.get('content-type')).toContain('multipart/form-data')
-    expect(await request.text()).toContain('name="logo"')
-    templates = templates.map(t => t.side === 'back' ? { ...t, logo_url: '/back-logo', logo_scale: 0.5 } : t)
-    return new HttpResponse(null, { status: 204 })
-  }))
-  mount('/assemble')
-  const backSection = await screen.findByRole('region', { name: 'Card back' })
-  await userEvent.click(within(backSection).getByRole('button', { name: 'Choose Combat back' }))
-  const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
-  await userEvent.upload(within(dialog).getByLabelText('Upload card back logo'), new File(['logo'], 'logo.png', { type: 'image/png' }))
-  const logo = await within(dialog).findByRole('img', { name: 'Card back logo' })
-  expect(logo).toHaveClass('left-1/2', 'top-1/2', '-translate-x-1/2', '-translate-y-1/2', 'object-contain')
-  fireEvent.change(within(dialog).getByRole('slider'), { target: { value: '75' } })
-  expect(logo).toHaveStyle({ width: '75%', height: '75%' })
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Save logo size' }))
-  await waitFor(() => expect(templates.find(t => t.side === 'back')?.logo_scale).toBe(0.75))
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-  expect(within(backSection).getByRole('img', { name: 'Card back logo' })).toHaveStyle({ width: '75%', height: '75%' })
-  await userEvent.click(screen.getByRole('button', { name: '3D preview of Winged Horror' }))
-  const viewer = await screen.findByRole('dialog', { name: '3D preview of Winged Horror' })
-  expect(within(viewer).getByRole('img', { name: 'Card back logo' })).toHaveAttribute('src', '/back-logo')
-  expect(within(viewer).getByRole('img', { name: 'Card back logo' })).toHaveStyle({ width: '75%', height: '75%' })
+  await userEvent.click(screen.getByRole('link', { name: /Combat cards/ }))
+  expect(await within(await screen.findByRole('region', { name: 'Card back' })).findByRole('img', { name: 'Combat back' })).toHaveAttribute('src', '/api/generations/5/image')
 })
 
 test('the cube opens a 3D preview with the rendered front and the deck back, turned by dragging', async () => {
@@ -353,7 +325,7 @@ test('template settings preview with a chosen card or demo level, and can show f
   const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
   await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Righteous Fury', level: 2 }), imageUrl: '/api/generations/7/image' })))
   await userEvent.selectOptions(within(dialog).getByLabelText('Demo level'), '0')
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Righteous Fury', level: 0 }), overlayUrls: ['/l0'] })))
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Righteous Fury', level: 0 }) })))
   await userEvent.selectOptions(within(dialog).getByLabelText('Preview with card'), '2')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Second card' }) })))
   expect(within(dialog).getByLabelText('Demo level')).toBeDisabled()
@@ -458,34 +430,11 @@ test('failed artwork upload opens the created card instead of creating a duplica
 })
 
 
-test('C0 logo scale previews per card, discards, saves, and hides at other levels', async () => {
-  assemblies['1'] = { ...emptyAssembly(), logo_scale: 1.2 }
+test('the faction logo has no per-card size control and is drawn at the same size', async () => {
   mount('/assemble/cards/1')
-  const slider = await screen.findByLabelText('Logo scale (120%)')
-  fireEvent.change(slider, { target: { value: '1.75' } })
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1.75 })))
-  await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
-  expect(screen.getByLabelText('Logo scale (120%)')).toHaveValue('1.2')
-  fireEvent.change(screen.getByLabelText(/Logo scale/), { target: { value: '1.75' } })
-  await userEvent.click(screen.getByRole('button', { name: /^Save$/ }))
-  await waitFor(() => expect(assemblies['1'].logo_scale).toBe(1.75))
-  expect(useAssembly.getState().logoScales['1']).toBeUndefined()
-  await userEvent.click(screen.getByLabelText('Starting card'))
-  expect(screen.queryByLabelText(/Logo scale/)).not.toBeInTheDocument()
-  await userEvent.click(screen.getByLabelText('Starting card'))
-  await userEvent.click(screen.getByRole('button', { name: 'Reset logo scale' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1 })))
-})
-
-test('a new C0 card saves its chosen logo scale on creation', async () => {
-  const router = mount('/assemble/cards/new?faction=1&tab=combat')
-  await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
-  await userEvent.click(screen.getByRole('checkbox', { name: 'Starting card' }))
-  fireEvent.change(screen.getByLabelText(/Logo scale/), { target: { value: '0.8' } })
-  await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
-  await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
-  expect(assemblies['9'].logo_scale).toBe(0.8)
-  await waitFor(() => expect(useAssembly.getState().logoScales['-1']).toBeUndefined())
+  expect(screen.queryByLabelText(/Logo scale/)).not.toBeInTheDocument()
+  expect(screen.getByText(/same for every card of the faction/)).toBeInTheDocument()
 })
 
 test('template image checkboxes select for deletion without changing the chosen template', async () => {
@@ -547,4 +496,151 @@ test('upgrade cards also offer right-click deletion', async () => {
   expect(confirm).toHaveTextContent('Forge World')
   await userEvent.click(within(confirm).getByRole('button', { name: 'Delete cards' }))
   await waitFor(() => expect(deleted).toEqual([[3]]))
+})
+
+test('the Faction config tab holds the faction logo, colour and banner (with its nebula)', async () => {
+  let colour = ''
+  server.use(http.get('/api/faction-colors', () => HttpResponse.json(colour ? [{ faction_id: 1, color: colour }] : [])),
+    http.put('/api/faction-colors/1', async ({ request }) => { colour = ((await request.json()) as { color: string }).color; return HttpResponse.json({ faction_id: 1, color: colour }) }))
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('tab', { name: 'Faction config' }))
+  expect(await screen.findByRole('region', { name: 'Faction logo' })).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Faction colour', { selector: 'input' }), { target: { value: '#aa3344' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Save colour' }))
+  await waitFor(() => expect(colour).toBe('#aa3344'))
+  expect(screen.getByRole('region', { name: 'Banner' })).toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Faction nebula' })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Custom colour')).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Card back' })).not.toBeInTheDocument()
+})
+
+test('the nebula position is set per card type on its back page and saved', async () => {
+  let saved: unknown
+  templates.push({ faction_id: 1, category: 'schema', side: 'back', image_key: 'test-5' })
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])),
+    http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
+    http.put('/api/nebula-placements/1/schema', async ({ request }) => { saved = await request.json(); return HttpResponse.json({ faction_id: 1, category: 'schema', ...(saved as object) }) }))
+  mount('/assemble/back/events?faction=1')
+  const section = await screen.findByRole('region', { name: 'Back nebula' })
+  expect(within(section).queryByLabelText('Seed')).not.toBeInTheDocument()
+  fireEvent.change(within(section).getByLabelText(/Rotation/), { target: { value: '45' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(saved).toEqual({ x: 0, y: 0, rotation: 45, logo_scale: 0.5 }))
+})
+
+test('your own image can be uploaded from the back picker and is chosen at once', async () => {
+  let uploaded: FormData | undefined
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])),
+    http.post('/api/generations/upload', async ({ request }) => { uploaded = await request.formData().catch(() => undefined); return HttpResponse.json({ id: 9, faction_id: 1, card_type_id: 4, status: 'done' }, { status: 201 }) }))
+  mount('/assemble/back/combat?faction=1')
+  await userEvent.click(await screen.findByRole('button', { name: 'Choose back image' }))
+  await userEvent.upload(await screen.findByLabelText('Upload your own image'), new File(['x'], 'mine.png', { type: 'image/png' }))
+  await waitFor(() => expect(templates).toContainEqual({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-9' }))
+  expect(uploaded === undefined || uploaded.get('card_type_id') === '4').toBe(true)
+})
+
+test('upgrade cards always use the bundled front picture, with no template to choose', async () => {
+  mount('/assemble?faction=1&tab=upgrades')
+  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Forge World' }), imageUrl: expect.stringContaining('front') })))
+  expect(screen.queryByText(/template chosen/)).not.toBeInTheDocument()
+  await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
+  expect(await screen.findByRole('dialog', { name: 'Card templates' })).toBeInTheDocument()
+  expect(await screen.findByText(/one front picture for every faction/)).toBeInTheDocument()
+  expect(screen.queryByLabelText('Upload your own image')).not.toBeInTheDocument()
+})
+
+test('a combat back edits nothing about its banner: no logo, banner size or nebula controls', async () => {
+  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' })
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])),
+    http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])))
+  mount('/assemble/back/combat?faction=1')
+  expect(await screen.findByRole('region', { name: 'Banner' })).toBeInTheDocument()
+  expect(screen.queryByLabelText('Upload card back logo')).not.toBeInTheDocument()
+  for (const name of ['Logo size', 'Banner size', 'Back nebula', 'Nebula']) expect(screen.queryByRole('region', { name })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+})
+
+test('an event back keeps its own logo size', async () => {
+  let placementSaved: Record<string, unknown> | undefined
+  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' })
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])),
+    http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
+    http.put('/api/nebula-placements/1/schema', async ({ request }) => { placementSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, category: 'schema', ...placementSaved }) }))
+  mount('/assemble/back/events?faction=1')
+  const section = await screen.findByRole('region', { name: 'Logo size' })
+  fireEvent.change(within(section).getByRole('slider'), { target: { value: '70' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(placementSaved).toMatchObject({ logo_scale: 0.7 }))
+})
+
+test('the banner is assembled in the faction settings: logo size and element, saved together', async () => {
+  let bannerSaved: Record<string, unknown> | undefined
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 5, name: 'back element', overlay_path: '' }])),
+    http.get('/api/generations', () => HttpResponse.json([{ id: 7, name: 'Gear crest', status: 'done', card_type_id: 5, faction_id: 1, image_path: 'el.png', created_at: '2026' }])),
+    http.get('/api/faction-banners', () => HttpResponse.json(bannerSaved ? [{ faction_id: 1, ...bannerSaved }] : [])),
+    http.put('/api/faction-banners/1', async ({ request }) => { bannerSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...bannerSaved }) }))
+  mount('/assemble?faction=1&tab=config')
+  const section = await screen.findByRole('region', { name: 'Banner' })
+  fireEvent.change(within(section).getByLabelText(/Logo size/), { target: { value: '35' } })
+  await userEvent.click(within(section).getByRole('button', { name: 'Choose element' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Use Gear crest as element' }))
+  fireEvent.change(within(section).getByLabelText(/Element size/), { target: { value: '60' } })
+  await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
+  await waitFor(() => expect(bannerSaved).toMatchObject({ logo_scale: 0.35, element_key: 'test-7', element_scale: 0.6 }))
+  await userEvent.click(await within(section).findByRole('button', { name: 'Remove element' }))
+  await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
+  await waitFor(() => expect(bannerSaved).toMatchObject({ element_key: '' }))
+})
+
+test('the banner\'s nebula position is saved with the banner', async () => {
+  let placementSaved: Record<string, unknown> | undefined
+  server.use(
+    http.get('/api/nebula-placements', () => HttpResponse.json([])),
+    http.put('/api/faction-banners/1', async ({ request }) => HttpResponse.json({ faction_id: 1, ...(await request.json() as object) })),
+    http.put('/api/nebula-placements/1/combat', async ({ request }) => { placementSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, category: 'combat', ...placementSaved }) }))
+  mount('/assemble?faction=1&tab=config')
+  const section = await screen.findByRole('region', { name: 'Banner' })
+  fireEvent.change(within(section).getByLabelText(/Nebula rotation/), { target: { value: '40' } })
+  await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
+  await waitFor(() => expect(placementSaved).toMatchObject({ rotation: 40 }))
+})
+
+test('an event back can have its own nebula brightness, and fall back to the faction\'s', async () => {
+  let saved: Record<string, unknown> | undefined
+  server.use(
+    http.get('/api/nebulas', () => HttpResponse.json([{ faction_id: 1, color: '', seed: 7, density: 1.2, as_template: false }])),
+    http.put('/api/nebula-placements/1/schema', async ({ request }) => { saved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, category: 'schema', ...saved }) }))
+  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-5' })
+  mount('/assemble/back/events?faction=1')
+  const section = await screen.findByRole('region', { name: 'Back nebula' })
+  expect(within(section).getByLabelText(/Nebula brightness \(120%\)/)).toBeInTheDocument()
+  fireEvent.change(within(section).getByLabelText(/Nebula brightness/), { target: { value: '60' } })
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(saved).toMatchObject({ brightness: 0.6 }))
+})
+
+test('the banner\'s nebula colour and brightness are set in the banner and saved with it', async () => {
+  let nebulaSaved: Record<string, unknown> | undefined
+  server.use(
+    http.put('/api/faction-banners/1', async ({ request }) => HttpResponse.json({ faction_id: 1, ...(await request.json() as object) })),
+    http.put('/api/nebulas/1', async ({ request }) => { nebulaSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...nebulaSaved }) }))
+  mount('/assemble?faction=1&tab=config')
+  const section = await screen.findByRole('region', { name: 'Banner' })
+  fireEvent.change(within(section).getByLabelText(/Nebula brightness/), { target: { value: '150' } })
+  await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
+  await waitFor(() => expect(nebulaSaved).toMatchObject({ density: 1.5 }))
+})
+
+test('the nebula can be switched on as the card template from the banner', async () => {
+  let nebulaSaved: Record<string, unknown> | undefined
+  server.use(http.put('/api/nebulas/1', async ({ request }) => { nebulaSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...nebulaSaved }) }))
+  mount('/assemble?faction=1&tab=config')
+  const section = await screen.findByRole('region', { name: 'Banner' })
+  await userEvent.click(within(section).getByLabelText(/Use the nebula as the card template/))
+  await waitFor(() => expect(nebulaSaved).toMatchObject({ as_template: true }))
 })

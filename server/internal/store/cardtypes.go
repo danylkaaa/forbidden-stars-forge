@@ -10,8 +10,10 @@ type CardType struct {
 	TemplatePath string `json:"template_path"`
 	OpenAIFileID string `json:"openai_file_id"`
 	OverlayPath  string `json:"overlay_path"` // preview-only, never sent to OpenAI
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	// NoTemplate: the type is generated from its prompt alone, with no template image.
+	NoTemplate bool   `json:"no_template"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -22,11 +24,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -34,7 +36,7 @@ func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 }
 
 func (s *CardTypesStore) List() ([]CardType, error) {
-	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY CASE name WHEN 'combat' THEN 0 WHEN 'events' THEN 1 WHEN 'upgrade' THEN 2 WHEN 'combat back' THEN 3 WHEN 'events back' THEN 4 WHEN 'upgrade back' THEN 5 WHEN 'faction card' THEN 6 WHEN 'faction card back' THEN 7 ELSE 8 END, name ASC")
+	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY CASE name WHEN 'combat' THEN 0 WHEN 'events' THEN 1 WHEN 'upgrade' THEN 2 WHEN 'card back' THEN 3 WHEN 'back element' THEN 4 WHEN 'faction card' THEN 5 WHEN 'faction card back' THEN 6 ELSE 7 END, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +88,7 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 	if newTemplatePath != nil {
 		res, err = s.db.Exec(
 			`UPDATE card_types SET name = ?, description = ?, constraints = ?,
-			 template_path = ?, openai_file_id = NULL, updated_at = datetime('now') WHERE id = ?`,
+			 template_path = ?, openai_file_id = NULL, no_template = 0, updated_at = datetime('now') WHERE id = ?`,
 			name, description, constraints, nullable(*newTemplatePath), id)
 	} else {
 		res, err = s.db.Exec(
@@ -143,13 +145,27 @@ func (s *CardTypesStore) Delete(id int64) error {
 
 // BuiltinCardTypes always exist: one per card category (combat, events,
 // upgrades). They are created on startup and cannot be deleted or renamed.
-var BuiltinCardTypes = []string{"combat", "events", "upgrade", "combat back", "events back", "upgrade back", "faction card", "faction card back"}
+var BuiltinCardTypes = []string{"combat", "events", "upgrade", "card back", "back element", "faction card", "faction card back"}
 
-// Back card types start with a prompt prefilled for a deck's card back; the
-// server also gives them a plain chroma template (see api.EnsureBackTemplates).
-var backDecks = map[string]string{"combat back": "combat", "events back": "event", "upgrade back": "upgrade"}
+// The card back is one texture for combat and event cards. Its type starts
+// with a prompt prefilled for it; the server also gives it a plain chroma
+// template (see api.EnsureBackTemplates). The upgrade back is a bundled
+// texture, so it has no type of its own.
+var backDecks = map[string]string{"card back": "combat or event"}
 
 const backConstraints = "The whole green canvas is the card back: replace all of it. Keep the exact canvas dimensions and aspect ratio. No text, letters or numbers. Keep a clean, even margin so the design survives card trimming."
+
+// The element on a card back's frame: an ornament centred on the frame's top
+// edge, turned over for the bottom. A small piece, not a whole card.
+const elementDescription = "Create a small decorative ornament for the top edge of the frame on a Warhammer 40K board-game card back, for this faction: a compact, symmetrical, ornate piece (like a crest, gear or arch) centred on the canvas, in the faction's colours and materials, that sits over the middle of the frame's top border. It is turned over and used again at the bottom of the frame, so it must look right mirrored top to bottom. Draw only the ornament on the plain green canvas, with a clear green margin around it."
+
+const elementConstraints = "The whole canvas is plain green except the ornament; keep the exact canvas dimensions and aspect ratio (a wide, short canvas). Do not fill the green: it is removed later. No text, letters, numbers or icons."
+
+// ElementCanvas is the pixel size of the element's template.
+var ElementCanvas = [2]int{816, 240}
+
+// IsElementCardType reports whether a card type is a custom-size element, not a card.
+func IsElementCardType(name string) bool { return name == "back element" }
 
 func backDescription(deck string) string {
 	return "Create the back of a Warhammer 40K board-game " + deck + " card for this faction. A symmetrical, ornate design that fills the whole card: a central faction emblem framed by an ornamental border, in the faction's colours and materials. It must read clearly at small size and be identical on every " + deck + " card of the deck. Do not reuse elements of the card front (no title bar, resource column or text panels)."
@@ -193,6 +209,8 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 		description, constraints := "", ""
 		if deck, ok := backDecks[name]; ok {
 			description, constraints = backDescription(deck), backConstraints
+		} else if IsElementCardType(name) {
+			description, constraints = elementDescription, elementConstraints
 		} else if d, ok := factionCardDescriptions[name]; ok {
 			description, constraints = d, factionCardConstraints
 		}
@@ -210,8 +228,19 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 	return nil
 }
 
+// DropTemplate removes a card type's template and its OpenAI file, and marks the
+// type as generated from its prompt alone. It returns the old template file's path.
+func (s *CardTypesStore) DropTemplate(id int64) (string, error) {
+	ct, err := s.Get(id)
+	if err != nil {
+		return "", err
+	}
+	_, err = s.db.Exec(`UPDATE card_types SET template_path=NULL, openai_file_id=NULL, no_template=1, updated_at=datetime('now') WHERE id=?`, id)
+	return ct.TemplatePath, err
+}
+
 // SetTemplatePath gives a card type a template without touching its text.
 func (s *CardTypesStore) SetTemplatePath(id int64, path string) error {
-	_, err := s.db.Exec(`UPDATE card_types SET template_path=?, openai_file_id=NULL, updated_at=datetime('now') WHERE id=?`, path, id)
+	_, err := s.db.Exec(`UPDATE card_types SET template_path=?, openai_file_id=NULL, no_template=0, updated_at=datetime('now') WHERE id=?`, path, id)
 	return err
 }

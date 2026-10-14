@@ -251,14 +251,46 @@ type ImageEditResult struct {
 	OutputTokens    int64
 }
 
+// GenerateBody is the JSON body for POST /v1/images/generations: the same
+// settings as an edit, but with no input image.
+func GenerateBody(req ImageEditRequest) map[string]any {
+	body := map[string]any{
+		"model":         req.Model,
+		"prompt":        req.Prompt,
+		"size":          req.Size,
+		"quality":       req.Quality,
+		"output_format": "png",
+		"moderation":    "low",
+		"n":             1,
+	}
+	if req.Background != "" {
+		body["background"] = req.Background
+	}
+	return body
+}
+
+// NoInput reports whether a request has no image to edit: the picture is made from the prompt alone.
+func (r ImageEditRequest) NoInput() bool {
+	return r.FileID == "" && r.ImageURL == "" && r.ReferenceImageURL == ""
+}
+
 // EditImage calls POST /v1/images/edits referencing an uploaded template
 // by file_id (see EditBody) and decodes the b64 PNG.
 func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEditResult, error) {
-	payload, err := json.Marshal(EditBody(req))
+	path, body := "/v1/images/edits", EditBody(req)
+	switch {
+	case req.NoInput():
+		path, body = "/v1/images/generations", GenerateBody(req)
+	case req.FileID == "" && req.ImageURL == "":
+		// No template, but a reference picture (a front for a back): that picture is what gets edited.
+		req.ImageURL, req.ReferenceImageURL = req.ReferenceImageURL, ""
+		body = EditBody(req)
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return ImageEditResult{}, err
 	}
-	data, err := c.do(ctx, http.MethodPost, "/v1/images/edits", "application/json",
+	data, err := c.do(ctx, http.MethodPost, path, "application/json",
 		func() (io.Reader, error) { return bytes.NewReader(payload), nil })
 	if err != nil {
 		return ImageEditResult{}, err

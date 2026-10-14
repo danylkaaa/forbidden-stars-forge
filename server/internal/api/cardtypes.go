@@ -350,6 +350,27 @@ func (h *CardTypesHandler) ServeTemplate(w http.ResponseWriter, r *http.Request)
 	http.ServeFile(w, r, filepath.Join(h.DataDir, ct.TemplatePath))
 }
 
+// DropTemplate removes a card type's template: its pictures are then made from the prompt alone.
+func (h *CardTypesHandler) DropTemplate(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	path, err := h.Store.DropTemplate(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	h.removeTemplateFile(path)
+	ct, err := h.Store.Get(id)
+	if err != nil {
+		h.cardTypeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ct)
+}
+
 func (h *CardTypesHandler) UploadToOpenAI(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEventHandler } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
-import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { SafeAreaLines } from '../../components/SafeArea'
 import { useCutMm } from '../print/layout'
 import { buttonClass } from '../../components/buttonStyles'
 import { FactionSelect } from './FactionSelect'
@@ -18,7 +18,6 @@ import { useFactions } from '../factions/api'
 import { LIBRARY_TABS } from './model'
 import { backTypeName, labLink, useTemplate, useTemplateLayout, type LibraryImage } from './library'
 import { useCardTypes } from '../card-types/api'
-import type { Side } from './api'
 import { Preview3DButton } from './Card3DViewer'
 import { useAssembly } from './state'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
@@ -28,6 +27,7 @@ import type { Category } from '../cards/model'
 import { BackImage } from './BackImage'
 import { CardContextMenu } from './CardContextMenu'
 import { TemplateSettingsDialog } from './TemplateSettingsDialog'
+import { FactionConfigPanel } from './FactionConfigPanel'
 
 // Selection checkbox in a tile's top-left corner; always visible once
 // anything is selected, otherwise on hover.
@@ -43,7 +43,7 @@ const tile = 'group block min-w-0 text-left no-underline'
 const frame = 'overflow-hidden rounded-md shadow-[0_6px_18px_rgba(0,0,0,0.55)] ring-1 ring-divider transition-shadow'
 const caption = 'mt-2 flex items-baseline justify-between gap-2 px-0.5 text-sm text-ink/80'
 
-function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; backLogoUrl?: string; backLogoScale?: number; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
+function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, backElementUrl, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; backLogoUrl?: string; backLogoScale?: number; backElementUrl?: string; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
   const { input } = useCardRenderInput(card, image, template)
   const cutMm = useCutMm()
   const { issues, dirty } = useCardDraft(card)
@@ -51,7 +51,7 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
   useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
   return <div className="group/tile relative min-w-0" onContextMenu={select.onContextMenu}>
   <SelectBox name={card.name} {...select} />
-  {result && <Preview3DButton title={card.name} canvas={result.canvas} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} className="absolute right-2 top-2 z-10" />}
+  {result && <Preview3DButton category={card.category} factionId={card.faction_id} title={card.name} canvas={result.canvas} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} backElementUrl={backElementUrl} className="absolute right-2 top-2 z-10" />}
   <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
     <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : 'group-hover:ring-2 group-hover:ring-accent'}`}>
       {result
@@ -68,13 +68,13 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
 }
 
 // The deck's shared back, first in the grid.
-function BackTile({ category, factionId, image, label, onChoose, generateLink }: { category: Category; factionId?: number; image: LibraryImage | undefined; label: string; onChoose: () => void; generateLink: string | null }) {
+function BackTile({ category, factionId, image, label, to, generateLink }: { category: Category; factionId?: number; image: LibraryImage | undefined; label: string; to: string; generateLink: string | null }) {
   return <div className="min-w-0">
-    <button type="button" aria-label={`Choose ${label}`} onClick={onChoose} className={`${frame} block w-full cursor-pointer bg-transparent p-0 hover:ring-2 hover:ring-accent`}>
+    <Link to={to} aria-label={`Configure ${label}`} className={`${frame} block w-full no-underline hover:ring-2 hover:ring-accent`}>
       {image
-        ? <BackImage category={category} factionId={factionId} url={image.url} logoUrl={image.logoUrl} scale={image.logoScale} alt={label} />
-        : <span className="grid aspect-[816/1104] place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-3 text-center text-xs text-ink/55">No card back chosen. Click to choose one.</span>}
-    </button>
+        ? <BackImage category={category} factionId={factionId} url={image.url} logoUrl={image.logoUrl} scale={image.logoScale} elementUrl={image.elementUrl} alt={label} />
+        : <span className="grid aspect-[816/1104] place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-3 text-center text-xs text-ink/55">No card back chosen. Click to configure.</span>}
+    </Link>
     <span className={caption}><span className="truncate">{label}</span>{generateLink && <Link to={generateLink} className="shrink-0 text-xs text-accent no-underline hover:underline">Generate</Link>}</span>
   </div>
 }
@@ -86,14 +86,16 @@ export default function AssemblePage() {
   // ?faction=<id>&tab=<slug> (from the library Factions page) selects both.
   const [params, setParams] = useSearchParams()
   useEffect(() => {
-    const faction = Number(params.get('faction')), tab = LIBRARY_TABS.find(t => t.slug === params.get('tab'))
-    if (!(faction > 0) && !tab) return
+    const faction = Number(params.get('faction')), tab = LIBRARY_TABS.find(t => t.slug === params.get('tab')), config = params.get('tab') === 'config'
+    if (!(faction > 0) && !tab && !config) return
+    setConfigTab(config)
     useAssembly.getState().select({ ...(faction > 0 ? { factionId: faction } : {}), ...(tab ? { category: tab.category } : {}) })
     setParams({}, { replace: true })
   }, [params, setParams])
   const factionId = (factions.data?.some(f => f.id === state.factionId) ? state.factionId : null) ?? factions.data?.[0]?.id ?? null
   const category = state.category
-  const [settingsOpen, setSettingsOpen] = useState<Side | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [configTab, setConfigTab] = useState(false)
   const cards = useCards(factionId ? String(factionId) : '', '')
   const template = useTemplate(factionId, category)
   const layout = useTemplateLayout(category)
@@ -161,18 +163,19 @@ export default function AssemblePage() {
   }) as MouseEventHandler<HTMLDivElement> })
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center gap-3">
-      <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen('front')} className="px-2!"><GearIcon /></Button>
+      <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen(true)} className="px-2!"><GearIcon /></Button>
       <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
       <FactionSelect factions={factions.data ?? []} value={factionId} onChange={factionId => state.select({ factionId })} />
-      {factionId && <div className="ml-auto flex gap-2">
+      {factionId && !configTab && <div className="ml-auto flex gap-2">
         <Button onClick={() => setImportOpen(true)}>Import JSON</Button>
         <Link to={newCardLink} className={buttonClass('primary')}>New {tabLabel.replace(/s$/, '').toLowerCase()} card</Link>
       </div>}
     </div>
     {queryError && <div role="alert" className="text-danger">{queryError.message}</div>}
-    <CategoryTabs value={category} onChange={c => state.select({ category: c })} badges={counts} faction={factionId ? { active: false, onSelect: () => navigate(`/assemble/faction-card?faction=${factionId}`) } : undefined} />
+    <CategoryTabs value={configTab ? null : category} onChange={c => { setConfigTab(false); state.select({ category: c }) }} badges={counts} config={factionId ? { active: configTab, onSelect: () => setConfigTab(true) } : undefined} faction={factionId ? { active: false, onSelect: () => navigate(`/assemble/faction-card?faction=${factionId}`) } : undefined} />
+    {configTab && factionId && <FactionConfigPanel factionId={factionId} />}
+    {!configTab && <>
     {shown.length > 0 && <div role="toolbar" aria-label="Selected cards" className="flex flex-wrap items-center gap-2 text-sm">
-      <SafeAreaToggle />
       <span className="text-ink/60">{selected.size ? `${chosen.length} selected` : 'Select cards to download or delete them.'}</span>
       <Button onClick={() => setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map(c => c.id)))}>{chosen.length === shown.length ? 'Select none' : 'Select all'}</Button>
       {chosen.length > 0 && <>
@@ -185,13 +188,13 @@ export default function AssemblePage() {
     {factionId && !template.isPending && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink/60">
       {template.image
         ? <><span>Template: <span className="text-ink">{template.image.name}</span></span><Link to={labLink(template.image)} className="text-accent underline">Edit in Faction Lab</Link></>
-        : <><span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span><Button onClick={() => setSettingsOpen('front')}>Choose template</Button></>}
+        : <><span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span><Button onClick={() => setSettingsOpen(true)}>Choose template</Button></>}
     </div>}
     {!factions.isPending && !factions.data?.length && <p className="text-sm text-ink/60"><Link to="/factions?mode=library" className="text-accent underline">Create a faction</Link> first.</p>}
     {factionId && <section aria-label="Card back" className="space-y-3">
       <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Card back</h2>
       <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-        <BackTile category={category} factionId={factionId} image={back.image} label={`${tabLabel} back`} onChoose={() => setSettingsOpen('back')}
+        <BackTile category={category} factionId={factionId} image={back.image} label={`${tabLabel} back`} to={`/assemble/back/${tab.slug}?faction=${factionId}`}
           generateLink={backType ? `/faction-lab?faction=${factionId}&card_type=${backType.id}` : null} />
       </div>
     </section>}
@@ -205,9 +208,10 @@ export default function AssemblePage() {
           {group.title}<span className="font-sans text-xs font-normal text-ink/45">{group.cards.length} card{group.cards.length === 1 ? '' : 's'}</span>
         </h2>}
         <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-          {group.cards.map(card => <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} onRendered={onRendered} {...selectProps(card)} />)}
+          {group.cards.map(card => <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} backElementUrl={back.image?.elementUrl} onRendered={onRendered} {...selectProps(card)} />)}
         </div>
       </section>)}
+    </>}
     {contextMenu && <CardContextMenu name={contextMenu.card.name} x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu}
       onDelete={() => { setActionError(null); setConfirmDelete([contextMenu.card]); closeContextMenu() }} />}
     {confirmDelete && <ConfirmDialog title={`Delete ${deleting.length} card${deleting.length === 1 ? '' : 's'}?`}
@@ -216,6 +220,6 @@ export default function AssemblePage() {
       onConfirm={() => { if (!busy) void removeSelected() }} onCancel={() => { if (!busy) setConfirmDelete(null) }} />}
     {importOpen && factions.data && <ImportCardsDialog factions={factions.data} onClose={() => setImportOpen(false)} onDirty={() => {}}
       onImported={count => { setImportOpen(false); setNotice(`Imported ${count} card${count === 1 ? '' : 's'}.`); void queryClient.invalidateQueries({ queryKey: ['cards'] }) }} />}
-    {settingsOpen && <TemplateSettingsDialog initialFactionId={factionId} initialCategory={category} initialSide={settingsOpen} onClose={() => setSettingsOpen(null)} />}
+    {settingsOpen && <TemplateSettingsDialog initialFactionId={factionId} initialCategory={category} onClose={() => setSettingsOpen(false)} />}
   </div>
 }

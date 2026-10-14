@@ -26,7 +26,7 @@ type imageSource struct {
 type imageEditRequest struct {
 	// The image to edit: a generation, or a batch item (BatchID + ID).
 	Parent      imageSource `json:"parent"`
-	Mask        string      `json:"mask"` // PNG data URL; transparent pixels = edit here
+	Mask        string      `json:"mask"` // PNG data URL; transparent pixels = edit here; empty edits the whole image
 	Instruction string      `json:"instruction"`
 	Protect     bool        `json:"protect"` // paste original pixels back outside the mask
 }
@@ -57,10 +57,14 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "instruction is required")
 		return
 	}
-	maskPNG, err := decodePNGDataURL(req.Mask)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "mask: "+err.Error())
-		return
+	// With nothing painted the whole image is edited, with no mask.
+	var maskPNG []byte
+	if strings.TrimSpace(req.Mask) != "" {
+		var err error
+		if maskPNG, err = decodePNGDataURL(req.Mask); err != nil {
+			writeError(w, http.StatusBadRequest, "mask: "+err.Error())
+			return
+		}
 	}
 	parent, status, err := h.loadEditParent(req)
 	if err != nil {
@@ -77,9 +81,11 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read image: "+err.Error())
 		return
 	}
-	if mw, mh, err := imaging.Size(maskPNG); err != nil || mw != ow || mh != oh {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("mask must be a %dx%d PNG", ow, oh))
-		return
+	if maskPNG != nil {
+		if mw, mh, err := imaging.Size(maskPNG); err != nil || mw != ow || mh != oh {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("mask must be a %dx%d PNG", ow, oh))
+			return
+		}
 	}
 
 	f, ct, ok := h.loadPair(w, parent.factionID, parent.cardTypeID)
@@ -98,7 +104,10 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 	if quality == "" {
 		quality = modeQuality(parent.mode, all)
 	}
-	p := prompt.AreaEdit(parent.prompt, req.Instruction)
+	p := prompt.WholeEdit(parent.prompt, req.Instruction)
+	if maskPNG != nil {
+		p = prompt.AreaEdit(parent.prompt, req.Instruction)
+	}
 	g, err := h.Gens.Create(parent.factionID, parent.cardTypeID, parent.mode, model, quality,
 		store.ImageNameSuffix(f.Name, ct.Name, quality), p)
 	if err != nil {
@@ -112,16 +121,19 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var post func([]byte) ([]byte, error)
-	if req.Protect {
+	if req.Protect && maskPNG != nil {
 		post = func(edited []byte) ([]byte, error) {
 			return imaging.ProtectUnmasked(original, edited, maskPNG, 4)
 		}
 	}
-	go h.run(g.ID, openai.ImageEditRequest{
+	edit := openai.ImageEditRequest{
 		Model: model, Prompt: p, Quality: quality,
 		ImageURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(original),
-		MaskURL:  "data:image/png;base64," + base64.StdEncoding.EncodeToString(maskPNG),
-	}, post)
+	}
+	if maskPNG != nil {
+		edit.MaskURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(maskPNG)
+	}
+	go h.run(g.ID, edit, post)
 	writeJSON(w, http.StatusCreated, g)
 }
 

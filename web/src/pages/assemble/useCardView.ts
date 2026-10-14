@@ -4,10 +4,9 @@ import { cardDraft, type Card } from '../cards/model'
 import { draftInput, validateCard } from '../cards/validation'
 import { useCardAssembly, type Assembly } from './api'
 import { defaultArtwork } from './artwork'
-import { withSubtypeLayout, type CombatCard, type FramedCard } from './model'
+import type { CombatCard, FramedCard } from './model'
 import { renderCard, type RenderInput } from './render'
 import { useAssembly } from './state'
-import { resolveSubtype, useSubtypes } from './subtypes'
 import { useFactionLogos } from './logos'
 import type { LibraryImage, useTemplateLayout } from './library'
 
@@ -51,23 +50,21 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const { id, card } = useCardDraft(source, localAssembly ? 'New card' : '')
   const savedAssembly = useCardAssembly(localAssembly ? '' : id)
   const assembly = { ...savedAssembly, data: localAssembly ?? savedAssembly.data }
-  const localLogoScale = useAssembly(s => s.logoScales[id])
-  const logoScale = localLogoScale ?? assembly.data?.logo_scale ?? 1
+  // The faction logo is the same size on every card of a faction; nothing per card.
+  const logoScale = 1
   const localTransform = useAssembly(s => s.transforms[id])
   const transform = localTransform ?? assembly.data?.transform ?? NO_TRANSFORM
   const artworkUrl = card?.category === 'upgrade' ? null : assembly.data?.image_url || null
-  const subtypes = useSubtypes()
-  const subtype = resolveSubtype(subtypes.data, assembly.data?.subtype_id, card)
   const localTitleScale = useAssembly(s => s.titleScales[id])
   const titleScale = localTitleScale ?? assembly.data?.layout?.title_scale ?? 1
   const layout = useMemo(() => {
-    const base = withSubtypeLayout(template.layout, subtype?.layout)
+    const base = template.layout
     return titleScale === 1 ? base : { ...base, name: { ...base.name, size: base.name.size * titleScale } }
-  }, [template.layout, subtype, titleScale])
+  }, [template.layout, titleScale])
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
-  const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !subtypes.isPending && !logos.isPending
-    ? { card, layout, imageUrl: image.url, overlayUrl: null, overlayUrls: subtype?.overlays.map(o => o.url) ?? [], logoUrl, logoScale, artworkUrl, artwork: transform }
-    : null, [card, image, template.ready, assembly.data, subtypes.isPending, subtype, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform])
-  return { input, assembly, logoScale, titleScale, transform, layout, artworkUrl, subtypes, subtype }
+  const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !logos.isPending
+    ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform }
+    : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform])
+  return { input, assembly, logoScale, titleScale, transform, layout, artworkUrl }
 }

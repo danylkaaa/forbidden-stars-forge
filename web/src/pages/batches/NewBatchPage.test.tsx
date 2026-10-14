@@ -12,7 +12,7 @@ const factions = [
 ]
 const cardTypes = [
   { id: 1, name: 'combat', description: '', constraints: '', template_path: 't.png', openai_file_id: 'file-1', created_at: 'a', updated_at: 'b' },
-  { id: 2, name: 'upgrade', description: '', constraints: '', template_path: '', openai_file_id: '', created_at: 'a', updated_at: 'b' },
+  { id: 2, name: 'events', description: '', constraints: '', template_path: '', openai_file_id: '', created_at: 'a', updated_at: 'b' },
 ]
 
 function renderPage() {
@@ -39,7 +39,7 @@ beforeEach(() => {
 
 test('card type without a file cannot be selected', async () => {
   renderPage()
-  expect(await screen.findByLabelText(/upgrade/)).toBeDisabled()
+  expect(await screen.findByLabelText(/events/)).toBeDisabled()
 })
 
 test('scope -> preview -> submit navigates to the new batch', async () => {

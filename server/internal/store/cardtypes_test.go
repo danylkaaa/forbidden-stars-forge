@@ -125,7 +125,7 @@ func TestEnsureBuiltinCardTypesIsIdempotent(t *testing.T) {
 		}
 	}
 	list, err := s.List()
-	if err != nil || len(list) != 8 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "combat back" || list[3].Description == "" || list[3].Constraints == "" {
+	if err != nil || len(list) != 7 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "card back" || list[3].Description == "" || list[3].Constraints == "" {
 		t.Fatalf("builtins: %+v %v", list, err)
 	}
 }

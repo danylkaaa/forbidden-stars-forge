@@ -2,6 +2,7 @@ import { SearchableSelect } from '../../components/SearchableSelect'
 import { useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { StepperInput } from '../../components/StepperInput'
 import { Field, inputClass } from '../../components/Field'
 import { DiffPanel } from '../../components/DiffPanel'
 import { isDraftDirty } from '../../lib/draftForm'
@@ -50,10 +51,12 @@ export function CardDialog({ id, factions, onClose, onSaved }: { id: number | nu
           const next = newDraft(e.target.value as Category, draft.faction_id); next.name = draft.name
           useCardDraft.setState({ draft: next }); setError('')
         }}>{CATEGORIES.map(c => <option key={c} value={c}>{LABELS[c]}</option>)}</SearchableSelect>}</Field>
-        {FIELDS[category].map(f => <Field key={f.key} label={f.label}>{fieldId => f.kind === 'select'
+        {FIELDS[category].map(f => <Field key={f.key} label={f.label}>{fieldId => f.kind === 'number' || f.key === 'level'
+          ? <StepperInput id={fieldId} label={f.label} value={Number(draft[f.key]) || 0} min={0} max={f.key === 'level' ? 3 : 999999} onChange={n => state.setField(f.key, String(n))} />
+          : f.kind === 'select'
           ? <SearchableSelect id={fieldId} className={inputClass} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)}>{f.options?.map(o => <option key={o} value={o}>{ACTION_LABELS[o] ?? o}</option>)}</SearchableSelect>
           : f.kind === 'text' ? <textarea id={fieldId} className={`${inputClass} min-h-24`} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)} />
-            : <input id={fieldId} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" className={inputClass} value={draft[f.key]} onChange={e => state.setField(f.key, e.target.value)} />
+            : null
         }</Field>)}
         {category === 'schema' && <p className="m-0 text-xs text-ink/60">Movement takes place within its own field.</p>}
       </fieldset>

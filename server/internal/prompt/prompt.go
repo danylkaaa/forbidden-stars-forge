@@ -178,6 +178,8 @@ func orNone(s string) string {
 
 const imageEditIntro = "Edit the provided card template image into finished card art."
 
+const imageNewIntro = "Create finished card art from the description below. There is no template image."
+
 const imageEditRendering = `- Photorealistic style.
 - Keep all important elements at least 6 mm from the image edges; background
   artwork must extend to the full bleed edge.
@@ -194,8 +196,17 @@ type FactionStyle struct {
 // ImageEdit assembles the per-card prompt (PRD §8.2) as Markdown sections
 // so the image model can tell the parts apart. Empty sections are omitted.
 func ImageEdit(cardTypeDescription, constraints string, f FactionStyle) string {
+	return build(imageEditIntro, cardTypeDescription, constraints, f)
+}
+
+// ImageNew is the prompt for a card type with no template image: the model paints the picture from the text alone.
+func ImageNew(cardTypeDescription, constraints string, f FactionStyle) string {
+	return build(imageNewIntro, cardTypeDescription, constraints, f)
+}
+
+func build(intro, cardTypeDescription, constraints string, f FactionStyle) string {
 	var b strings.Builder
-	b.WriteString(imageEditIntro)
+	b.WriteString(intro)
 	section := func(title, body string) {
 		if body = strings.TrimSpace(body); body != "" {
 			fmt.Fprintf(&b, "\n\n## %s\n%s", title, body)
@@ -220,6 +231,18 @@ var assembledPromptShape = ImageEdit("{description}", "{constraints}", FactionSt
 
 // AreaEdit is the prompt for editing a painted area of an existing image:
 // the image's original prompt for context, plus the requested change.
+// WholeEdit is the prompt for changing an existing image as a whole, with nothing painted:
+// the original prompt for context, plus the requested change.
+func WholeEdit(originalPrompt, instruction string) string {
+	return strings.TrimSpace(originalPrompt) + `
+
+## Edit
+` + strings.TrimSpace(instruction) + `
+
+Change the provided image as described. Keep everything the change does not
+touch the same: layout, colors, lighting and details.`
+}
+
 func AreaEdit(originalPrompt, instruction string) string {
 	return strings.TrimSpace(originalPrompt) + `
 

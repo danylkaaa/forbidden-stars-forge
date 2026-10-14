@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useId } from 'react'
 
-export function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
+export function Field({ label, children }: { label: ReactNode; children: (id: string) => ReactNode }) {
   const id = useId()
   return (
     <div>

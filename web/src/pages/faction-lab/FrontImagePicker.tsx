@@ -25,9 +25,10 @@ export function FrontImagePicker({ options, selectedKey, onSelect, factionId, fr
   const [open, setOpen] = useState(false)
   const templates = useAssemblyTemplates()
   const trigger = useRef<HTMLButtonElement>(null)
-  const category: Category | undefined = frontTypeName === 'events' ? 'schema' : frontTypeName === 'combat' || frontTypeName === 'upgrade' ? frontTypeName : undefined
-  const assignedKey = templates.data?.find((t) => t.faction_id === factionId && t.category === category && (t.side ?? 'front') === 'front')?.image_key
-  const sorted = [...options].sort((a, b) => Number(b.libraryKey === assignedKey) - Number(a.libraryKey === assignedKey))
+  // A card back serves several front types ("combat or events"): any of their assigned fronts counts.
+  const categories = frontTypeName.split(' or ').map((n): Category | undefined => n === 'events' ? 'schema' : n === 'combat' || n === 'upgrade' ? n : undefined)
+  const assignedKeys = templates.data?.filter((t) => t.faction_id === factionId && categories.includes(t.category) && (t.side ?? 'front') === 'front').map((t) => t.image_key) ?? []
+  const sorted = [...options].sort((a, b) => Number(assignedKeys.includes(b.libraryKey)) - Number(assignedKeys.includes(a.libraryKey)))
   const selected = options.find((image) => image.key === selectedKey)
   const close = () => { setOpen(false); trigger.current?.focus() }
 
@@ -46,16 +47,16 @@ export function FrontImagePicker({ options, selectedKey, onSelect, factionId, fr
           <p className="mt-2 mb-0 text-xs text-ink/55">Click the image placeholder to choose a front.</p>}
       </div>
     </div>
-    {open && <FrontImageDialog options={sorted} selectedKey={selectedKey} assignedKey={assignedKey}
+    {open && <FrontImageDialog options={sorted} selectedKey={selectedKey} assignedKeys={assignedKeys}
       loading={loading || templates.isPending} imageError={error} templateError={!!templates.error}
       onSelect={(key) => { onSelect(key); close() }} onClose={close} />}
   </div>
 }
 
-function FrontImageDialog({ options, selectedKey, assignedKey, loading, imageError, templateError, onSelect, onClose }: {
+function FrontImageDialog({ options, selectedKey, assignedKeys, loading, imageError, templateError, onSelect, onClose }: {
   options: FrontImageOption[]
   selectedKey: string
-  assignedKey?: string
+  assignedKeys: string[]
   loading: boolean
   imageError: boolean
   templateError: boolean
@@ -86,7 +87,7 @@ function FrontImageDialog({ options, selectedKey, assignedKey, loading, imageErr
       {!loading && !imageError && options.length === 0 && <p className="m-0 text-sm text-ink/60">No generated fronts for this faction and card type yet.</p>}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
         {options.map((image) => {
-          const assigned = image.libraryKey === assignedKey
+          const assigned = assignedKeys.includes(image.libraryKey)
           const selected = image.key === selectedKey
           return <button key={image.key} type="button" aria-label={`Use ${image.name}`} aria-pressed={selected}
             onClick={() => onSelect(image.key)}

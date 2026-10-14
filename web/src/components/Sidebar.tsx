@@ -8,10 +8,10 @@ import { workspaceLink, type WorkspaceMode } from './workspaceMode'
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
   { to: '/assemble', label: 'Library', Icon: LibraryIcon },
   { to: '/factions', label: 'Factions', Icon: FactionsIcon },
-  { to: '/subtypes', label: 'Card Types', Icon: LayersIcon },
-  { to: '/card-types', label: 'Card Types', Icon: CardTypesIcon },
+  { to: '/card-templates', label: 'Card Templates', Icon: LayersIcon },
+  { to: '/card-types', label: 'Card Templates', Icon: CardTypesIcon },
   { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
-  { to: '/generations', label: 'Generations', Icon: GalleryIcon },
+  { to: '/generations', label: 'Assets', Icon: GalleryIcon },
   { to: '/batches', label: 'Batch Processing', Icon: BatchIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]
@@ -28,8 +28,8 @@ const LITANIES = [
 
 export function Sidebar({ mode }: { mode: WorkspaceMode }) {
   const visible = items.filter(item => mode === 'library'
-    ? ['/assemble', '/factions', '/subtypes'].includes(item.to)
-    : !['/assemble', '/subtypes'].includes(item.to))
+    ? ['/assemble', '/factions', '/card-templates'].includes(item.to)
+    : !['/assemble', '/card-templates'].includes(item.to))
   const [litany] = useState(() => LITANIES[Math.floor(Math.random() * LITANIES.length)])
   return (
     <aside className="relative flex w-full flex-none flex-col gap-3 border-b md:w-60 md:gap-5 md:border-r md:border-b-0 border-accent/30 bg-[linear-gradient(180deg,#2a0f0b_0%,#140a08_35%,#0b0706_100%)] p-4 shadow-[inset_-1px_0_0_rgba(0,0,0,0.6)]">

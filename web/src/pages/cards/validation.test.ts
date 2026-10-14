@@ -55,3 +55,15 @@ test('imported combat cards can be flagged as starting or not', () => {
   const bad = parseImport(JSON.stringify({ cards: [{ ...base, starting: false }] }), [1])
   expect(bad.errors).toContainEqual(expect.objectContaining({ field: 'level' }))
 })
+
+test('an upgrade limitation is optional: left out when empty, text when given, never on other cards', () => {
+  const upgrade = { faction_id: 1, name: 'Forge World', category: 'upgrade', upgrade_type: 'deploy', level: 1, resource_cost: 2, text: 'Deploy.' }
+  expect(validateCard(upgrade, [1])).toEqual([])
+  expect(validateCard({ ...upgrade, limitation: 'Limit one per area.' }, [1])).toEqual([])
+  expect(validateCard({ ...upgrade, limitation: 5 }, [1]).length).toBeGreaterThan(0)
+  const draft = newDraft('upgrade', '1'); draft.name = 'Forge World'
+  expect(draftInput(draft)).not.toHaveProperty('limitation')
+  draft.limitation = 'Limit one per area.'
+  expect(draftInput(draft)).toHaveProperty('limitation', 'Limit one per area.')
+  expect(validateCard({ faction_id: 1, name: 'x', category: 'schema', subtype: 'schema', action: 'move_vertical', text: '', limitation: 'no' }, [1]).length).toBeGreaterThan(0)
+})

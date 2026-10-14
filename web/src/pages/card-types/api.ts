@@ -10,13 +10,14 @@ export type CardType = {
   template_path: string
   openai_file_id: string
   overlay_path: string // preview-only overlay; never sent to OpenAI
+  no_template?: boolean // generated from its prompt alone, with no template image
   created_at: string
   updated_at: string
 }
 
 // One per card category; the server creates them on startup and refuses to
 // delete or rename them.
-export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'combat back', 'events back', 'upgrade back', 'faction card', 'faction card back'] as const
+export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'card back', 'back element', 'faction card', 'faction card back'] as const
 export const isBuiltinCardType = (name: string) => (BUILTIN_CARD_TYPES as readonly string[]).includes(name)
 
 export function useCardTypes() {
@@ -49,6 +50,10 @@ export function deleteCardType(id: number): Promise<undefined> {
 
 export function uploadToOpenAI(id: number): Promise<{ openai_file_id: string }> {
   return apiSend('POST', `/api/card-types/${id}/upload-to-openai`, undefined)
+}
+
+export function dropTemplate(id: number): Promise<CardType> {
+  return apiSend<CardType>('DELETE', `/api/card-types/${id}/template`, undefined)
 }
 
 export function templateUrl(ct: CardType): string | null {

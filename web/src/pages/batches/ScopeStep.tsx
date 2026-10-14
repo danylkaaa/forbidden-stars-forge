@@ -9,7 +9,7 @@ export function ScopeStep({
   factions, cardTypes, onNext, loading,
 }: { factions: Faction[]; cardTypes: CardType[]; onNext: () => void; loading: boolean }) {
   const wizard = useBatchWizard()
-  const uploadedCardTypes = cardTypes.filter((c) => c.openai_file_id)
+  const uploadedCardTypes = cardTypes.filter((c) => c.openai_file_id && c.name !== 'upgrade')
   const requestCount = wizard.factionIds.length * wizard.cardTypeIds.length
   const canProceed = requestCount > 0 && !loading
 
@@ -65,7 +65,7 @@ export function ScopeStep({
           </button>
         </div>
         <div className="flex flex-wrap gap-2 rounded-md bg-surface p-3 shadow-[0_0_0_1px_var(--color-neutral-800)]">
-          {cardTypes.map((c) => {
+          {cardTypes.filter((c) => c.name !== 'upgrade').map((c) => {
             const disabled = !c.openai_file_id
             return (
               <label key={c.id}

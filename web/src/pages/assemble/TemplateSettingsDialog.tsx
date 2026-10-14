@@ -10,18 +10,18 @@ import { useFactions } from '../factions/api'
 import { useCardTypes } from '../card-types/api'
 import type { Category } from '../cards/model'
 import { saveAssemblyTemplate, useAssemblyTemplates, type AssemblyTemplate, type Side } from './api'
-import { ART_WINDOW, DEMO_COMBAT, LIBRARY_TABS, type CombatCard } from './model'
+import { ART_WINDOW, DEMO_COMBAT, DEMO_SCHEMA, DEMO_UPGRADE, LIBRARY_TABS, type CombatCard, type FramedCard } from './model'
 import { useDemoArtwork } from './demoArtwork'
 import { useAssembledPreview, usePreviewCard } from './previewCard'
-import { backTypeName, labLink, matchesCategory, useLibraryImages, type LibraryImage } from './library'
+import { labLink, matchesCategory, useLibraryImages, type LibraryImage } from './library'
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
-import { FactionNebulaSection } from './NebulaEditor'
-import { BackLogoEditor } from './BackLogoEditor'
+import { UploadImageButton } from './UploadImageButton'
+import { UPGRADE_FRONT_IMAGE } from './library'
 import { ImageSelectionCheckbox, ImageSelectionControls } from '../../components/ImageSelection'
 import { DeleteImageButton } from '../../components/DeleteImageButton'
 
-function DemoCombat({ image, card }: { image: LibraryImage; card: CombatCard }) {
+function DemoCombat({ image, card }: { image: LibraryImage; card: CombatCard | FramedCard }) {
   const { result, error } = useAssembledPreview(image.url, image.factionId, card)
   if (result) return <CardCanvas result={result} aria-label={`${card.name} on ${image.name}`} className="block h-auto w-full" />
   return <div className="grid aspect-[816/1104] place-items-center p-2 text-center text-xs text-ink/50">{error || 'Rendering…'}</div>
@@ -39,11 +39,11 @@ export function DemoText({ image, title, text, demo = false }: { image?: Library
   </div>
 }
 
-export function TemplateSettingsDialog({ initialFactionId, initialCategory, initialSide = 'front', onClose }: { initialFactionId: number | null; initialCategory: Category; initialSide?: Side; onClose: () => void }) {
+export function TemplateSettingsDialog({ initialFactionId, initialCategory, onClose }: { initialFactionId: number | null; initialCategory: Category; onClose: () => void }) {
   const factions = useFactions(), types = useCardTypes(), templates = useAssemblyTemplates(), images = useLibraryImages()
   const [factionId, setFactionId] = useState(initialFactionId ?? factions.data?.[0]?.id ?? null)
   const [category, setCategory] = useState<Category>(initialCategory)
-  const [side, setSide] = useState<Side>(initialSide)
+  const side: Side = 'front'
   // Preview setup: the demo card at a level, or one of the faction's cards.
   const [previewCardId, setPreviewCardId] = useState(0)
   const [previewLevel, setPreviewLevel] = useState(DEMO_COMBAT.level)
@@ -63,25 +63,21 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, init
   const imageSelection = useImageSelection(options, JSON.stringify([factionId, category, side, favoritesOnly]))
   const selectedImage = images.data.find(i => i.key === selected)
   const choose = (t: AssemblyTemplate) => { save.reset(); save.mutate(t) }
-  const counts = Object.fromEntries(LIBRARY_TABS.map(t => [t.category, templates.data?.some(x => x.faction_id === factionId && x.category === t.category && sideOf(x) === side) ? '✓' : '—']))
-  const backType = types.data?.find(t => t.name === backTypeName(category))
+  const counts = Object.fromEntries(LIBRARY_TABS.map(t => [t.category, t.category === 'upgrade' || templates.data?.some(x => x.faction_id === factionId && x.category === t.category && sideOf(x) === side) ? '✓' : '—']))
   return <Dialog title="Card templates" width="min(1100px,100%)" onBackdropClick={onClose} titleExtra={<Button onClick={onClose}>Close</Button>}>
-    <p className="m-0 text-sm text-ink/60">Choose the generated image every card of a faction and card type is assembled on (front), and the back all of them share.</p>
+    <p className="m-0 text-sm text-ink/60">Choose the generated image every card of a faction and card type is assembled on. Backs are configured on their own page.</p>
     <div className="flex flex-wrap items-end gap-3">
       <div className="w-64"><Field label="Faction">{id => <SearchableSelect id={id} className={selectClass} value={factionId ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
         {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
       </SearchableSelect>}</Field></div>
       {selectedImage && <Link to={labLink(selectedImage)} className="text-sm text-accent underline">Edit selected image in Faction Lab</Link>}
-      {selected && <Button disabled={save.isPending || !factionId} onClick={() => factionId && choose({ faction_id: factionId, category, side, image_key: '' })}>Clear choice</Button>}
-      <div role="tablist" aria-label="Card side" className="ml-auto inline-flex overflow-hidden rounded-md border border-divider text-sm">
-        {(['front', 'back'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={side === value} onClick={() => { save.reset(); setSide(value) }}
-          className={`cursor-pointer border-0 px-3 py-1.5 capitalize ${side === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{value}</button>)}
-      </div>
+      {selected && category !== 'upgrade' && <Button disabled={save.isPending || !factionId} onClick={() => factionId && choose({ faction_id: factionId, category, side, image_key: '' })}>Clear choice</Button>}
     </div>
-    {factionId && <FactionNebulaSection key={factionId} factionId={factionId} />}
     <CategoryTabs value={category} onChange={setCategory} badges={counts} />
-    {side === 'back' && selectedTemplate && selectedImage && <BackLogoEditor key={`${factionId}-${category}-${selected}-${selectedTemplate.logo_scale}`} template={selectedTemplate} imageUrl={selectedImage.url} />}
-    {side === 'back' && !selectedImage && <p className="m-0 text-sm text-ink/60">Choose a back image below to upload a centered logo.</p>}
+    {category === 'upgrade' ? <div className="space-y-3">
+      <p className="m-0 text-sm text-ink/70">Upgrade cards always use one front picture for every faction (<code>src/images/upgrades/front.png</code>). It is not generated or chosen per faction.</p>
+      <div className="w-56"><DemoCombat image={UPGRADE_FRONT_IMAGE} card={{ ...DEMO_UPGRADE, faction_id: factionId ?? 0 }} /></div>
+    </div> : <>
     <div className="flex flex-wrap items-end gap-3">
       {side === 'front' && category === 'combat' && <>
         <div className="w-64"><Field label="Preview with card">{id => <SearchableSelect id={id} className={selectClass} value={previewCard.id} onChange={e => setPreviewCardId(Number(e.target.value))}>
@@ -94,9 +90,10 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, init
       </>}
       <label className="flex min-h-9 items-center gap-2 text-sm text-ink/80"><input type="checkbox" checked={favoritesOnly} onChange={e => setFavoritesOnly(e.target.checked)} />Favourites only</label>
     </div>
+    {factionId && <UploadImageButton factionId={factionId} cardTypeId={types.data?.find(t => matchesCategory(t, category, 'front'))?.id} disabled={save.isPending}
+      onUploaded={key => choose({ faction_id: factionId, category, side, image_key: key })} />}
     {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
     {templates.isError && <p role="alert" className="m-0 text-sm text-danger">{templates.error.message}</p>}
-    {side === 'back' && factionId && backType && <p className="m-0 text-sm text-ink/60">Backs are generated in Faction Lab with the “{backType.name}” card type (its prompt is prefilled). <Link to={`/faction-lab?faction=${factionId}&card_type=${backType.id}`} className="text-accent underline">Generate a back</Link>.</p>}
     {!images.isPending && !options.length && favoritesOnly && <p className="m-0 text-sm text-ink/60">No favourite images for this faction. Star images in Faction Lab or Generations, or turn off the filter.</p>}
     {!images.isPending && !options.length && !favoritesOnly && <p className="m-0 text-sm text-ink/60">No finished images for this faction yet. <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">Generate one in Faction Lab</Link>.</p>}
     <ImageSelectionControls selection={imageSelection} images={options} disabled={save.isPending} />
@@ -104,14 +101,10 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, init
       {factionId && options.map(image => {
         const type = types.data?.find(t => t.id === image.cardTypeId)
         return <div key={image.key} className="group/image relative flex min-w-0 flex-col overflow-hidden rounded-md border border-divider bg-bg">
-          <button type="button" aria-pressed={selected === image.key} aria-label={`Use ${image.name}${side === 'back' ? ' as back' : ''}`} disabled={save.isPending || imageSelection.remove.isPending}
+          <button type="button" aria-pressed={selected === image.key} aria-label={`Use ${image.name}`} disabled={save.isPending || imageSelection.remove.isPending}
             onClick={() => choose({ faction_id: factionId, category, side, image_key: image.key })}
             className={`block w-full overflow-hidden rounded-md border-2 bg-bg p-0 text-left ${selected === image.key ? 'border-accent ring-2 ring-accent/40' : 'border-divider hover:border-accent/60'}`}>
-            {side === 'back'
-              ? <img loading="lazy" src={image.url} alt="" className="block aspect-[816/1104] w-full object-cover" />
-              : category === 'combat'
-              ? <DemoCombat image={image} card={previewCard} />
-              : <DemoText demo image={image} title={category === 'schema' ? 'Demo event' : 'Demo upgrade'} text="Choose an area you control. Gain 1 (B) and 1 [S] there." />}
+            <DemoCombat image={image} card={category === 'combat' ? previewCard : category === 'schema' ? { ...DEMO_SCHEMA, faction_id: image.factionId } : { ...DEMO_UPGRADE, faction_id: image.factionId }} />
             <span className="block truncate px-2 pt-1 text-xs" title={image.name}>{image.name}</span>
             <span className="block px-2 pb-1.5 text-[10px] text-ink/50">{image.source} · {type?.name ?? 'Unknown type'}{matchesCategory(type, category, side) ? '' : ' · other type'}</span>
           </button>
@@ -121,5 +114,6 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, init
         </div>
       })}
     </div>
+    </>}
   </Dialog>
 }

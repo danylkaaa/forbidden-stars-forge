@@ -25,6 +25,8 @@ type CardInput struct {
 	Text         *string `json:"text,omitempty"`
 	Action       *string `json:"action,omitempty"`
 	UpgradeType  *string `json:"upgrade_type,omitempty"`
+	// Limitation is an upgrade card's optional bottom line; nil or empty means none.
+	Limitation *string `json:"limitation,omitempty"`
 	// Starting marks a combat card as a starting card (level 0, no price, shows the
 	// faction logo). Any other combat card has a level from 0 to 3.
 	Starting *bool `json:"starting,omitempty"`
@@ -78,7 +80,7 @@ func ValidateCard(in CardInput) []CardFieldError {
 		}
 		add(f, "must be one of: "+strings.Join(values, ", "))
 	}
-	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "lower_text": in.LowerText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil, "starting": in.Starting != nil}
+	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "lower_text": in.LowerText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil, "limitation": in.Limitation != nil, "starting": in.Starting != nil}
 	allowed := CardCategoryFields(in.Category)
 	for f, yes := range present {
 		if yes && !allowed[f] {
@@ -123,7 +125,7 @@ func CardCategoryFields(category string) map[string]bool {
 	case "schema":
 		extra = []string{"subtype", "text", "action"}
 	case "upgrade":
-		extra = []string{"upgrade_type", "level", "resource_cost", "text"}
+		extra = []string{"upgrade_type", "level", "resource_cost", "text", "limitation"}
 	}
 	for _, f := range extra {
 		fields[f] = true
@@ -135,12 +137,12 @@ type CardsStore struct{ db *sql.DB }
 
 func NewCardsStore(db *sql.DB) *CardsStore { return &CardsStore{db} }
 
-const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at, starting"
+const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at, starting, limitation"
 
 func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
 	var starting bool
-	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.LowerText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt, &starting)
+	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.LowerText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt, &starting, &c.Limitation)
 	if c.Category == "combat" {
 		c.Starting = &starting
 	}
@@ -149,8 +151,16 @@ func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	}
 	return c, err
 }
+
+// limitationFor stores an upgrade's limitation, or NULL when it is empty or the card is not an upgrade.
+func limitationFor(c CardInput) any {
+	if c.Category != "upgrade" || c.Limitation == nil || strings.TrimSpace(*c.Limitation) == "" {
+		return nil
+	}
+	return *c.Limitation
+}
 func cardArgs(c CardInput) []any {
-	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.LowerText, c.Subtype, c.Text, c.Action, c.UpgradeType, c.Category == "combat" && c.Starting != nil && *c.Starting}
+	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.LowerText, c.Subtype, c.Text, c.Action, c.UpgradeType, c.Category == "combat" && c.Starting != nil && *c.Starting, limitationFor(c)}
 }
 func (s *CardsStore) Get(id int64) (Card, error) {
 	return scanCard(s.db.QueryRow("SELECT "+cardCols+" FROM cards WHERE id=?", id))
@@ -188,7 +198,7 @@ func insertCard(tx *sql.Tx, in CardInput) (Card, error) {
 	if err := checkCard(tx, in); err != nil {
 		return Card{}, err
 	}
-	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type,starting) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
+	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type,starting,limitation) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
 	if err != nil {
 		return Card{}, err
 	}
@@ -237,7 +247,7 @@ func (s *CardsStore) Update(id int64, in CardInput) (Card, error) {
 		return Card{}, err
 	}
 	args := append(cardArgs(in), id)
-	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,starting=?,updated_at=datetime('now') WHERE id=?", args...)
+	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,starting=?,limitation=?,updated_at=datetime('now') WHERE id=?", args...)
 	if err != nil {
 		return Card{}, err
 	}
