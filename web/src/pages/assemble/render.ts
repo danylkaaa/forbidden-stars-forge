@@ -9,16 +9,17 @@ import symbols from '../../fonts/ForbiddenStars.woff2?url'
 import advanceIcon from '../../images/upgrades/advance.png?url'
 import deployIcon from '../../images/upgrades/deploy.png?url'
 import dominateIcon from '../../images/upgrades/dominate.png?url'
+import orbitalStrikeIcon from '../../images/upgrades/orbital strike.png?url'
 import strategizeIcon from '../../images/upgrades/strategize.png?url'
-import clockwiseIcon from '../../images/events/exec-6378f342-2b43-4ceb-a9c1-bb3ae074afe8.png?url'
-import counterclockwiseIcon from '../../images/events/exec-cb9b86a5-cf73-49f7-af4e-8b8221457ec9.png?url'
-import horizontalIcon from '../../images/events/exec-a4cd0cce-4acb-4189-be4e-1278326fbf3b.png?url'
-import verticalIcon from '../../images/events/exec-bba1edbd-bd47-473d-b1ba-74d57f9df5a3.png?url'
+import clockwiseIcon from '../../images/events/clockwise.png?url'
+import counterclockwiseIcon from '../../images/events/counterclockwise.png?url'
+import horizontalIcon from '../../images/events/horizontal.png?url'
+import verticalIcon from '../../images/events/vertical.png?url'
 import type { UpgradeType } from '../cards/model'
 import { LAYERS, LAYER_LABELS, artWindow, defaultLayout, framedLayers, layerLabel, textRuns, type CombatCard, type Layout, type Placement, type Run, type FramedCard } from './model'
 
 // The hexagon in the middle of an upgrade card shows its order.
-export const ORDER_ICONS: Record<UpgradeType, string> = { deploy: deployIcon, advance: advanceIcon, strategize: strategizeIcon, dominate: dominateIcon }
+export const ORDER_ICONS: Record<UpgradeType, string> = { deploy: deployIcon, advance: advanceIcon, strategize: strategizeIcon, dominate: dominateIcon, orbital_strike: orbitalStrikeIcon }
 // The dial on an event card shows how it moves the schema or tactic.
 export const ACTION_ICONS: Record<string, string> = { rotate_clockwise: clockwiseIcon, rotate_counterclockwise: counterclockwiseIcon, move_vertical: verticalIcon, move_horizontal: horizontalIcon }
 
@@ -35,7 +36,7 @@ export function loadFonts() {
   })())).catch(error => { fonts = undefined; throw error })
 }
 const images = new Map<string, Promise<HTMLImageElement>>()
-function loadImage(url: string) {
+export function loadImage(url: string) {
   let pending = images.get(url)
   if (!pending) {
     pending = new Promise<HTMLImageElement>((resolve, reject) => {

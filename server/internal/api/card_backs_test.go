@@ -26,11 +26,11 @@ func TestBackTemplatesAreCreatedOnceAtTheFrontSize(t *testing.T) {
 	}
 	list, _ := types.List()
 	files, _ := os.ReadDir(filepath.Join(dir, "templates"))
-	if len(files) != 3 {
+	if len(files) != 5 {
 		t.Fatalf("templates: %d", len(files))
 	}
 	for _, ct := range list {
-		if store.IsBackCardType(ct.Name) != (ct.TemplatePath != "") {
+		if (store.IsBackCardType(ct.Name) || store.IsFactionCardType(ct.Name)) != (ct.TemplatePath != "") {
 			t.Fatalf("%s template %q", ct.Name, ct.TemplatePath)
 		}
 		if ct.TemplatePath == "" {
@@ -39,7 +39,12 @@ func TestBackTemplatesAreCreatedOnceAtTheFrontSize(t *testing.T) {
 		f, _ := os.Open(filepath.Join(dir, ct.TemplatePath))
 		cfg, _, err := image.DecodeConfig(f)
 		f.Close()
-		if err != nil || cfg.Width != 816 || cfg.Height != 1104 {
+		// Faction cards are landscape.
+		wantW, wantH := 816, 1104
+		if store.IsFactionCardType(ct.Name) {
+			wantW, wantH = 1583, 1063
+		}
+		if err != nil || cfg.Width != wantW || cfg.Height != wantH {
 			t.Fatalf("%s: %+v %v", ct.Name, cfg, err)
 		}
 	}

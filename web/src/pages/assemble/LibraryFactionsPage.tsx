@@ -5,6 +5,7 @@ import { useCards } from '../cards/api'
 import { useFactions } from '../factions/api'
 import { DlcTag } from '../factions/DlcTag'
 import { LIBRARY_TABS, libraryLink } from './model'
+import { useSavedFactionCards } from '../faction-card/api'
 import { deleteFactionLogo, uploadFactionLogo, useFactionLogos } from './logos'
 
 function LogoCell({ factionId, name, url }: { factionId: number; name: string; url?: string }) {
@@ -30,7 +31,7 @@ function LogoCell({ factionId, name, url }: { factionId: number; name: string; u
 // Library-mode Factions: deck progress per faction. Prompt editing lives on
 // the generation-mode Factions page.
 export default function LibraryFactionsPage() {
-  const factions = useFactions(), cards = useCards('', ''), logos = useFactionLogos()
+  const factions = useFactions(), cards = useCards('', ''), logos = useFactionLogos(), savedCards = useSavedFactionCards()
   const count = (factionId: number, category: string) => cards.data?.filter(c => c.faction_id === factionId && c.category === category).length ?? 0
   const expectedTotal = LIBRARY_TABS.reduce((n, t) => n + t.expected, 0)
   const error = factions.error ?? cards.error
@@ -49,6 +50,7 @@ export default function LibraryFactionsPage() {
             <th className="px-4 py-3.5 font-medium">Logo <span className="normal-case tracking-normal text-ink/40">(level 0 cards)</span></th>
             <th className="px-4 py-3.5 font-medium">DLC</th>
             {LIBRARY_TABS.map(t => <th key={t.category} className="px-4 py-3.5 text-right font-medium">{t.label}</th>)}
+            <th className="px-4 py-3.5 text-right font-medium">Faction card</th>
             <th className="px-4 py-3.5 text-right font-medium">Total</th>
           </tr>
         </thead>
@@ -68,6 +70,10 @@ export default function LibraryFactionsPage() {
                   </Link>
                 </td>
               })}
+              <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
+                {(() => { const n = savedCards.data?.includes(f.id) ? 1 : 0
+                  return <Link to={`/assemble/faction-card?faction=${f.id}`} aria-label={`${f.name} faction card: ${n} of 1`} className={`${n ? 'text-success' : 'text-ink/45'} no-underline hover:underline`}>{n}<span className="text-ink/40"> / 1</span></Link> })()}
+              </td>
               <td className={`whitespace-nowrap px-4 py-3 text-right font-mono ${total === expectedTotal ? 'text-success' : 'text-ink/70'}`}>{total}<span className="text-ink/40"> / {expectedTotal}</span></td>
             </tr>
           })}

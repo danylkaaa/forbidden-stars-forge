@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEventHandler } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button } from '../../components/Button'
+import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { useCutMm } from '../print/layout'
 import { buttonClass } from '../../components/buttonStyles'
 import { FactionSelect } from './FactionSelect'
 import { GearIcon } from '../../components/icons'
@@ -42,6 +44,7 @@ const caption = 'mt-2 flex items-baseline justify-between gap-2 px-0.5 text-sm t
 
 function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, onRendered, ...select }: { card: Card; image: LibraryImage | undefined; template: ReturnType<typeof useTemplateLayout>; back: string | null; backLogoUrl?: string; backLogoScale?: number; onRendered: (id: number, canvas: HTMLCanvasElement | null) => void } & Selectable) {
   const { input } = useCardRenderInput(card, image, template)
+  const cutMm = useCutMm()
   const { issues, dirty } = useCardDraft(card)
   const { result, error } = useRenderedCard(input)
   useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
@@ -51,7 +54,7 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
   <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
     <div className={`${frame} ${select.selected ? 'ring-2 ring-accent' : 'group-hover:ring-2 group-hover:ring-accent'}`}>
       {result
-        ? <CardCanvas result={result} aria-hidden="true" className="block h-auto w-full" />
+        ? <div className="relative"><CardCanvas result={result} aria-hidden="true" className="block h-auto w-full" /><SafeAreaLines px={result.canvas} cutMm={cutMm} /></div>
         : <div className="grid aspect-[816/1104] place-items-center bg-black/30 p-3 text-center text-xs text-ink/50">
           {error || (!image ? `Choose ${{ combat: 'a combat', upgrade: 'an upgrade', schema: 'an event' }[card.category]} template (top-left settings) to preview.` : issues.length ? 'Fix this card’s fields in the editor.' : 'Rendering…')}
         </div>}
@@ -78,6 +81,7 @@ function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImag
 export default function AssemblePage() {
   const factions = useFactions()
   const state = useAssembly()
+  const navigate = useNavigate()
   // ?faction=<id>&tab=<slug> (from the library Factions page) selects both.
   const [params, setParams] = useSearchParams()
   useEffect(() => {
@@ -165,8 +169,9 @@ export default function AssemblePage() {
       </div>}
     </div>
     {queryError && <div role="alert" className="text-danger">{queryError.message}</div>}
-    <CategoryTabs value={category} onChange={c => state.select({ category: c })} badges={counts} />
+    <CategoryTabs value={category} onChange={c => state.select({ category: c })} badges={counts} faction={factionId ? { active: false, onSelect: () => navigate(`/assemble/faction-card?faction=${factionId}`) } : undefined} />
     {shown.length > 0 && <div role="toolbar" aria-label="Selected cards" className="flex flex-wrap items-center gap-2 text-sm">
+      <SafeAreaToggle />
       <span className="text-ink/60">{selected.size ? `${chosen.length} selected` : 'Select cards to download or delete them.'}</span>
       <Button onClick={() => setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map(c => c.id)))}>{chosen.length === shown.length ? 'Select none' : 'Select all'}</Button>
       {chosen.length > 0 && <>

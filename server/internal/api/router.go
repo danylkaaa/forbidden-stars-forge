@@ -47,6 +47,16 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Put("/factions/{id}", factions.Update)
 			r.Delete("/factions/{id}", factions.Delete)
 			logos := &LogosHandler{Store: store.NewLogosStore(db), Factions: factionsStore, DataDir: dataDir}
+			factionCards := &FactionCardsHandler{Store: store.NewFactionCardsStore(db), Factions: factionsStore, DataDir: dataDir}
+			r.Get("/faction-card-layout", factionCards.GetLayout)
+			r.Put("/faction-card-layout", factionCards.SaveLayout)
+			r.Get("/faction-cards", factionCards.List)
+			r.Get("/faction-cards/{id}", factionCards.Get)
+			r.Put("/faction-cards/{id}", factionCards.Save)
+			r.Get("/faction-card-defaults", factionCards.Defaults)
+			r.Put("/faction-cards/{id}/assets/{key}", factionCards.UploadAsset)
+			r.Get("/faction-cards/{id}/assets/{key}", factionCards.Asset)
+			r.Delete("/faction-cards/{id}/assets/{key}", factionCards.DeleteAsset)
 			r.Get("/faction-logos", logos.List)
 			r.Get("/factions/{id}/logo", logos.Get)
 			r.Put("/factions/{id}/logo", logos.Upload)

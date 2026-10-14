@@ -1,6 +1,7 @@
 export const CATEGORIES = ['combat', 'schema', 'upgrade'] as const
 export type Category = typeof CATEGORIES[number]
-export const UPGRADE_TYPES = ['deploy', 'advance', 'strategize', 'dominate'] as const
+export const UPGRADE_TYPES = ['deploy', 'advance', 'strategize', 'dominate', 'orbital_strike'] as const
+export const orderLabel = (type: string) => { const text = type.replace(/_/g, ' '); return text[0].toUpperCase() + text.slice(1) }
 export type UpgradeType = typeof UPGRADE_TYPES[number]
 type Common = { faction_id: number; name: string; category: Category }
 export type CardInput = Common & (

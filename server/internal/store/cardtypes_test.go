@@ -125,7 +125,38 @@ func TestEnsureBuiltinCardTypesIsIdempotent(t *testing.T) {
 		}
 	}
 	list, err := s.List()
-	if err != nil || len(list) != 6 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "combat back" || list[3].Description == "" || list[3].Constraints == "" {
+	if err != nil || len(list) != 8 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "combat back" || list[3].Description == "" || list[3].Constraints == "" {
 		t.Fatalf("builtins: %+v %v", list, err)
+	}
+}
+
+func TestFactionCardPromptsAreRefreshedOnlyWhenUnedited(t *testing.T) {
+	s := openCardTypes(t)
+	if err := s.EnsureBuiltins(); err != nil {
+		t.Fatal(err)
+	}
+	front, _ := s.List()
+	var id int64
+	for _, ct := range front {
+		if ct.Name == "faction card" {
+			id = ct.ID
+		}
+	}
+	current := factionCardDescriptions["faction card"]
+	set := func(d string) {
+		if _, err := s.db.Exec(`UPDATE card_types SET description=? WHERE id=?`, d, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() string { ct, _ := s.Get(id); return ct.Description }
+	set(factionCardOldDescriptions[0])
+	s.EnsureBuiltins()
+	if read() != current {
+		t.Fatal("a shipped description was not refreshed")
+	}
+	set("my own prompt")
+	s.EnsureBuiltins()
+	if read() != "my own prompt" {
+		t.Fatal("an edited description was overwritten")
 	}
 }

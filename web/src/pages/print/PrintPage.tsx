@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '../../components/Button'
 import { Field, inputClass, selectClass } from '../../components/Field'
@@ -11,6 +11,29 @@ import { useTemplate, useTemplateLayout } from '../assemble/library'
 import { useCardRenderInput, useRenderedCard } from '../assemble/useCardView'
 import { backSlot, mmToPx, cutGuides, gridFor, PRINT_DPI, type Grid, mirrorPage, MM_PT, reconcile, reflow, slotRect, strokeFor, swapSlots, usePrintSettings, type Pages, type PrintSettings } from './layout'
 import { canvasAsset, useBackAsset, type PrintAsset } from './assets'
+import { useFactionCardCanvases } from '../faction-card/useFactionCardCanvases'
+
+// A faction card is 258 × 170 mm (268 × 180 mm with 5 mm bleed: 3165 × 2126 px at 300 dpi). It prints on its
+// own: its size replaces the page's card size, landscape.
+const FACTION_CARD_MM = { cardWidth: 258, cardHeight: 170 }
+
+// Renders a faction's card (front and back) off-screen as print assets.
+function FactionCardRenderer({ factionId, onFront, onBack }: { factionId: number; onFront: (id: number, asset: PrintAsset | null) => void; onBack: (id: number, asset: PrintAsset | null) => void }) {
+  const { front, back, probes } = useFactionCardCanvases(factionId)
+  useEffect(() => {
+    if (!front) return
+    let cancelled = false, made: PrintAsset | null = null
+    canvasAsset(front).then(asset => { if (cancelled) URL.revokeObjectURL(asset.url); else { made = asset; onFront(factionId, asset) } }).catch(() => {})
+    return () => { cancelled = true; onFront(factionId, null); if (made) URL.revokeObjectURL(made.url) }
+  }, [front, factionId, onFront])
+  useEffect(() => {
+    if (!back) return
+    let cancelled = false, made: PrintAsset | null = null
+    canvasAsset(back).then(asset => { if (cancelled) URL.revokeObjectURL(asset.url); else { made = asset; onBack(factionId, asset) } }).catch(() => {})
+    return () => { cancelled = true; onBack(factionId, null); if (made) URL.revokeObjectURL(made.url) }
+  }, [back, factionId, onBack])
+  return <>{probes}</>
+}
 
 // Renders one card off-screen and reports it as a print asset.
 function CardRenderer({ card, template, onAsset }: { card: Card; template: ReturnType<typeof useTemplateLayout>; onAsset: (id: number, asset: PrintAsset | null) => void }) {
@@ -80,7 +103,10 @@ const Group = ({ title, children }: { title: string; children: ReactNode }) =>
 
 export default function PrintPage() {
   const factions = useFactions()
-  const { settings, update, reset } = usePrintSettings()
+  const { settings: stored, update, reset } = usePrintSettings()
+  const [mode, setMode] = useState<'cards' | 'faction'>('cards')
+  const factionMode = mode === 'faction'
+  const settings = useMemo<PrintSettings>(() => factionMode ? { ...stored, ...FACTION_CARD_MM, orientation: 'landscape' } : stored, [stored, factionMode])
   const cards = useCards('', ''), layout = useTemplateLayout()
 
   const [categories, setCategories] = useState<Set<Category>>(new Set(['combat']))
@@ -95,6 +121,10 @@ export default function PrintPage() {
     return { faction, cards: !q || faction.name.toLowerCase().includes(q) ? mine : mine.filter(c => c.name.toLowerCase().includes(q)) }
   }).filter(g => g.cards.length), [factions.data, cards.data, categories, q])
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  // Faction cards are chosen by faction, one per faction.
+  const [fSelected, setFSelected] = useState<Set<number>>(new Set())
+  const sortedFactions = useMemo(() => [...(factions.data ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })), [factions.data])
+  const toggleFaction = (id: number) => setFSelected(prev => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next })
   const toggle = (id: number) => setSelected(prev => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next })
   const setMany = (ids: number[], on: boolean) => setSelected(prev => { const next = new Set(prev); ids.forEach(id => on ? next.add(id) : next.delete(id)); return next })
   const shownIds = groups.flatMap(g => g.cards.filter(printable).map(c => c.id))
@@ -110,7 +140,13 @@ export default function PrintPage() {
   const selectedFactions = useMemo(() => [...new Set(selectedCards.map(c => c.faction_id))], [selectedCards])
   const factionName = (id: number) => factions.data?.find(f => f.id === id)?.name ?? `Faction ${id}`
   const factionOf = useMemo(() => new Map((cards.data ?? []).map(c => [c.id, c.faction_id])), [cards.data])
-  const backOf = (id: number) => statuses[factionOf.get(id) ?? -1]?.backAsset ?? undefined
+  const [backAssets, setBackAssets] = useState<Record<number, PrintAsset | undefined>>({})
+  const onBack = useCallback((id: number, asset: PrintAsset | null) => setBackAssets(prev => {
+    const next = { ...prev }
+    if (asset) next[id] = asset; else delete next[id]
+    return next
+  }), [])
+  const backOf = (id: number) => factionMode ? backAssets[id] : statuses[factionOf.get(id) ?? -1]?.backAsset ?? undefined
 
   const [assets, setAssets] = useState<Record<number, PrintAsset | undefined>>({})
   const onAsset = useCallback((id: number, asset: PrintAsset | null) => setAssets(prev => {
@@ -125,18 +161,22 @@ export default function PrintPage() {
   const imageMm = useMemo(() => sampleW && sampleH ? { width: sampleW / PRINT_DPI * 25.4, height: sampleH / PRINT_DPI * 25.4 } : undefined, [sampleW, sampleH])
   const grid = gridFor(settings, imageMm)
   const [pages, setPages] = useState<Pages>([])
-  const idsKey = allCards.map(c => c.id).join(',')
+  const printIds = factionMode ? sortedFactions.filter(f => fSelected.has(f.id)).map(f => f.id) : allCards.map(c => c.id)
+  const idsKey = `${mode}:${printIds.join(',')}`
   useEffect(() => {
-    const ids = idsKey ? idsKey.split(',').map(Number) : []
-    setPages(prev => reconcile(prev, ids, grid.perPage))
+    const list = idsKey.slice(idsKey.indexOf(':') + 1)
+    const ids = list ? list.split(',').map(Number) : []
+    // Card ids and faction ids are different namespaces, so switching mode starts afresh.
+    setPages(prev => reconcile(idsKey.startsWith('faction') === prevMode.current ? prev : [], ids, grid.perPage)); prevMode.current = idsKey.startsWith('faction')
   }, [idsKey, grid.perPage])
+  const prevMode = useRef(false)
   const [dragging, setDragging] = useState<Slot | null>(null)
   const drop = (to: Slot) => { if (dragging) setPages(prev => swapSlots(prev, dragging, to)); setDragging(null) }
 
   const placed = pages.flat().filter((id): id is number => id !== null)
-  const placedFactions = [...new Set(placed.map(id => factionOf.get(id)!))]
+  const placedFactions = [...new Set(placed.map(id => factionMode ? id : factionOf.get(id)!))]
   const useBacks = settings.includeBacks && placed.some(id => backOf(id))
-  const backsPending = settings.includeBacks && placedFactions.some(f => statuses[f]?.back === 'loading' || !statuses[f])
+  const backsPending = settings.includeBacks && (factionMode ? placed.some(id => !backAssets[id]) : placedFactions.some(f => statuses[f]?.back === 'loading' || !statuses[f]))
   const ready = placed.length > 0 && placed.every(id => assets[id]) && !backsPending
   const [error, setError] = useState<string | null>(null)
 
@@ -193,6 +233,26 @@ export default function PrintPage() {
     <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <div className="space-y-4">
         <Group title="Cards">
+          <div role="tablist" aria-label="What to print" className="inline-flex overflow-hidden rounded-md border border-divider text-sm">
+            {([['cards', 'Cards'], ['faction', 'Faction cards']] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)}
+              className={`cursor-pointer border-0 px-3 py-1.5 ${mode === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{label}</button>)}
+          </div>
+          {factionMode && <>
+            <div className="flex items-center gap-2 text-sm">
+              <Button onClick={() => setFSelected(new Set(sortedFactions.map(f => f.id)))}>Select all</Button>
+              <Button onClick={() => setFSelected(new Set())}>None</Button>
+              <span className="ml-auto text-xs text-ink/50">{fSelected.size} selected</span>
+            </div>
+            <ul className="m-0 max-h-[32rem] list-none space-y-0.5 overflow-y-auto p-0">
+              {sortedFactions.map(f => <li key={f.id}><label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-surface">
+                <input type="checkbox" checked={fSelected.has(f.id)} onChange={() => toggleFaction(f.id)} className="accent-[var(--color-accent)]" /><span className="truncate">{f.name}</span>
+                <Link to={`/assemble/faction-card?faction=${f.id}`} className="ml-auto flex-none text-xs text-accent no-underline hover:underline" onClick={e => e.stopPropagation()}>Edit</Link>
+              </label></li>)}
+              {!sortedFactions.length && <li className="text-sm text-ink/50">{factions.isPending ? 'Loading…' : 'No factions yet.'}</li>}
+            </ul>
+            <p className="m-0 text-xs text-ink/50">Faction cards are cut at 258 × 170 mm and printed with 5 mm of bleed (268 × 180 mm), landscape, one per sheet on A4 or Letter, with their back on the next page.</p>
+          </>}
+          {!factionMode && <>
           <div className="flex flex-wrap gap-1" role="group" aria-label="Card types">
             {LIBRARY_TABS.map(t => <button key={t.category} type="button" aria-pressed={categories.has(t.category)}
               onClick={() => setCategories(prev => { const next = new Set(prev); if (!next.delete(t.category)) next.add(t.category); return next })}
@@ -230,13 +290,14 @@ export default function PrintPage() {
             })}
             {!groups.length && <li className="text-sm text-ink/50">{cards.isPending || factions.isPending ? 'Loading…' : 'Nothing matches.'}</li>}
           </ul>
+          </>}
         </Group>
         <Group title="Page">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Paper">{id => <select id={id} className={selectClass} value={settings.paper} onChange={e => update({ paper: e.target.value as PrintSettings['paper'] })}><option value="a4">A4</option><option value="letter">Letter</option></select>}</Field>
-            <Field label="Orientation">{id => <select id={id} className={selectClass} value={settings.orientation} onChange={e => update({ orientation: e.target.value as PrintSettings['orientation'] })}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>}</Field>
-            <NumberField label="Cut width (mm)" value={settings.cardWidth} min={10} step={0.5} onChange={setNum('cardWidth')} />
-            <NumberField label="Cut height (mm)" value={settings.cardHeight} min={10} step={0.5} onChange={setNum('cardHeight')} />
+            <Field label="Orientation">{id => <select id={id} className={selectClass} value={settings.orientation} disabled={factionMode} onChange={e => update({ orientation: e.target.value as PrintSettings['orientation'] })}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>}</Field>
+            <NumberField label="Cut width (mm)" value={settings.cardWidth} min={10} step={0.5} disabled={factionMode} onChange={setNum('cardWidth')} />
+            <NumberField label="Cut height (mm)" value={settings.cardHeight} min={10} step={0.5} disabled={factionMode} onChange={setNum('cardHeight')} />
             <NumberField label="Gap (mm)" value={settings.gap} step={0.5} disabled={settings.evenSpacing} onChange={setNum('gap')} />
             <NumberField label="Min margin (mm)" value={settings.margin} step={0.5} onChange={setNum('margin')} />
           </div>
@@ -280,7 +341,8 @@ export default function PrintPage() {
         </div>
       </section>
     </div>
-    {selectedFactions.map(f => <FactionRenderer key={f} factionId={f} imagePx={imagePx} onStatus={onStatus} />)}
-    {allCards.map(c => <CardRenderer key={c.id} card={c} template={layout} onAsset={onAsset} />)}
+    {!factionMode && selectedFactions.map(f => <FactionRenderer key={f} factionId={f} imagePx={imagePx} onStatus={onStatus} />)}
+    {!factionMode && allCards.map(c => <CardRenderer key={c.id} card={c} template={layout} onAsset={onAsset} />)}
+    {factionMode && printIds.map(id => <FactionCardRenderer key={id} factionId={id} onFront={onAsset} onBack={onBack} />)}
   </div>
 }

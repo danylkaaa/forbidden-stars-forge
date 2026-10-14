@@ -228,6 +228,19 @@
     "valid": true
   },
   {
+    "name": "orbital strike",
+    "card": {
+      "faction_id": 1,
+      "name": "Upgrade",
+      "category": "upgrade",
+      "upgrade_type": "orbital_strike",
+      "level": 2,
+      "resource_cost": 3,
+      "text": "Текст"
+    },
+    "valid": true
+  },
+  {
     "name": "invalid level -1",
     "card": {
       "faction_id": 1,

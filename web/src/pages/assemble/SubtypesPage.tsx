@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { inputClass } from '../../components/Field'
 import type { Category } from '../cards/model'
 import { CategoryTabs } from './CategoryTabs'
+import { FactionCardLayoutEditor } from '../faction-card/FactionCardLayoutEditor'
 import { LIBRARY_TABS } from './model'
 import { useAssembly } from './state'
 import { SubtypeLayoutEditor } from './SubtypeLayoutEditor'
@@ -78,6 +79,7 @@ export default function SubtypesPage() {
   const category = useAssembly(s => s.category)
   const select = useAssembly(s => s.select)
   const [name, setName] = useState('')
+  const [factionTab, setFactionTab] = useState(false)
   const create = useMutation({
     mutationFn: ({ category, name }: { category: Category; name: string }) => createSubtype(category, name),
     onSuccess: () => { setName(''); void queryClient.invalidateQueries({ queryKey: ['subtypes'] }) },
@@ -90,7 +92,11 @@ export default function SubtypesPage() {
       <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Card Types</h1>
       <p className="m-0 text-sm text-ink/60">Text layout for each card type, and its subtypes with their own overlay stacks.</p>
     </div>
-    <CategoryTabs value={category} onChange={c => { create.reset(); select({ category: c }) }} badges={counts} />
+    <CategoryTabs value={factionTab ? null : category} onChange={c => { create.reset(); setFactionTab(false); select({ category: c }) }} badges={counts} faction={{ active: factionTab, onSelect: () => setFactionTab(true) }} />
+    {factionTab ? <details className="rounded-lg border border-divider bg-surface p-4" open>
+      <summary className="cursor-pointer font-display text-lg text-accent-300">Faction card layout</summary>
+      <div className="mt-3"><FactionCardLayoutEditor /></div>
+    </details> : <>
     <details className="rounded-lg border border-divider bg-surface p-4" open>
       <summary className="cursor-pointer font-display text-lg text-accent-300">{label} text layout</summary>
       <div className="mt-3"><CardTypeLayoutEditor key={category} category={category} /></div>
@@ -104,5 +110,6 @@ export default function SubtypesPage() {
     {subtypes.isError && <p role="alert" className="text-danger">{subtypes.error.message}</p>}
     {!subtypes.isPending && !shown.length && <p className="text-sm text-ink/60">No {label.toLowerCase()} subtypes yet.</p>}
     <div className="space-y-4">{shown.map(s => <SubtypePanel key={s.id} subtype={s} />)}</div>
+    </>}
   </div>
 }

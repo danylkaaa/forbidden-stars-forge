@@ -3,6 +3,7 @@ import { AppLayout } from './components/AppLayout'
 import AssemblePage from './pages/assemble/AssemblePage'
 import CardEditorPage from './pages/assemble/CardEditorPage'
 import NewCardPage from './pages/assemble/NewCardPage'
+import FactionCardPage from './pages/faction-card/FactionCardPage'
 import FactionsRoute from './pages/factions/FactionsRoute'
 import SubtypesPage from './pages/assemble/SubtypesPage'
 import CardTypesPage from './pages/card-types/CardTypesPage'
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
       { path: '/assemble', element: <AssemblePage /> },
       { path: '/assemble/cards/new', element: <NewCardPage /> },
       { path: '/assemble/cards/:id', element: <CardEditorPage /> },
+      { path: '/assemble/faction-card', element: <FactionCardPage /> },
       { path: '/print', element: <PrintPage /> },
       { path: '/factions', element: <FactionsRoute /> },
       { path: '/card-types', element: <CardTypesPage /> },

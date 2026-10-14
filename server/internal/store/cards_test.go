@@ -41,7 +41,7 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 			inputs = append(inputs, CardInput{FactionID: f, Name: "План", Category: "schema", Subtype: ptr(sub), Action: ptr(action), Text: ptr("")})
 		}
 	}
-	for _, kind := range []string{"deploy", "advance", "strategize", "dominate"} {
+	for _, kind := range []string{"deploy", "advance", "strategize", "dominate", "orbital_strike"} {
 		inputs = append(inputs, CardInput{FactionID: f, Name: "Улучшение", Category: "upgrade", UpgradeType: ptr(kind), Level: ptr[int64](2), ResourceCost: ptr[int64](3), Text: ptr("Текст")})
 	}
 	for _, in := range inputs {

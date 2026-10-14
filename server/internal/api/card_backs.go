@@ -22,6 +22,9 @@ func EnsureBackTemplates(db *sql.DB, dataDir string) error {
 		return err
 	}
 	w, h := 816, 1104
+	// Faction cards are landscape; this is half of their 3165 x 2126 px size
+	// (268 x 180 mm with bleed at 300 dpi).
+	fw, fh := 1583, 1063
 	for _, ct := range list {
 		if ct.Name == "combat" && ct.TemplatePath != "" {
 			if f, err := os.Open(filepath.Join(dataDir, ct.TemplatePath)); err == nil {
@@ -33,8 +36,13 @@ func EnsureBackTemplates(db *sql.DB, dataDir string) error {
 		}
 	}
 	for _, ct := range list {
-		if !store.IsBackCardType(ct.Name) || ct.TemplatePath != "" {
+		faction := store.IsFactionCardType(ct.Name)
+		if !(store.IsBackCardType(ct.Name) || faction) || ct.TemplatePath != "" {
 			continue
+		}
+		w, h := w, h
+		if faction {
+			w, h = fw, fh
 		}
 		img := image.NewRGBA(image.Rect(0, 0, w, h))
 		green := color.RGBA{0, 255, 65, 255}

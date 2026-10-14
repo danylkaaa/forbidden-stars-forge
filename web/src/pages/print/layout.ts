@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -138,4 +139,10 @@ export function strokeFor(s: PrintSettings) {
   const width = s.lineWidth * PX_PT
   const dash = s.lineStyle === 'dashed' ? [width * 4, width * 3] : s.lineStyle === 'dotted' ? [width, width * 2] : []
   return { color: s.lineColor, width, dash }
+}
+
+// The finished card size, for safe-area lines on previews.
+export function useCutMm() {
+  const width = usePrintSettings(s => s.settings.cardWidth), height = usePrintSettings(s => s.settings.cardHeight)
+  return useMemo(() => ({ width, height }), [width, height])
 }

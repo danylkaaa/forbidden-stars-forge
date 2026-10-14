@@ -1,8 +1,7 @@
 import { useEffect, useRef, type ComponentProps, type Ref } from 'react'
-import type { RenderResult } from './useCardView'
 
 // Copies a rendered card onto a visible canvas scaled down by CSS.
-export function CardCanvas({ result, canvasRef, ...rest }: { result: RenderResult | null; canvasRef?: Ref<HTMLCanvasElement> } & ComponentProps<'canvas'>) {
+export function CardCanvas({ result, canvasRef, ...rest }: { result: { canvas: HTMLCanvasElement } | null; canvasRef?: Ref<HTMLCanvasElement> } & ComponentProps<'canvas'>) {
   const local = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = local.current

@@ -16,7 +16,7 @@ export type CardType = {
 
 // One per card category; the server creates them on startup and refuses to
 // delete or rename them.
-export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'combat back', 'events back', 'upgrade back'] as const
+export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'combat back', 'events back', 'upgrade back', 'faction card', 'faction card back'] as const
 export const isBuiltinCardType = (name: string) => (BUILTIN_CARD_TYPES as readonly string[]).includes(name)
 
 export function useCardTypes() {

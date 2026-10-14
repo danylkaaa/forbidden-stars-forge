@@ -2,6 +2,8 @@ import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
+import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { useCutMm } from '../print/layout'
 import { Field, selectClass } from '../../components/Field'
 import { useFactions } from '../factions/api'
 import { CardCanvas } from './CardCanvas'
@@ -9,7 +11,7 @@ import { PlacementFields } from './LayerControls'
 import { usePreviewTemplate, useTemplateLayout } from './library'
 import { useFactionLogos } from './logos'
 import { DEMO_COMBAT, DEMO_SCHEMA, DEMO_UPGRADE, layerLabel, resourceBox, defaultLayout, type Layer, type Layout, type Placement } from './model'
-import { ACTION_LABELS, UPGRADE_TYPES, type Category, type UpgradeType } from '../cards/model'
+import { ACTION_LABELS, orderLabel, UPGRADE_TYPES, type Category, type UpgradeType } from '../cards/model'
 import type { RenderInput } from './render'
 import { useAssembly } from './state'
 import { useRenderedCard } from './useCardView'
@@ -44,6 +46,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
   const previewFaction = factionId ?? factions.data?.[0]?.id ?? null
   const [level, setLevel] = useState(initialLevel)
   const upgrade = category === 'upgrade', schema = category === 'schema'
+  const cutMm = useCutMm()
   const [action, setAction] = useState(DEMO_SCHEMA.action), [kind, setKind] = useState<'schema' | 'tactic'>(DEMO_SCHEMA.subtype)
   const [price, setPrice] = useState(upgrade ? DEMO_UPGRADE.resource_cost : DEMO_COMBAT.resource_cost)
   const [order, setOrder] = useState<UpgradeType>(DEMO_UPGRADE.upgrade_type)
@@ -99,6 +102,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
         {result
           ? <CardCanvas result={result} aria-label={`${label} position preview`} className="block h-auto w-full" />
           : <div className="grid aspect-[3/4] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
+        {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
         {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key], stackCount, CARD_SIZE) : shown(key), selected = key === layer
           return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${layerLabel(key, category)}`} title={layerLabel(key, category)}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
@@ -109,6 +113,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
               className="absolute -right-1.5 -bottom-1.5 h-3 w-3 cursor-nwse-resize touch-none rounded-sm border border-bg bg-accent" />}
           </div> })}
       </div>
+      <SafeAreaToggle className="mt-1" />
       <p className="mt-1 text-[11px] text-ink/50">{template.image
         ? <>Template: {template.image.name}{template.chosen ? '' : ' (newest image of this faction; choose one with the Library settings)'}.</>
         : 'This faction has no generated images yet, so the preview has no template.'}</p>
@@ -131,7 +136,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
           {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l}</option>)}
         </SearchableSelect>}</Field>}
         {upgrade && <Field label="Preview order">{id => <SearchableSelect id={id} className={selectClass} value={order} onChange={e => setOrder(e.target.value as UpgradeType)}>
-          {UPGRADE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}
         </SearchableSelect>}</Field>}
         {!schema && <Field label="Preview price">{id => <SearchableSelect id={id} className={selectClass} value={price} disabled={level === 0 && category === 'combat'} title={level === 0 && category === 'combat' ? 'Level 0 cards have no resource price' : undefined} onChange={e => setPrice(Number(e.target.value))}>
           {Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>{n}</option>)}

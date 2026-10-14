@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
+import { SafeAreaLines, SafeAreaToggle } from '../../components/SafeArea'
+import { useCutMm } from '../print/layout'
 import { DiffPanel } from '../../components/DiffPanel'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { apiGet } from '../../lib/api'
 import { createCard, updateCard } from '../cards/api'
-import { ACTION_LABELS, CATEGORIES, newDraft, UPGRADE_TYPES, type Card, type CardInput, type Category } from '../cards/model'
+import { ACTION_LABELS, CATEGORIES, newDraft, orderLabel, UPGRADE_TYPES, type Card, type CardInput, type Category } from '../cards/model'
 import { draftInput } from '../cards/validation'
 import { useFactions } from '../factions/api'
 import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, type Assembly } from './api'
@@ -29,6 +31,7 @@ const NUMBER_FIELDS = [['resource_cost', 'Resource price'], ['guns', 'Guns'], ['
 
 export default function CardEditorPage({ newFactionId, newCategory = 'combat', onCategoryChange }: { newFactionId?: string; newCategory?: Category; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
   const creating = newFactionId !== undefined
+  const cutMm = useCutMm()
   const { id: routeId = '' } = useParams()
   const id = creating ? '-1' : routeId
   const navigate = useNavigate()
@@ -280,6 +283,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             onPointerMove={e => { const start = drag.current; if (!start) return; const rect = e.currentTarget.getBoundingClientRect(); if (!rect.width || !rect.height) return; setTransform(panArtwork(start.transform, (e.clientX - start.x) / rect.width * 100, (e.clientY - start.y) / rect.height * 100), false) }}
             onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
             className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
+          {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
           {result && !movable && <Preview3DButton title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} className="absolute right-2 top-2 z-10" />}
           {result && movable && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]"
             style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
@@ -290,6 +294,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             {renderError || (issues.length ? 'Fix the card fields to update the preview.' : !template.isPending && !template.image ? `No ${upgrade ? 'upgrade' : schema ? 'event' : 'combat'} template chosen for this faction. Pick one with the settings button in the library.` : 'Rendering card…')}
           </p>}
         </div>
+        <SafeAreaToggle />
         {renderError && <Button onClick={retry}>Retry rendering</Button>}
         {!!result?.warnings.length && <div role="status" className="space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w} className="m-0">{w}</p>)}</div>}
         {!template.image && !template.isPending && <Link to="/assemble" className="text-sm text-accent underline">Choose a template in the library</Link>}
@@ -322,7 +327,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             <Field label="Kind">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.subtype} onChange={e => edit('subtype', e.target.value)}>{['schema', 'tactic'].map(t => <option key={t} value={t}>{t === 'schema' ? 'Scheme' : 'Tactic'}</option>)}</SearchableSelect>}</Field>
             <Field label="Action">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.action} onChange={e => edit('action', e.target.value)}>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SearchableSelect>}</Field>
           </div>}
-          {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}</SearchableSelect>}</Field>}
+          {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
           {!schema && <div className={`grid grid-cols-2 gap-3 ${upgrade ? 'sm:grid-cols-2' : 'sm:grid-cols-5'}`}>
             <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
             {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
