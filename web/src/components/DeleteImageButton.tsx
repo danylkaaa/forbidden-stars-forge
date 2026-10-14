@@ -16,7 +16,7 @@ export function DeleteImageButton({ target, name, disabled = false, overlay = fa
   })
   return <>
     <button type="button" aria-label={`Delete ${name}`} title="Delete generated image" disabled={disabled || remove.isPending}
-      className={`${overlay ? 'absolute right-2 top-2 z-[1] h-8 w-8 bg-black/70! backdrop-blur-sm ' : ''}inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-danger/35 bg-transparent px-2 py-1 text-xs text-danger hover:border-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50`}
+      className={`${overlay ? 'absolute right-2 top-2 z-[1] h-8 w-8 bg-black/70! backdrop-blur-sm opacity-0 group-hover/image:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ' : ''}inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-danger/35 bg-transparent px-2 py-1 text-xs text-danger hover:border-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50`}
       onClick={() => { remove.reset(); setConfirming(true) }}>
       <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></svg>
       {!overlay && 'Delete'}

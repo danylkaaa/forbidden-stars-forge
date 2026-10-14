@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../../lib/api'
-import { CARD_SIZE } from './model'
+import { CARD_SIZE, DEFAULT_MODEL_STYLE, type ModelStyle } from './model'
 
 export type Side = 'front' | 'back'
 // Every element is placed in % of the card (x, y, w, h), text sizes are % of
@@ -40,7 +40,10 @@ export const ELEMENTS = [
 ] as const
 export type ElementKey = typeof ELEMENTS[number]['key']
 export type ElementKind = typeof ELEMENTS[number]['kind']
-export type FactionCardLayout = Record<ElementKey, ElementLayout>
+// `modelStyle` (shadow, outline, inner shadow, contrast of the unit icons) is
+// shared by every faction; it is edited on the Card Types page.
+export type FactionCardLayout = Record<ElementKey, ElementLayout> & { modelStyle: ModelStyle }
+export type SavedLayout = Partial<Record<ElementKey, Partial<ElementLayout>>> & { modelStyle?: Partial<ModelStyle> }
 
 // Reference card the defaults come from: 1932 × 966 per side.
 const RX = 1932, RY = 966
@@ -49,6 +52,7 @@ const px = (x: number) => Math.round(x / RX * 10000) / 100, py = (y: number) => 
 const sz = (v: number) => Math.round(v * 0.0901 * 100) / 100
 export function defaultLayout(): FactionCardLayout {
   return {
+    modelStyle: DEFAULT_MODEL_STYLE,
     logo: { x: 45.8, y: 14, w: 10.5, h: 16 },
     backLogo: { x: 14.1, y: 7.5, w: 11.3, h: 18 },
     title: { x: px(800), y: py(318), w: px(395), size: sz(38) },
@@ -61,7 +65,7 @@ export function defaultLayout(): FactionCardLayout {
     materialsStyle: { x: 0, y: 0, color: '#74b13f', nx: 0, ny: 0, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
     diceStyle: { x: 0, y: 0, color: '#ffffff', nx: 0, ny: 0, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
     healthStyle: { x: 0, y: 0, color: '#ffffff', nx: 0, ny: 0, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
-    moraleStyle: { x: 0, y: 0, color: '#e5632a', nx: 0, ny: -0.62, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
+    moraleStyle: { x: 0, y: 0, color: '#e5632a', nx: 0, ny: 0, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
     cityIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' }, factoryIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' }, bastionIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' },
     forcesTitle: { x: px(205), y: py(291 - 22), w: px(400), size: sz(23) },
     forces: { x: px(205), y: py(364), scale: 1, pitch: py(102) },
@@ -72,9 +76,9 @@ export function defaultLayout(): FactionCardLayout {
     objectives: { x: px(843), y: py(544), scale: 1, pitch: py(92), gap: px(542) },
   }
 }
-export function mergeLayout(saved: Partial<Record<ElementKey, Partial<ElementLayout>>> | undefined): FactionCardLayout {
+export function mergeLayout(saved: SavedLayout | undefined): FactionCardLayout {
   const base = defaultLayout()
-  return Object.fromEntries(ELEMENTS.map(({ key }) => [key, { ...base[key], ...saved?.[key] }])) as FactionCardLayout
+  return { ...Object.fromEntries(ELEMENTS.map(({ key }) => [key, { ...base[key], ...saved?.[key] }])), modelStyle: { ...DEFAULT_MODEL_STYLE, ...saved?.modelStyle } } as FactionCardLayout
 }
 
 // Pixel geometry shared by the renderer and the editor's overlay boxes.
@@ -112,8 +116,8 @@ export function elementBox(key: ElementKey, l: FactionCardLayout): { x: number; 
 }
 
 export function useFactionCardLayout() {
-  const query = useQuery({ queryKey: ['faction-card-layout'], queryFn: () => apiGet<{ layout: Partial<Record<ElementKey, Partial<ElementLayout>>> }>('/api/faction-card-layout') })
+  const query = useQuery({ queryKey: ['faction-card-layout'], queryFn: () => apiGet<{ layout: SavedLayout }>('/api/faction-card-layout') })
   const layout = useMemo(() => mergeLayout(query.data?.layout), [query.data?.layout])
   return { ...query, layout, saved: query.data?.layout }
 }
-export const saveFactionCardLayout = (layout: Partial<Record<ElementKey, Partial<ElementLayout>>>) => apiSend<{ layout: Partial<Record<ElementKey, ElementLayout>> }>('PUT', '/api/faction-card-layout', { layout })
+export const saveFactionCardLayout = (layout: SavedLayout) => apiSend<{ layout: SavedLayout }>('PUT', '/api/faction-card-layout', { layout })

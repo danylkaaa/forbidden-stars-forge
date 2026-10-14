@@ -18,6 +18,22 @@ import verticalIcon from '../../images/events/vertical.png?url'
 import type { UpgradeType } from '../cards/model'
 import { LAYERS, LAYER_LABELS, artWindow, defaultLayout, framedLayers, layerLabel, textRuns, type CombatCard, type Layout, type Placement, type Run, type FramedCard } from './model'
 
+// Average colour of an image's last two rows ('#rrggbb'); a dark neutral if it cannot be read.
+function edgeColor(image: HTMLImageElement): string {
+  try {
+    const probe = document.createElement('canvas'); probe.width = image.naturalWidth; probe.height = 2
+    const pctx = probe.getContext('2d', { willReadFrequently: true })!
+    pctx.drawImage(image, 0, image.naturalHeight - 2, image.naturalWidth, 2, 0, 0, image.naturalWidth, 2)
+    const data = pctx.getImageData(0, 0, probe.width, 2).data
+    let r = 0, g = 0, b = 0
+    for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2] }
+    const n = data.length / 4
+    return '#' + [r, g, b].map(v => Math.round(v / n).toString(16).padStart(2, '0')).join('')
+  } catch { return '#17130d' }
+}
+const shade = (hex: string, factor: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * factor).toString(16).padStart(2, '0')).join('')
+// The standard card's cut height; the bottom border of combat cards stays above it.
+const CARD_CUT_HEIGHT_MM = 88
 // The hexagon in the middle of an upgrade card shows its order.
 export const ORDER_ICONS: Record<UpgradeType, string> = { deploy: deployIcon, advance: advanceIcon, strategize: strategizeIcon, dominate: dominateIcon, orbital_strike: orbitalStrikeIcon }
 // The dial on an event card shows how it moves the schema or tactic.
@@ -50,7 +66,7 @@ export function loadImage(url: string) {
   return pending
 }
 type Atom = Run & { width: number }
-function font(run: Run, size: number, family: string) { return `${run.italic ? 'italic ' : ''}${size}px ${run.icon ? 'CardSymbols' : family}, CardEvent, serif` }
+function font(run: Run, size: number, family: string) { return `${run.italic ? 'italic ' : ''}${run.bold ? 'bold ' : ''}${size}px ${run.icon ? 'CardSymbols' : family}, CardEvent, serif` }
 // Measure the same runs we paint: symbols occupy one glyph and stay intact
 // during wrapping. Newlines and long words are supported without squeezing.
 export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => number): Atom[][] {
@@ -126,7 +142,7 @@ function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement,
   return { size, lineHeight, lines, ascent, height }
 }
 // Text is left aligned unless the caller (the event card's label) asks otherwise.
-function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number, align: 'left' | 'center' = 'left'): boolean {
+function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number, align: 'left' | 'center' | 'digit' = 'left'): boolean {
   const { size, lineHeight, lines, ascent, height: textHeight } = measureBlock(ctx, text, p, family, w, h)
   ctx.fillStyle = p.color
   // Centre visible glyph bounds, including inline icons, rather than the font's em box.
@@ -137,6 +153,11 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
     if (align === 'center') {
       const free = p.width * w / 100 - line.reduce((sum, atom) => sum + atom.width, 0)
       x += free / 2
+    } else if (align === 'digit') {
+      // Centred on where a "2" would sit when started at x, so a narrower "1"
+      // lands on the same centre and the badge position stays as laid out.
+      ctx.font = font({ text: '2', icon: false, italic: false }, size, family)
+      x += (ctx.measureText('2').width - line.reduce((sum, atom) => sum + atom.width, 0)) / 2
     }
     for (const atom of line) {
       ctx.font = font(atom, size, family)
@@ -152,8 +173,8 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
 // Rows of the 759 px wide parchment textures that are decoration, not
 // writing space: background.png's top border (0–20) and foreground.png's
 // transparent strip (0–5) plus divider bar (6–17).
-function textureInsets(scale: number) {
-  return { background: 21 * scale, dividerTop: 6 * scale, foreground: 18 * scale }
+function textureInsets(scale: number, foregroundScale = scale) {
+  return { background: 21 * scale, dividerTop: 6 * foregroundScale, foreground: 18 * foregroundScale }
 }
 // The resource column stacks guns, then shields, then morale.
 const RESOURCES = ['guns', 'shields', 'eagles'] as const
@@ -222,7 +243,7 @@ async function renderFramed({ card, layout, imageUrl, overlayUrl, overlayUrls, l
     }
     const shadowed = layer === 'resource_cost' || layer === 'level'
     if (shadowed) { ctx.save(); setCardShadow(ctx, h) }
-    const overflow = paintText(ctx, texts[layer] ?? '', p, layer === 'upper_text' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' ? 'center' : 'left')
+    const overflow = paintText(ctx, texts[layer] ?? '', p, layer === 'upper_text' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' ? 'center' : layer === 'level' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${layerLabel(layer, card.category)} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
@@ -235,7 +256,7 @@ export async function renderCard(input: RenderInput): Promise<RenderOutput> {
 async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
   // A subtype's overlay stack (bottom first) replaces the card type overlay.
   const stack = overlayUrls?.length ? overlayUrls : overlayUrl ? [overlayUrl] : []
-  const [template, overlays, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.level === 0 && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
+  const [template, overlays, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), Promise.all(stack.map(loadImage)), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
   // Overlay dimensions define the finished card when supplied.
   const overlay = overlays[0]
   const w = overlay?.naturalWidth ?? outputSize?.width ?? template.naturalWidth
@@ -259,10 +280,12 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   const upperBlock = measureBlock(ctx, card.upper_text, layout.upper_text, familyFor(layout.upper_text, 'upper_text'), w, h)
   const lowerBlock = measureBlock(ctx, card.lower_text, layout.lower_text, familyFor(layout.lower_text, 'lower_text'), w, h)
   const bottomHeight = bottom.naturalHeight * w / bottom.naturalWidth
+  // Images are 300 dpi with the card centred in them: the margin below the cut line is bleed.
+  const bleedBottom = Math.max(0, (h - CARD_CUT_HEIGHT_MM / 25.4 * 300) / 2)
   const panels = combatPanels(w, h, bottomHeight,
     { text: card.upper_text, height: upperBlock.height, placement: layout.upper_text },
     { text: card.lower_text, height: lowerBlock.height, placement: layout.lower_text },
-    textureInsets(w / background.naturalWidth))
+    textureInsets(w / background.naturalWidth, foreground ? w / foreground.naturalWidth : undefined), bleedBottom)
   // Preserve each texture's aspect ratio; extend it vertically only when text
   // needs more parchment than the source image supplies. The canvas crops it.
   if (panels.backgroundY !== null) ctx.drawImage(background, 0, panels.backgroundY, w, Math.max(background.naturalHeight * w / background.naturalWidth, h - panels.backgroundY))
@@ -279,9 +302,9 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
   if (panels.overflow) warnings.push('Rules text extends beyond the parchment area. Reduce its size or adjust its position.')
   if (panels.overlap) warnings.push('Upper text overlaps the lower panel. Adjust the manual text positions.')
   for (const layer of LAYERS) {
-    // Level 0 cards have no level requirement and no resource price; the
+    // Starting cards have no level requirement and no resource price; the
     // faction logo takes the level badge.
-    if (layer === 'logo' || layer === 'order_icon' || layer === 'subtype' || (card.level === 0 && (layer === 'level' || layer === 'resource_cost'))) continue
+    if (layer === 'logo' || layer === 'order_icon' || layer === 'subtype' || (card.starting && (layer === 'level' || layer === 'resource_cost'))) continue
     const p = paintLayout[layer]
     const family = familyFor(p, layer)
     const stack = RESOURCES.flatMap(r => Array.from({ length: card[r] }, () => PLAIN_GLYPHS[r]))
@@ -292,9 +315,20 @@ async function renderCombat({ card, layout, imageUrl, overlayUrl, overlayUrls, l
     }
     const overflow = layer === 'resources'
       ? paintResources(ctx, stack, p, w, h)
-      : paintText(ctx, texts[layer], p, family, w, h)
+      // A narrow level "1" is centred where a "2" would be, so it sits in the badge like one.
+      : paintText(ctx, texts[layer], p, family, w, h, layer === 'level' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${LAYER_LABELS[layer]} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
+  }
+  if (bleedBottom > 0) {
+    // Below the border (outside the cut) the bleed is a plain dark continuation
+    // of the border's bottom edge colour, fading darker: clean, with nothing
+    // to look stretched or smeared.
+    const top = panels.bottomY + bottomHeight - 1
+    const edge = edgeColor(bottom)
+    const fade = ctx.createLinearGradient(0, top, 0, h)
+    fade.addColorStop(0, edge); fade.addColorStop(1, shade(edge, 0.55))
+    ctx.fillStyle = fade; ctx.fillRect(0, top, w, h - top)
   }
   ctx.drawImage(bottom, 0, panels.bottomY, w, bottomHeight)
   if (logo) {

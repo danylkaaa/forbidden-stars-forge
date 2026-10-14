@@ -5,7 +5,7 @@ export const orderLabel = (type: string) => { const text = type.replace(/_/g, ' 
 export type UpgradeType = typeof UPGRADE_TYPES[number]
 type Common = { faction_id: number; name: string; category: Category }
 export type CardInput = Common & (
-  | { category: 'combat'; level: number; resource_cost: number; shields: number; guns: number; eagles: number; upper_text: string; lower_text: string }
+  | { category: 'combat'; starting?: boolean; level: number; resource_cost: number; shields: number; guns: number; eagles: number; upper_text: string; lower_text: string }
   | { category: 'schema'; subtype: 'schema' | 'tactic'; text: string; action: 'rotate_clockwise' | 'rotate_counterclockwise' | 'move_vertical' | 'move_horizontal' }
   | { category: 'upgrade'; upgrade_type: UpgradeType; level: number; resource_cost: number; text: string }
 )
@@ -42,6 +42,7 @@ export type CardDraft = Record<string, string>
 export function newDraft(category: Category, factionId = ''): CardDraft {
   const draft: CardDraft = { faction_id: factionId, name: '', category }
   for (const f of FIELDS[category]) draft[f.key] = f.options?.[0] ?? (f.kind === 'number' ? '0' : '')
+  if (category === 'combat') draft.starting = 'false'
   return draft
 }
 export function cardDraft(card: CardInput): CardDraft {

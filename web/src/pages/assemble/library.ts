@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useCardTypes, type CardType } from '../card-types/api'
 import { useGenerations, generationImageUrl } from '../test-generation/api'
 import { useDoneBatchItems } from '../generations/api'
 import { batchItemImageUrl } from '../batches/api'
 import type { Category } from '../cards/model'
-import { useAssemblyTemplates, useCardTypeLayouts, type Side } from './api'
+import { useFactions } from '../factions/api'
+import { nebulaTemplateUrl } from './backDecor'
+import { useAssemblyTemplates, useCardTypeLayouts, useNebula, useNebulaPicture, type Side } from './api'
 import { LIBRARY_TABS, assemblyLayout } from './model'
 import type { ImageRef } from '../../lib/favorites'
 
@@ -45,14 +47,35 @@ export function useTemplateLayout(category: Category = 'combat') {
   return { layout, ready: !layouts.isPending, error: layouts.error }
 }
 
-// The template chosen for a faction and category, if it still exists.
+// The faction's nebula as a template image, when it is switched on.
+function useNebulaTemplate(factionId: number | null, enabled: boolean) {
+  const nebula = useNebula(factionId ?? undefined), factions = useFactions(), picture = useNebulaPicture('combat')
+  const fallback = factions.data?.find(f => f.id === factionId)?.primary_color ?? ''
+  const active = enabled && !!factionId && nebula.as_template
+  const [made, setMade] = useState<{ key: string; url: string } | null>(null)
+  const key = `${factionId}|${nebula.color}|${nebula.seed}|${nebula.density}|${fallback}|${picture}`
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    nebulaTemplateUrl(nebula, fallback, undefined, picture).then(url => { if (!cancelled) setMade({ key, url }) }).catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, key])
+  const url = active && made?.key === key ? made.url : undefined
+  const image = useMemo<LibraryImage | undefined>(() => url && factionId ? { key: 'nebula', name: 'Nebula', factionId, cardTypeId: 0, url, createdAt: '', source: 'Lab', favorite: false, ref: { kind: 'generation', id: 0 } } : undefined, [url, factionId])
+  return { image, pending: active && !url }
+}
+
+// The template chosen for a faction and category, if it still exists. With
+// none chosen, the faction's nebula stands in when it is switched on.
 export function useTemplate(factionId: number | null, category: Category, side: Side = 'front') {
   const templates = useAssemblyTemplates(), images = useLibraryImages()
   const saved = templates.data?.find(t => t.faction_id === factionId && t.category === category && (t.side ?? 'front') === side)
   const key = saved?.image_key
   const source = key ? images.data.find(i => i.key === key) : undefined
-  const image = useMemo(() => source && side === 'back' ? { ...source, logoUrl: saved?.logo_url, logoScale: saved?.logo_scale } : source, [source, side, saved?.logo_url, saved?.logo_scale])
-  return { key, image, isPending: templates.isPending || images.isPending, queries: [templates, ...images.queries] }
+  const nebula = useNebulaTemplate(factionId, side === 'front' && !source && !templates.isPending && !images.isPending)
+  const image = useMemo(() => source && side === 'back' ? { ...source, logoUrl: saved?.logo_url, logoScale: saved?.logo_scale } : source ?? nebula.image, [source, side, saved?.logo_url, saved?.logo_scale, nebula.image])
+  return { key: key ?? (nebula.image ? 'nebula' : undefined), image, isPending: templates.isPending || images.isPending || nebula.pending, queries: [templates, ...images.queries] }
 }
 
 // For layout previews: the chosen template, else the faction's newest image

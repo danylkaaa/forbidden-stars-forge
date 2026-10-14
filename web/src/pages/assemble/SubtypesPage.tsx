@@ -9,7 +9,8 @@ import { LIBRARY_TABS } from './model'
 import { useAssembly } from './state'
 import { SubtypeLayoutEditor } from './SubtypeLayoutEditor'
 import { CardTypeLayoutEditor } from './CardTypeLayoutEditor'
-import { createSubtype, deleteSubtype, deleteSubtypeOverlay, moveOverlay, renameSubtype, reorderSubtypeOverlays, uploadSubtypeOverlay, isBuiltinSubtype, useSubtypes, type Subtype } from './subtypes'
+import { CardBackEditor } from './CardBackEditor'
+import { createSubtype, deleteSubtype, deleteSubtypeOverlay, moveOverlay, renameSubtype, reorderSubtypeOverlays, uploadSubtypeOverlay, isBuiltinSubtype, displaySubtypeName, useSubtypes, type Subtype } from './subtypes'
 
 // Overlays are drawn bottom first, so the stack preview layers them in order.
 function StackPreview({ subtype }: { subtype: Subtype }) {
@@ -41,9 +42,9 @@ function SubtypePanel({ subtype }: { subtype: Subtype }) {
     <StackPreview subtype={subtype} />
     <div className="min-w-64 flex-1 space-y-3">
       {isBuiltinSubtype(subtype) ? <div className="flex flex-wrap items-baseline gap-2">
-        <h2 className="m-0 text-lg font-medium">{subtype.name}</h2>
+        <h2 className="m-0 text-lg font-medium">{displaySubtypeName(subtype.name)}</h2>
         <span className="text-[10px] uppercase tracking-wider text-ink/40">built-in</span>
-        <span className="text-xs text-ink/55">Used automatically for {subtype.name === 'Level 0' ? 'level 0' : 'level 1–3'} combat cards without a chosen subtype.</span>
+        <span className="text-xs text-ink/55">Used automatically for {subtype.name === 'Level 0' ? 'starting' : 'regular (non-starting)'} combat cards without a chosen subtype.</span>
       </div> : <div className="flex flex-wrap items-center gap-2">
         <input aria-label="Subtype name" className={`${inputClass} max-w-64`} value={name} onChange={e => setName(e.target.value)} />
         <Button disabled={busy || !name.trim() || name.trim() === subtype.name} onClick={() => change.mutate(() => renameSubtype(subtype.id, name))}>Rename</Button>
@@ -98,9 +99,13 @@ export default function SubtypesPage() {
       <div className="mt-3"><FactionCardLayoutEditor /></div>
     </details> : <>
     <details className="rounded-lg border border-divider bg-surface p-4" open>
-      <summary className="cursor-pointer font-display text-lg text-accent-300">{label} text layout</summary>
+      <summary className="cursor-pointer font-display text-lg text-accent-300">{label} front layout</summary>
       <div className="mt-3"><CardTypeLayoutEditor key={category} category={category} /></div>
     </details>
+    {category === 'combat' && <details className="rounded-lg border border-divider bg-surface p-4" open>
+      <summary className="cursor-pointer font-display text-lg text-accent-300">Combat back layout</summary>
+      <div className="mt-3"><CardBackEditor /></div>
+    </details>}
     <h2 className="m-0 font-display text-lg text-accent-300">{label} subtypes</h2>
     <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); if (name.trim()) create.mutate({ category, name: name.trim() }) }}>
       <input aria-label="New subtype name" className={`${inputClass} max-w-72`} placeholder={`New ${label.toLowerCase()} subtype`} value={name} onChange={e => { create.reset(); setName(e.target.value) }} />

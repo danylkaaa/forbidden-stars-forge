@@ -18,7 +18,7 @@ export function useFactionCombatCards(factionId: number | null) {
 // The demo card (at `demoLevel`) or the chosen card, for a faction.
 export function usePreviewCard(factionId: number, cardId: number, demoLevel = DEMO_COMBAT.level) {
   const combat = useFactionCombatCards(factionId)
-  const card = useMemo(() => combat.find(c => c.id === cardId) ?? { ...DEMO_COMBAT, faction_id: factionId, level: demoLevel }, [combat, cardId, factionId, demoLevel])
+  const card = useMemo(() => combat.find(c => c.id === cardId) ?? { ...DEMO_COMBAT, faction_id: factionId, level: demoLevel, starting: demoLevel === 0 }, [combat, cardId, factionId, demoLevel])
   return { card, combat }
 }
 

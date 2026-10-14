@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { Field } from '../../components/Field'
+import { Magnifier } from '../../components/Magnifier'
 import { removeBackLogo, saveAssemblyTemplate, uploadBackLogo, type AssemblyTemplate } from './api'
 import { BackImage } from './BackImage'
 
@@ -19,7 +20,7 @@ export function BackLogoEditor({ template, imageUrl }: { template: AssemblyTempl
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assembly-templates'] }),
   })
   return <section aria-label="Card back logo" className="flex flex-wrap gap-5 rounded-md border border-divider p-3">
-    <div className="w-40 shrink-0"><BackImage url={imageUrl} logoUrl={template.logo_url} scale={scale} alt="Selected card back" /></div>
+    <Magnifier className="w-40 shrink-0"><BackImage category={template.category} factionId={template.faction_id} url={imageUrl} logoUrl={template.logo_url} scale={scale} alt="Selected card back" /></Magnifier>
     <div className="min-w-48 flex-1 space-y-3">
       <input ref={fileInput} type="file" aria-label="Upload card back logo" accept="image/png,image/jpeg" className="hidden" disabled={change.isPending}
         onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) change.mutate(file) }} />

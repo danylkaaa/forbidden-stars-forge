@@ -10,13 +10,14 @@ import { PositionNumber } from '../assemble/LayerControls'
 import { undoShortcut, useUndoable } from '../assemble/useUndoable'
 import { useFactions } from '../factions/api'
 import { useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
-import { ELEMENTS, elementBox, mergeLayout, saveFactionCardLayout, useFactionCardLayout, type ElementKey, type ElementLayout, type Side } from './layout'
+import { ELEMENTS, elementBox, mergeLayout, saveFactionCardLayout, useFactionCardLayout, type ElementKey, type ElementLayout, type SavedLayout, type Side } from './layout'
 import { useCardImages } from './useCardImages'
-import { FACTION_CARD_CUT_MM, initialCardIds, normalizeData } from './model'
+import { CARD_SIZE, FACTION_CARD_CUT_MM, backgroundUrl, initialCardIds, normalizeData } from './model'
+import { ModelStyleControls } from './ModelStyleControls'
 import { renderFactionCard, type FactionCardResult } from './render'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
 
-type Draft = Partial<Record<ElementKey, Partial<ElementLayout>>>
+type Draft = SavedLayout
 const byKey = (assets: AssetRef[] | undefined) => Object.fromEntries((assets ?? []).map(a => [a.key, a.url]))
 const round = (n: number) => Math.round(n * 100) / 100
 const SAMPLE = {
@@ -72,14 +73,15 @@ export function FactionCardLayoutEditor() {
   const cards = useCardImages(data ? initialCardIds(data) : [])
   const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
   const shared = useMemo(() => byKey(defaults.data), [defaults.data])
-  const options = images.data.filter(i => i.factionId === preview)
-  const background = options.find(i => i.key === (side === 'front' ? record.data?.front_image_key : record.data?.back_image_key))?.url ?? null
+  const background = backgroundUrl((side === 'front' ? record.data?.front_image_key : record.data?.back_image_key) ?? '', side, assets, images.data)
   useEffect(() => {
     if (!data || !record.data) return
     let cancelled = false
-    const timer = window.setTimeout(() => renderFactionCard({ side, data, unitColor: record.data!.unit_color, backgroundUrl: background, assets, defaults: shared, layout, logoUrl, cardImages: cards.images })
-      .then(r => { if (!cancelled) { setResult(r); setError('') } }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not render the card.') }), 60)
-    return () => { cancelled = true; window.clearTimeout(timer) }
+    // Drawn on the next frame at half size, so dragging a slider updates the
+    // card straight away; only the newest request is kept.
+    const frame = requestAnimationFrame(() => renderFactionCard({ side, data, unitColor: record.data!.unit_color, backgroundUrl: background, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
+      .then(r => { if (!cancelled) { setResult(r); setError('') } }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not render the card.') }))
+    return () => { cancelled = true; cancelAnimationFrame(frame) }
   }, [side, data, record.data, background, assets, shared, layout, logoUrl, cards.images])
 
   const save = useMutation({
@@ -122,7 +124,7 @@ export function FactionCardLayoutEditor() {
       <div ref={root} className="relative select-none bg-black/30">
         {result ? <CardCanvas result={result} aria-label={`Faction card ${side} position preview`} className="block h-auto w-full" />
           : <div className="grid aspect-[3165/2126] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
-        {result && <SafeAreaLines px={result.canvas} cutMm={FACTION_CARD_CUT_MM} />}
+        {result && <SafeAreaLines px={CARD_SIZE} cutMm={FACTION_CARD_CUT_MM} />}
         {result && sideElements.filter(e => e.kind !== 'style').map(({ key, label }) => { const b = elementBox(key, layout), active = key === selected
           return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${label}`} title={label}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
@@ -147,6 +149,7 @@ export function FactionCardLayoutEditor() {
           ? <input id={id} type="color" className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={current.color ?? '#ffffff'} onChange={e => patch(selected, { color: e.target.value })} />
           : <PositionNumber key={`${selected}-${f}`} id={id} value={Number(current[f] ?? 0)} min={['x', 'y', 'nx', 'ny', 'sx', 'sy'].includes(f) ? -100 : f === 'shadow' || f === 'blur' || f === 'outline' ? 0 : 0.01} max={f === 'scale' ? 5 : f === 'shadow' ? 1 : 200} onChange={n => patch(selected, { [f]: n })} />}</Field>)}
       </div>
+      <ModelStyleControls open value={layout.modelStyle} onStart={() => history.begin()} onChange={modelStyle => { save.reset(); history.replace(d => ({ ...d, modelStyle })) }} />
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save layout'}</Button>
         <Button disabled={!history.canUndo} onClick={history.undo}>Undo</Button>

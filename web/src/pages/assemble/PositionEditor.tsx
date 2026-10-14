@@ -68,7 +68,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
   const { layout, overlayUrls } = useMemo(() => compose(draft, level, templateLayout.layout), [compose, draft, level, templateLayout.layout])
   const logoUrl = logos.data?.find(l => l.faction_id === previewFaction)?.url ?? null
   const input = useMemo<RenderInput | null>(() => !template.isPending && (templateLayout.ready || !template.image)
-    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
+    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level, starting: level === 0, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, overlayUrl: null, overlayUrls, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
     : null, [template.isPending, templateLayout.ready, template.image, layout, level, price, order, upgrade, schema, action, kind, overlayUrls, logoUrl, demoArtwork])
   const { result, error } = useRenderedCard(input)
   const save = useMutation({ mutationFn: () => onSave(draft) })
@@ -133,7 +133,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
           </SearchableSelect>}</Field>
         </>}
         {!schema && <Field label="Preview level">{id => <SearchableSelect id={id} className={selectClass} value={level} onChange={e => setLevel(Number(e.target.value))}>
-          {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l}</option>)}
+          {[0, 1, 2, 3].map(l => <option key={l} value={l}>{l === 0 && category === 'combat' ? '0 (starting)' : l}</option>)}
         </SearchableSelect>}</Field>}
         {upgrade && <Field label="Preview order">{id => <SearchableSelect id={id} className={selectClass} value={order} onChange={e => setOrder(e.target.value as UpgradeType)}>
           {UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}

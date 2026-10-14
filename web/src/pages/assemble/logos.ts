@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiSend, apiSendForm } from '../../lib/api'
 
-// Drawn in the level badge of level 0 combat cards.
+// Drawn in the level badge of starting (level 0) combat cards.
 export type FactionLogo = { faction_id: number; url: string }
 export function useFactionLogos() {
   return useQuery({ queryKey: ['faction-logos'], queryFn: () => apiGet<FactionLogo[]>('/api/faction-logos') })

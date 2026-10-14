@@ -28,14 +28,10 @@ function sharedRenderer() {
   return renderer
 }
 
-// A miniature rendered on a transparent square: front-lit, orthographic.
-// `scale` 1 fits the model's bounding sphere inside the square, so turning
-// the model never changes its size.
-export async function renderModelIcon(url: string, pose: Partial<Orientation>, color: string, size = 512): Promise<HTMLCanvasElement> {
-  const o = withDefaults(pose)
-  const cacheKey = JSON.stringify([url, o, color, size])
-  const cached = icons.get(cacheKey)
-  if (cached) return cached
+// The 3D part: lit model with relief and detail lines. It does not depend on
+// the shared shadow / outline / contrast settings, so it is cached apart and
+// changing those settings only redoes the cheap 2D finishing below.
+async function renderModelBase(url: string, o: Orientation, color: string, size: number): Promise<HTMLCanvasElement> {
   const geometry = await loadGeometry(url)
   const radius = geometry.boundingSphere?.radius || 1
   const scene = new Scene()
@@ -106,6 +102,35 @@ export async function renderModelIcon(url: string, pose: Partial<Orientation>, c
     litCtx.globalCompositeOperation = 'source-over'
     normalMaterial.dispose()
   }
+  material.dispose()
+  return lit
+}
+
+function finishModelIcon(lit: HTMLCanvasElement, o: Orientation, size: number): HTMLCanvasElement {
+  // Work on a copy: `lit` is cached and shared.
+  const work = document.createElement('canvas'); work.width = work.height = size
+  const litCtx = work.getContext('2d', { willReadFrequently: true })!
+  litCtx.drawImage(lit, 0, 0)
+  lit = work
+  // Contrast, then an inner shadow: the dark outside of the silhouette, blurred
+  // and clipped to the silhouette, darkens the model along its edges.
+  if (o.contrast !== 1) {
+    const adjusted = document.createElement('canvas'); adjusted.width = adjusted.height = size
+    const actx = adjusted.getContext('2d')!
+    actx.filter = `contrast(${Math.max(0.2, o.contrast)})`; actx.drawImage(lit, 0, 0); actx.filter = 'none'
+    litCtx.clearRect(0, 0, size, size); litCtx.drawImage(adjusted, 0, 0)
+  }
+  if (o.innerShadow > 0 && o.innerShadowSize > 0) {
+    const dark = document.createElement('canvas'); dark.width = dark.height = size
+    const dctx = dark.getContext('2d')!
+    dctx.fillStyle = '#05020a'; dctx.fillRect(0, 0, size, size)
+    dctx.globalCompositeOperation = 'destination-out'; dctx.drawImage(lit, 0, 0)
+    const soft = document.createElement('canvas'); soft.width = soft.height = size
+    const sctx = soft.getContext('2d')!
+    sctx.filter = `blur(${Math.max(0.5, o.innerShadowSize * size)}px)`; sctx.drawImage(dark, 0, 0); sctx.filter = 'none'
+    sctx.globalCompositeOperation = 'destination-in'; sctx.drawImage(lit, 0, 0)
+    litCtx.globalAlpha = Math.min(1, o.innerShadow); litCtx.drawImage(soft, 0, 0); litCtx.globalAlpha = 1
+  }
   const out = document.createElement('canvas'); out.width = out.height = size
   // The model is drawn a little smaller, leaving room for outline and shadow.
   const ctx = out.getContext('2d')!, fit = 0.9, inset = size * (1 - fit) / 2, drawSize = size * fit
@@ -122,8 +147,28 @@ export async function renderModelIcon(url: string, pose: Partial<Orientation>, c
   ctx.shadowColor = `rgba(0, 0, 0, ${Math.min(1, Math.max(0, o.shadow))})`
   ctx.shadowBlur = o.shadowBlur * size; ctx.shadowOffsetX = o.shadowX * size; ctx.shadowOffsetY = o.shadowY * size
   ctx.drawImage(layer, 0, 0)
-  material.dispose()
-  if (icons.size >= 80) icons.delete(icons.keys().next().value!)
+  return out
+}
+
+const BASE_KEYS = ['rx', 'ry', 'rz', 'scale', 'x', 'y', 'lightAzimuth', 'lightElevation', 'lightPower', 'lightAmbient', 'detail', 'relief'] as const
+const bases = new Map<string, Promise<HTMLCanvasElement>>()
+// A miniature rendered on a transparent square: front-lit, orthographic.
+// `scale` 1 fits the model's bounding sphere inside the square, so turning
+// the model never changes its size.
+export async function renderModelIcon(url: string, pose: Partial<Orientation>, color: string, size = 512): Promise<HTMLCanvasElement> {
+  const o = withDefaults(pose)
+  const baseKey = JSON.stringify([url, BASE_KEYS.map(k => o[k]), color, size])
+  let base = bases.get(baseKey)
+  if (!base) {
+    if (bases.size >= 60) bases.delete(bases.keys().next().value!)
+    base = renderModelBase(url, o, color, size); bases.set(baseKey, base)
+    base.catch(() => bases.delete(baseKey))
+  }
+  const cacheKey = JSON.stringify([baseKey, o.shadow, o.shadowBlur, o.shadowX, o.shadowY, o.outline, o.innerShadow, o.innerShadowSize, o.contrast])
+  const cached = icons.get(cacheKey)
+  if (cached) return cached
+  const out = finishModelIcon(await base, o, size)
+  if (icons.size >= 120) icons.delete(icons.keys().next().value!)
   icons.set(cacheKey, out)
   return out
 }

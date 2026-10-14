@@ -27,7 +27,9 @@ test('downloadable mixed example validates with Unicode and UTF-8 BOM', async ()
 
 test('equivalent JSON integer forms validate consistently with the backend', () => {
   for (const value of ['0.0', '0e0', '1e0', '3.000']) {
-    const source = JSON.stringify({ cards: [exampleImport(1).cards[0]] }).replace('"level":0', '"level":' + value)
+    // A plain level (no starting flag), so every value from 0 to 3 is allowed.
+    const { starting: _, ...card } = exampleImport(1).cards[0] as { starting?: boolean }
+    const source = JSON.stringify({ cards: [card] }).replace('"level":0', '"level":' + value)
     expect(parseImport(source, [1]).errors).toEqual([])
   }
 })
@@ -44,4 +46,12 @@ test('extra metadata does not bypass required field validation', () => {
   const result = parseImport(JSON.stringify({ cards: [card] }), [1])
   expect(result.cards).toEqual([])
   expect(result.errors).toEqual([{ index: 0, field: 'guns', message: 'Must be an integer from 0 to 9007199254740991' }])
+})
+
+test('imported combat cards can be flagged as starting or not', () => {
+  const base = { ...exampleImport(1).cards[0] } as Record<string, unknown>
+  delete base.level; delete base.resource_cost
+  expect(parseImport(JSON.stringify({ cards: [{ ...base, starting: true }] }), [1]).errors).toEqual([])
+  const bad = parseImport(JSON.stringify({ cards: [{ ...base, starting: false }] }), [1])
+  expect(bad.errors).toContainEqual(expect.objectContaining({ field: 'level' }))
 })

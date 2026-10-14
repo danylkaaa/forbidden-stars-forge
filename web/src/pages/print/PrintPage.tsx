@@ -117,7 +117,7 @@ export default function PrintPage() {
   // Factions with at least one card to show; a faction-name match shows all its cards.
   const groups = useMemo(() => [...(factions.data ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })).map(faction => {
     const mine = (cards.data ?? []).filter(c => c.faction_id === faction.id && categories.has(c.category))
-      .sort((a, b) => (a.category === 'combat' && b.category === 'combat' ? a.level - b.level : 0) || a.name.localeCompare(b.name))
+      .sort((a, b) => (a.category === 'combat' && b.category === 'combat' ? Number(!!b.starting) - Number(!!a.starting) || a.level - b.level : 0) || a.name.localeCompare(b.name))
     return { faction, cards: !q || faction.name.toLowerCase().includes(q) ? mine : mine.filter(c => c.name.toLowerCase().includes(q)) }
   }).filter(g => g.cards.length), [factions.data, cards.data, categories, q])
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -283,7 +283,7 @@ export default function PrintPage() {
                   {list.map(c => <li key={c.id}><label className={`flex items-center gap-2 rounded px-1.5 py-1 text-sm ${printable(c) ? 'cursor-pointer hover:bg-surface' : 'opacity-45'}`}>
                     <input type="checkbox" disabled={!printable(c)} checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-accent)]" />
                     <span className="truncate">{c.name}</span>
-                    <span className="ml-auto flex-none text-xs text-ink/45">{c.category === 'combat' ? `L${c.level}` : 'rendering soon'}</span>
+                    <span className="ml-auto flex-none text-xs text-ink/45">{c.category === 'combat' ? c.starting ? 'Start' : `L${c.level}` : 'rendering soon'}</span>
                   </label></li>)}
                 </ul>}
               </li>

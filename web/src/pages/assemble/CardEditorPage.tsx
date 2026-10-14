@@ -18,7 +18,7 @@ import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
 import { labLink, useTemplate, useTemplateLayout } from './library'
-import { levelSubtypeName } from './subtypes'
+import { displaySubtypeName, levelSubtypeName } from './subtypes'
 import { undoShortcut } from './useUndoable'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
@@ -213,6 +213,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   })
 
   function edit(field: string, value: string) { save.reset(); state.edit(id, field, value) }
+  // Starting cards are level 0 with no price.
+  function setStarting(on: boolean) { edit('starting', String(on)); if (on) { edit('level', '0'); edit('resource_cost', '0') } }
   function insertSymbol(token: string) {
     if (!draft) return
     const target = textTarget.current?.element.isConnected ? textTarget.current : firstText.current ? { key: firstTextKey, element: firstText.current } : null
@@ -284,7 +286,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
             className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
           {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
-          {result && !movable && <Preview3DButton title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} className="absolute right-2 top-2 z-10" />}
+          {result && !movable && <Preview3DButton category={category} factionId={factionId ?? undefined} title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} className="absolute right-2 top-2 z-10" />}
           {result && movable && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]"
             style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
             <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-accent-100">Drag to move · scroll to zoom · Enter applies · Esc cancels</span>
@@ -314,7 +316,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
           </div>}
           <Field label="Subtype">{fid => <SearchableSelect id={fid} className={selectClass} value={assembly.data?.subtype_id ?? 0} disabled={busy || !assembly.data}
             onChange={e => subtype.mutate(Number(e.target.value))}>
-            <option value={0}>{source.category === 'combat' ? `Automatic by level (${levelSubtypeName(Number(draft.level) || 0)})` : 'None (card type overlay)'}</option>
+            <option value={0}>{source.category === 'combat' ? `Automatic by level (${displaySubtypeName(levelSubtypeName(draft.starting === 'true'))})` : 'None (card type overlay)'}</option>
             {categorySubtypes.map(st => <option key={st.id} value={st.id}>{st.name} · {st.overlays.length} overlay{st.overlays.length === 1 ? '' : 's'}</option>)}
           </SearchableSelect>}</Field>
           {activeSubtype && !activeSubtype.overlays.length && <p className="m-0 text-xs text-ink/60">“{activeSubtype.name}” has no overlays yet, so the card type overlay is used. <Link to="/subtypes" className="text-accent underline">Upload overlays</Link>.</p>}
@@ -329,21 +331,28 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
           </div>}
           {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
           {!schema && <div className={`grid grid-cols-2 gap-3 ${upgrade ? 'sm:grid-cols-2' : 'sm:grid-cols-5'}`}>
-            <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
+            {category === 'combat'
+              ? <div className="col-span-2 space-y-1 sm:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-ink/70" title="Starting cards have no level requirement or price and show the faction logo instead of a level number.">
+                  <input type="checkbox" checked={draft.starting === 'true'} onChange={e => setStarting(e.target.checked)} className="accent-[var(--color-accent)]" />Starting card</label>
+                <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} disabled={draft.starting === 'true'} onChange={e => edit('level', e.target.value)}>
+                  {['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>
+              </div>
+              : <Field label="Level">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.level} onChange={e => edit('level', e.target.value)}>{['0', '1', '2', '3'].map(l => <option key={l}>{l}</option>)}</SearchableSelect>}</Field>}
             {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label]) => <Field key={key} label={label}>{fid => <input id={fid} type="number" min={0} step={1} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)}
-              disabled={!upgrade && key === 'resource_cost' && draft.level === '0'} title={!upgrade && key === 'resource_cost' && draft.level === '0' ? 'Level 0 cards have no resource price' : undefined} />}</Field>)}
+              disabled={!upgrade && key === 'resource_cost' && draft.starting === 'true'} title={!upgrade && key === 'resource_cost' && draft.starting === 'true' ? 'Starting cards have no resource price' : undefined} />}</Field>)}
           </div>}
           {(framed ? ['text'] as const : ['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={key === 'text' ? 'Text' : LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={4} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key]} onChange={e => edit(key, e.target.value)} />}</Field>)}
           <SymbolPicker insert={insertSymbol} disabled={busy} />
-          <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). **Italic text** is supported. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
+          <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={(schema ? ['subtype', 'action'] : upgrade ? ['upgrade_type', 'level', 'resource_cost'] : ['level', 'resource_cost', 'guns', 'shields', 'eagles']).filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
             textDiffs={(framed ? ['name', 'text'] as const : ['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : LAYER_LABELS[key], before: saved[key], after: draft[key] }))} /></details>}
         </section>
 
-        {(framed || draft.level === '0') && <section aria-label="C0 faction logo" className={panel}>
-          <h2 className="m-0 font-display text-accent-300">{framed ? 'Faction logo' : 'C0 faction logo'}</h2>
+        {(framed || draft.starting === 'true') && <section aria-label="Faction logo" className={panel}>
+          <h2 className="m-0 font-display text-accent-300">{framed ? 'Faction logo' : 'Faction logo (starting card)'}</h2>
           <Field label={`Logo scale (${Math.round(logoScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.1} max={3} step={0.01} value={logoScale} disabled={busy} className="w-full"
             onChange={e => { save.reset(); state.logoScale(id, Number(e.target.value)) }} />}</Field>
           <Button disabled={busy || logoScale === 1} onClick={() => { save.reset(); state.logoScale(id, 1) }}>Reset logo scale</Button>

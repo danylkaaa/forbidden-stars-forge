@@ -17,6 +17,7 @@ export type FactionCardInput = {
   logoUrl?: string | null // the faction's logo, drawn on both sides
   cardImages?: Record<number, HTMLCanvasElement> // rendered library cards for initial-forces rows
   layout?: FactionCardLayout
+  scale?: number // output size relative to the full card (previews use less); drawing is unchanged
   modelIcon?: ModelIcon
 }
 export type FactionCardResult = { canvas: HTMLCanvasElement; warnings: string[] }
@@ -77,9 +78,11 @@ function badge(ctx: CanvasRenderingContext2D, kind: 'dice' | 'health' | 'morale'
 // A stat: its icon with the number on top, or a plain badge if there is no icon.
 function stat(ctx: CanvasRenderingContext2D, image: Drawable | null, kind: 'dice' | 'health' | 'morale', cx: number, cy: number, w: number, h: number, value: number, st: IconStyle) {
   if (!image) return badge(ctx, kind, cx, cy, Math.min(w, h), value)
-  shadowed(ctx, st, h, () => fit(ctx, image, { x: cx - w / 2, y: cy - h / 2, w, h }))
+  // The eagle is small and sits under its number; every number is on one level.
+  const box = kind === 'morale' ? { x: cx - w / 2, y: cy + h * .1, w, h: h * .55 } : { x: cx - w / 2, y: cy - h / 2, w, h }
+  shadowed(ctx, st, h, () => fit(ctx, image, box))
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = h * .08; ctx.shadowOffsetY = h * .03
-  centred(ctx, String(value), cx + st.nx * w, cy + h * .03 + st.ny * h, kind === 'morale' ? w * .36 : h * .56, st.color); ctx.restore()
+  centred(ctx, String(value), cx + st.nx * w, cy + h * .03 + st.ny * h, h * .56, st.color); ctx.restore()
 }
 // Colour, number offset and drop shadow of an icon, from its style element.
 type IconStyle = { color: string; nx: number; ny: number; shadow: number; blur: number; sx: number; sy: number }
@@ -119,7 +122,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
   const { side, data, unitColor, assets, defaults } = input
   const layout = input.layout ?? defaultLayout()
   const modelIcon = input.modelIcon ?? renderModelIcon
-  const keys = side === 'front' ? ['city', 'factory', 'gear', 'forge', 'tech', 'bastion', 'dice', 'health', 'morale'] : ['gear', 'reinforce', 'city', 'factory', 'bastion']
+  const keys = side === 'front' ? ['city', 'factory', 'gear', 'forge', 'tech', 'bastion', 'dice', 'health', 'morale'] : ['gear', 'reinforce', 'forge-token', 'city', 'factory', 'bastion']
   const [background, logo, shared, unitIcons, objectiveImages, portrait] = await Promise.all([
     optional(input.backgroundUrl ?? undefined),
     optional(input.logoUrl ?? undefined),
@@ -129,7 +132,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
       if (key === 'bastion') return null
       const override = assets[assetKeys.icon(key)], model = assets[assetKeys.model(key)]
       if (override) return optional(override)
-      if (model) return modelIcon(model, data.models[key] ?? {}, unitColor).catch(() => null)
+      if (model) return modelIcon(model, { ...data.models[key], ...layout.modelStyle }, unitColor).catch(() => null)
       return null
     })),
     Promise.all(data.objectives.map((_, i) => side === 'back' ? optional(assets[assetKeys.objective(i)]) : null)),
@@ -140,9 +143,11 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
   const unitIcon = Object.fromEntries(UNIT_SLOTS.map(({ key }, i) => [key, unitIcons[i]])) as Record<SlotKey, Drawable | null>
 
   const { width: w, height: h } = CARD_SIZE
-  const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
+  const outScale = input.scale ?? 1
+  const canvas = document.createElement('canvas'); canvas.width = Math.round(w * outScale); canvas.height = Math.round(h * outScale)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
+  ctx.scale(outScale, outScale)
   const { X, Y, S } = scaler(w, h), warnings: string[] = []
   if (background) fit(ctx, background, { x: 0, y: 0, w, h }, 'cover')
   else {
@@ -211,7 +216,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
       cost(String(u.cost), g.dx(152) - g.ss(6), g.dx(152), cy, g.ss(58), g.ss(30))
       for (let n = 0; n < u.forge; n++) sharedIcon('forge', { x: g.dx(145) + n * g.ss(50), y: cy + g.ss(34), w: g.ss(46), h: g.ss(26) })
       note(`${UNIT_SLOTS[i].label} name`, paintParagraph(ctx, [{ text: u.name.toUpperCase() }], { x: g.dx(235), y: cy - Y(52) * g.k, width: X(225) * g.k, size: g.ss(13), lineHeight: 1, color: INK, family: 'CardHeadline', align: 'center' }).overflow)
-      stat(ctx, icon.dice, 'dice', g.dx(265), cy + g.ss(8), g.ss(54), g.ss(54), u.dice, dice); stat(ctx, icon.health, 'health', g.dx(345), cy + g.ss(8), g.ss(54), g.ss(54), u.health, skull); stat(ctx, icon.morale, 'morale', g.dx(423), cy + g.ss(8), g.ss(70), g.ss(54), u.morale, eagle)
+      stat(ctx, icon.dice, 'dice', g.dx(265), cy + g.ss(8), g.ss(54), g.ss(54), u.dice, dice); stat(ctx, icon.health, 'health', g.dx(345), cy + g.ss(8), g.ss(54), g.ss(54), u.health, skull); stat(ctx, icon.morale, 'morale', g.dx(423), cy + g.ss(8), g.ss(54), g.ss(54), u.morale, eagle)
       if (u.tech !== null && u.tech !== lastTech) {
         sharedIcon('tech', { x: g.dx(-95), y: cy - g.ss(30), w: g.ss(56), h: g.ss(60) })
         centred(ctx, String(u.tech), g.dx(-95) + g.ss(28), cy - g.ss(7), g.ss(26), INK)
@@ -242,7 +247,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
     data.objectives.forEach((o, i) => {
       const x = og.ox + (i % 2) * og.gap, y = og.oy + Math.floor(i / 2) * og.pitch, pic = objectiveImages[i]
       if (pic) fit(ctx, pic, { x, y, w: X(107) * og.k, h: Y(76) * og.k }, 'cover')
-      note(`Objective ${i + 1}`, paintParagraph(ctx, [{ text: o.name ? `${o.name}: ` : '', bold: true }, { text: o.text }], { x: x + X(122) * og.k, y: y + Y(4) * og.k, width: X(285) * og.k, height: Y(70) * og.k, size: og.ss(12.5), lineHeight: 1.2, color: INK, family: 'CardRules' }).overflow)
+      note(`Objective ${i + 1}`, paintParagraph(ctx, [{ text: o.name ? `${o.name}: ` : '', bold: true }, { text: o.text }], { x: x + X(122) * og.k, y: y + Y(4) * og.k, width: X(285) * og.k, height: Y(70) * og.k, size: og.ss(12.5), lineHeight: 1.2, color: INK, family: 'CardRules', italic: true }).overflow)
     })
   }
   return { canvas, warnings }
@@ -251,6 +256,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
 function forcesIcon(ctx: CanvasRenderingContext2D, icon: ForcesIcon, b: Box, unitIcon: Record<SlotKey, Drawable | null>, shared: (key: string, b: Box) => void) {
   if (icon === 'materiel') shared('gear', b)
   else if (icon === 'reinforcement') shared('reinforce', b)
+  else if (icon === 'forge_token') shared('forge-token', b)
   else if (icon === 'city' || icon === 'factory') shared(icon, b)
   else if (icon === 'card') return
   else if (unitIcon[icon]) fit(ctx, unitIcon[icon]!, b)

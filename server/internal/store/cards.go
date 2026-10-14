@@ -25,6 +25,9 @@ type CardInput struct {
 	Text         *string `json:"text,omitempty"`
 	Action       *string `json:"action,omitempty"`
 	UpgradeType  *string `json:"upgrade_type,omitempty"`
+	// Starting marks a combat card as a starting card (level 0, no price, shows the
+	// faction logo). Any other combat card has a level from 0 to 3.
+	Starting *bool `json:"starting,omitempty"`
 }
 type Card struct {
 	ID int64 `json:"id"`
@@ -75,7 +78,7 @@ func ValidateCard(in CardInput) []CardFieldError {
 		}
 		add(f, "must be one of: "+strings.Join(values, ", "))
 	}
-	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "lower_text": in.LowerText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil}
+	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "lower_text": in.LowerText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil, "starting": in.Starting != nil}
 	allowed := CardCategoryFields(in.Category)
 	for f, yes := range present {
 		if yes && !allowed[f] {
@@ -86,6 +89,14 @@ func ValidateCard(in CardInput) []CardFieldError {
 	case "combat":
 		number("level", in.Level, 3)
 		number("resource_cost", in.ResourceCost, MaxCardInteger)
+		if in.Starting != nil && *in.Starting {
+			if in.Level != nil && *in.Level != 0 {
+				add("level", "must be 0 for a starting card")
+			}
+			if in.ResourceCost != nil && *in.ResourceCost != 0 {
+				add("resource_cost", "must be 0 for a starting card")
+			}
+		}
 		number("shields", in.Shields, MaxCardInteger)
 		number("guns", in.Guns, MaxCardInteger)
 		number("eagles", in.Eagles, MaxCardInteger)
@@ -108,7 +119,7 @@ func CardCategoryFields(category string) map[string]bool {
 	var extra []string
 	switch category {
 	case "combat":
-		extra = []string{"level", "resource_cost", "shields", "guns", "eagles", "upper_text", "lower_text"}
+		extra = []string{"level", "resource_cost", "shields", "guns", "eagles", "upper_text", "lower_text", "starting"}
 	case "schema":
 		extra = []string{"subtype", "text", "action"}
 	case "upgrade":
@@ -124,18 +135,22 @@ type CardsStore struct{ db *sql.DB }
 
 func NewCardsStore(db *sql.DB) *CardsStore { return &CardsStore{db} }
 
-const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at"
+const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at, starting"
 
 func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
-	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.LowerText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt)
+	var starting bool
+	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.LowerText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt, &starting)
+	if c.Category == "combat" {
+		c.Starting = &starting
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
 	return c, err
 }
 func cardArgs(c CardInput) []any {
-	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.LowerText, c.Subtype, c.Text, c.Action, c.UpgradeType}
+	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.LowerText, c.Subtype, c.Text, c.Action, c.UpgradeType, c.Category == "combat" && c.Starting != nil && *c.Starting}
 }
 func (s *CardsStore) Get(id int64) (Card, error) {
 	return scanCard(s.db.QueryRow("SELECT "+cardCols+" FROM cards WHERE id=?", id))
@@ -173,7 +188,7 @@ func insertCard(tx *sql.Tx, in CardInput) (Card, error) {
 	if err := checkCard(tx, in); err != nil {
 		return Card{}, err
 	}
-	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
+	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type,starting) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
 	if err != nil {
 		return Card{}, err
 	}
@@ -222,7 +237,7 @@ func (s *CardsStore) Update(id int64, in CardInput) (Card, error) {
 		return Card{}, err
 	}
 	args := append(cardArgs(in), id)
-	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,updated_at=datetime('now') WHERE id=?", args...)
+	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,starting=?,updated_at=datetime('now') WHERE id=?", args...)
 	if err != nil {
 		return Card{}, err
 	}

@@ -1,8 +1,8 @@
 import { renderCard } from './render'
 import { defaultLayout, type CombatCard } from './model'
 
-const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), stroke: vi.fn(), font: '', fillStyle: '' }
-const card: CombatCard = { id: 1, faction_id: 1, category: 'combat', name: 'Title', level: 0, resource_cost: 2, guns: 0, shields: 0, eagles: 0, upper_text: 'upper (B)', lower_text: 'lower [M]', created_at: '', updated_at: '' }
+const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), fillRect: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), stroke: vi.fn(), font: '', fillStyle: '' }
+const card: CombatCard = { id: 1, faction_id: 1, category: 'combat', name: 'Title', starting: true, level: 0, resource_cost: 2, guns: 0, shields: 0, eagles: 0, upper_text: 'upper (B)', lower_text: 'lower [M]', created_at: '', updated_at: '' }
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('Image', class {
@@ -17,11 +17,13 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+// The border's colour is also sampled from `bottom` (a 9-argument call); only the drawn textures count here.
+const texture = (name: string) => ctx.drawImage.mock.calls.filter(call => call.length === 5 && (call[0] as { url?: string }).url?.includes(name))
 test('all combat textures cover the full output width', async () => {
   await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
-  const textures = ctx.drawImage.mock.calls.slice(2)
-  expect(textures).toHaveLength(3)
-  for (const call of textures) { expect(call[1]).toBe(0); expect(call[3]).toBe(816) }
+  expect(texture('background')).toHaveLength(1); expect(texture('foreground')).toHaveLength(1)
+  expect(texture('bottom')).toHaveLength(1)
+  for (const call of [...texture('background'), ...texture('foreground'), ...texture('bottom')]) { expect(call[1]).toBe(0); expect(call[3]).toBe(816) }
 })
 test('alignment, fonts and colours are fixed even when an old layout overrides them', async () => {
   const layout = defaultLayout()
@@ -39,8 +41,7 @@ test('rules text is left aligned and centred in the visible parchment of each pa
   await renderCard({ card, layout, imageUrl: 'art', overlayUrl: 'frame' })
   expect(ctx.fillText.mock.calls.find(call => call[0] === 'upper')![1]).toBeCloseTo(layout.upper_text.x * 816 / 100)
   expect(ctx.fillText.mock.calls.find(call => call[0] === 'lower')![1]).toBeCloseTo(layout.lower_text.x * 816 / 100)
-  const textures = ctx.drawImage.mock.calls.slice(2)
-  const backgroundY = textures[0][2] as number, foregroundY = textures[1][2] as number, bottomY = textures[2][2] as number
+  const backgroundY = texture('background')[0][2] as number, foregroundY = texture('foreground')[0][2] as number, bottomY = texture('bottom').at(-1)![2] as number
   // Mocked glyph bounds: ascent 20, descent 5 around each baseline.
   const upperBaseline = ctx.fillText.mock.calls.find(call => call[0] === 'upper')![2] as number
   const lowerBaseline = ctx.fillText.mock.calls.find(call => call[0] === 'lower')![2] as number
@@ -57,7 +58,7 @@ test('level 0 cards draw the faction logo last, in place of the level number', a
   expect((ctx.drawImage.mock.calls.at(-1)![0] as { url?: string }).url).toBe('logo')
   expect(ctx.fillText.mock.calls.some(call => call[0] === '0')).toBe(false)
   vi.clearAllMocks()
-  await renderCard({ card: { ...card, level: 2 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo' })
+  await renderCard({ card: { ...card, starting: false, level: 2 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame', logoUrl: 'logo' })
   expect(ctx.drawImage.mock.calls.some(call => (call[0] as { url?: string }).url === 'logo')).toBe(false)
   expect(ctx.fillText.mock.calls.some(call => call[0] === '2')).toBe(true)
 })
@@ -74,7 +75,7 @@ test('level 0 cards have no level or resource price, even without a logo', async
   await renderCard({ card: { ...card, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
   expect(ctx.fillText.mock.calls.some(call => call[0] === '7' || call[0] === '0')).toBe(false)
   vi.clearAllMocks()
-  await renderCard({ card: { ...card, level: 1, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
+  await renderCard({ card: { ...card, starting: false, level: 1, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art', overlayUrl: 'frame' })
   expect(ctx.fillText.mock.calls.some(call => call[0] === '7')).toBe(true)
 })
 

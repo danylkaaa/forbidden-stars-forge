@@ -106,3 +106,13 @@ test('dice token works inline, in italic text, and alongside existing symbols', 
   const lines = wrapText(textRuns('(D) (D)'), 1, () => 1)
   expect(lines.map(line => line.filter(run => run.icon))).toHaveLength(2)
 })
+
+test('__double underscores__ make bold text, which can be combined with italics', () => {
+  expect(textRuns('Gain __2 [GUN]__ now')).toEqual([
+    { text: 'Gain ', icon: false, italic: false }, { text: '2 ', icon: false, italic: false, bold: true }, { text: '#', icon: true, italic: false, bold: true },
+    { text: ' now', icon: false, italic: false },
+  ])
+  expect(textRuns('*__Both__*')).toEqual([{ text: 'Both', icon: false, italic: true, bold: true }])
+  expect(textRuns('__*Both*__')).toEqual([{ text: 'Both', icon: false, italic: true, bold: true }])
+  expect(textRuns('snake_case and __ alone')).toEqual([{ text: 'snake_case and __ alone', icon: false, italic: false }])
+})

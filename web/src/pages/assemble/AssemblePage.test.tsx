@@ -13,7 +13,7 @@ import CardEditorPage from './CardEditorPage'
 import NewCardPage from './NewCardPage'
 import LibraryFactionsPage from './LibraryFactionsPage'
 vi.mock('./render', () => ({ renderCard: vi.fn(), pngBlob: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
-const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', level: 0, resource_cost: 2, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', lower_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
+const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', starting: true, level: 0, resource_cost: 0, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', lower_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
 const upgrade: Card = { id: 3, faction_id: 1, category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', level: 1, resource_cost: 2, text: 'Deploy one more unit.', created_at: '', updated_at: '' }
 let records: Card[], deleted: number[][], updates: unknown[], templates: AssemblyTemplate[], assemblies: Record<string, Assembly>, assemblyUpdates: unknown[]
 beforeEach(() => {
@@ -26,6 +26,7 @@ beforeEach(() => {
     http.get('/api/card-type-layouts', () => HttpResponse.json([{ category: 'combat', layout: { upper_text: { x: 15 } } }])),
     http.get('/api/faction-logos', () => HttpResponse.json([{ faction_id: 1, url: '/api/factions/1/logo?v=a' }])),
     http.get('/api/subtypes', () => HttpResponse.json([{ id: 1, category: 'combat', name: 'Level 0', overlays: [{ id: 7, url: '/l0' }] }, { id: 2, category: 'combat', name: 'Level 1+', layout: { resources: { x: 33 } }, overlays: [{ id: 8, url: '/l1' }] }, { id: 4, category: 'combat', name: 'Elite', overlays: [{ id: 9, url: '/api/subtypes/4/overlays/9' }] }])),
+    http.get('/api/nebulas', () => HttpResponse.json([])),
     http.get('/api/assembly-templates', () => HttpResponse.json(templates)),
     http.put('/api/assembly-templates', async ({ request }) => { const input = await request.json() as AssemblyTemplate; const t = { ...templates.find(x => x.faction_id === input.faction_id && x.category === input.category && (x.side ?? 'front') === (input.side ?? 'front')), ...input }; templates = [...templates.filter(x => x.faction_id !== t.faction_id || x.category !== t.category || (x.side ?? 'front') !== (t.side ?? 'front')), t]; return HttpResponse.json(t) }),
     http.get('/api/cards/:id/assembly', ({ params }) => HttpResponse.json(assemblies[String(params.id)] ?? emptyAssembly())),
@@ -166,7 +167,8 @@ test('library factions page counts cards per type and links to the library tab',
 test('combat cards use the level subtype until another subtype is chosen', async () => {
   mount('/assemble/cards/1')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ overlayUrls: ['/l0'], logoUrl: '/api/factions/1/logo?v=a' })))
-  expect(await screen.findByRole('option', { name: 'Automatic by level (Level 0)' })).toBeInTheDocument()
+  expect(await screen.findByRole('option', { name: 'Automatic by level (Starting)' })).toBeInTheDocument()
+  await userEvent.click(screen.getByLabelText('Starting card'))
   await userEvent.selectOptions(screen.getByLabelText('Level'), '2')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ overlayUrls: ['/l1'], layout: expect.objectContaining({ resources: expect.objectContaining({ x: 33, y: 27 }) }) })))
   expect(screen.queryByRole('option', { name: 'Resource icons (guns, shields, morale)' })).not.toBeInTheDocument()
@@ -244,9 +246,9 @@ test('new event cards are created in the assembly editor with the event fields',
 })
 
 test('combat cards are grouped into a section per level', async () => {
-  records = [{ ...combat }, { ...combat, id: 2, name: 'Second card', level: 2 }, { ...combat, id: 4, name: 'Third card', level: 2 }, upgrade]
+  records = [{ ...combat }, { ...combat, id: 2, name: 'Second card', starting: false, level: 2 }, { ...combat, id: 4, name: 'Third card', starting: false, level: 2 }, upgrade]
   mount('/assemble')
-  const level0 = await screen.findByRole('region', { name: 'Level 0' })
+  const level0 = await screen.findByRole('region', { name: 'Starting cards' })
   const level2 = screen.getByRole('region', { name: 'Level 2' })
   expect(within(level0).getByRole('link', { name: 'Edit Winged Horror' })).toBeInTheDocument()
   expect(within(level2).getAllByRole('link').map(l => l.getAttribute('aria-label'))).toEqual(['Edit Second card', 'Edit Third card'])
@@ -468,9 +470,9 @@ test('C0 logo scale previews per card, discards, saves, and hides at other level
   await userEvent.click(screen.getByRole('button', { name: /^Save$/ }))
   await waitFor(() => expect(assemblies['1'].logo_scale).toBe(1.75))
   expect(useAssembly.getState().logoScales['1']).toBeUndefined()
-  await userEvent.selectOptions(screen.getByLabelText('Level'), '1')
+  await userEvent.click(screen.getByLabelText('Starting card'))
   expect(screen.queryByLabelText(/Logo scale/)).not.toBeInTheDocument()
-  await userEvent.selectOptions(screen.getByLabelText('Level'), '0')
+  await userEvent.click(screen.getByLabelText('Starting card'))
   await userEvent.click(screen.getByRole('button', { name: 'Reset logo scale' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1 })))
 })
@@ -478,6 +480,7 @@ test('C0 logo scale previews per card, discards, saves, and hides at other level
 test('a new C0 card saves its chosen logo scale on creation', async () => {
   const router = mount('/assemble/cards/new?faction=1&tab=combat')
   await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Starting card' }))
   fireEvent.change(screen.getByLabelText(/Logo scale/), { target: { value: '0.8' } })
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))

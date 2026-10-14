@@ -34,6 +34,7 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 	for level := int64(0); level <= 3; level++ {
 		c := combatCard(f)
 		c.Level = ptr(level)
+		c.Starting = ptr(level == 0) // only flagged cards are starting cards
 		inputs = append(inputs, c)
 	}
 	for _, sub := range []string{"schema", "tactic"} {

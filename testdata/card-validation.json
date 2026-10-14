@@ -708,5 +708,138 @@
       "text": ""
     },
     "valid": false
+  },
+  {
+    "name": "starting card without level or price",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": true
+    },
+    "valid": true
+  },
+  {
+    "name": "starting card at level 0",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": true,
+      "level": 0,
+      "resource_cost": 0
+    },
+    "valid": true
+  },
+  {
+    "name": "starting card with a level",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": true,
+      "level": 2,
+      "resource_cost": 0
+    },
+    "valid": false
+  },
+  {
+    "name": "starting card with a price",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": true,
+      "level": 0,
+      "resource_cost": 2
+    },
+    "valid": false
+  },
+  {
+    "name": "regular card level 2",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": false,
+      "level": 2,
+      "resource_cost": 1
+    },
+    "valid": true
+  },
+  {
+    "name": "regular card at level 0",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": false,
+      "level": 0,
+      "resource_cost": 0
+    },
+    "valid": true
+  },
+  {
+    "name": "regular card without level",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": false,
+      "resource_cost": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "starting flag not a boolean",
+    "card": {
+      "faction_id": 1,
+      "name": "Огонь",
+      "category": "combat",
+      "shields": 1,
+      "guns": 2,
+      "eagles": 0,
+      "upper_text": "Верх",
+      "lower_text": "",
+      "starting": "yes",
+      "level": 0,
+      "resource_cost": 0
+    },
+    "valid": false
   }
 ]

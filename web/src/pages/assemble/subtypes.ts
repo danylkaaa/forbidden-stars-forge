@@ -36,11 +36,15 @@ export function moveOverlay(ids: number[], index: number, delta: number): number
 // Combat cards without a chosen subtype use one of these by level.
 export const BUILTIN_SUBTYPES = [{ category: 'combat', name: 'Level 0' }, { category: 'combat', name: 'Level 1+' }] as const
 export const isBuiltinSubtype = (st: Pick<Subtype, 'category' | 'name'>) => BUILTIN_SUBTYPES.some(b => b.category === st.category && b.name === st.name)
-export const levelSubtypeName = (level: number) => level === 0 ? 'Level 0' : 'Level 1+'
+// Starting cards are the deck's opening cards: no level requirement and no
+// price, with the faction logo where the level number would be. Every other
+// combat card (level 0–3) uses the second built-in subtype.
+export const displaySubtypeName = (name: string) => name === 'Level 0' ? 'Starting' : name === 'Level 1+' ? 'Regular' : name
+export const levelSubtypeName = (starting: boolean) => starting ? 'Level 0' : 'Level 1+'
 
 // The chosen subtype, or for combat cards the built-in one for its level.
-export function resolveSubtype(subtypes: Subtype[] | undefined, chosenId: number | undefined, card: { category: string; level?: number } | null) {
+export function resolveSubtype(subtypes: Subtype[] | undefined, chosenId: number | undefined, card: { category: string; starting?: boolean } | null) {
   const chosen = chosenId ? subtypes?.find(s => s.id === chosenId) : undefined
   if (chosen || !card || card.category !== 'combat') return chosen
-  return subtypes?.find(s => s.category === 'combat' && s.name === levelSubtypeName(card.level ?? 0))
+  return subtypes?.find(s => s.category === 'combat' && s.name === levelSubtypeName(!!card.starting))
 }

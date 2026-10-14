@@ -24,6 +24,7 @@ import { useAssembly } from './state'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
+import type { Category } from '../cards/model'
 import { BackImage } from './BackImage'
 import { CardContextMenu } from './CardContextMenu'
 import { TemplateSettingsDialog } from './TemplateSettingsDialog'
@@ -67,11 +68,11 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, o
 }
 
 // The deck's shared back, first in the grid.
-function BackTile({ image, label, onChoose, generateLink }: { image: LibraryImage | undefined; label: string; onChoose: () => void; generateLink: string | null }) {
+function BackTile({ category, factionId, image, label, onChoose, generateLink }: { category: Category; factionId?: number; image: LibraryImage | undefined; label: string; onChoose: () => void; generateLink: string | null }) {
   return <div className="min-w-0">
     <button type="button" aria-label={`Choose ${label}`} onClick={onChoose} className={`${frame} block w-full cursor-pointer bg-transparent p-0 hover:ring-2 hover:ring-accent`}>
       {image
-        ? <BackImage url={image.url} logoUrl={image.logoUrl} scale={image.logoScale} alt={label} />
+        ? <BackImage category={category} factionId={factionId} url={image.url} logoUrl={image.logoUrl} scale={image.logoScale} alt={label} />
         : <span className="grid aspect-[816/1104] place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-3 text-center text-xs text-ink/55">No card back chosen. Click to choose one.</span>}
     </button>
     <span className={caption}><span className="truncate">{label}</span>{generateLink && <Link to={generateLink} className="shrink-0 text-xs text-accent no-underline hover:underline">Generate</Link>}</span>
@@ -190,15 +191,18 @@ export default function AssemblePage() {
     {factionId && <section aria-label="Card back" className="space-y-3">
       <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Card back</h2>
       <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-        <BackTile image={back.image} label={`${tabLabel} back`} onChoose={() => setSettingsOpen('back')}
+        <BackTile category={category} factionId={factionId} image={back.image} label={`${tabLabel} back`} onChoose={() => setSettingsOpen('back')}
           generateLink={backType ? `/faction-lab?faction=${factionId}&card_type=${backType.id}` : null} />
       </div>
     </section>}
     {!cards.isPending && factionId && !shown.length && <p className="text-sm text-ink/60">No {tabLabel.toLowerCase()} cards for {faction?.name}. <Link to={newCardLink} className="text-accent underline">Add one</Link>.</p>}
-    {(category === 'combat' ? [0, 1, 2, 3].map(level => ({ level, cards: shown.filter(c => c.category === 'combat' && c.level === level) })).filter(g => g.cards.length) : [{ level: null, cards: shown }]).map(group =>
-      <section key={group.level ?? 'all'} aria-label={group.level === null ? `${tabLabel} cards` : `Level ${group.level}`} className="space-y-3">
-        {group.level !== null && <h2 className="m-0 flex items-baseline gap-2 border-b border-divider pb-1.5 font-display text-lg text-accent-300">
-          Level {group.level}<span className="font-sans text-xs font-normal text-ink/45">{group.cards.length} card{group.cards.length === 1 ? '' : 's'}</span>
+    {(category === 'combat'
+      ? [{ key: 'starting', title: 'Starting cards', cards: shown.filter(c => c.category === 'combat' && c.starting) },
+        ...[0, 1, 2, 3].map(level => ({ key: `level-${level}`, title: `Level ${level}`, cards: shown.filter(c => c.category === 'combat' && !c.starting && c.level === level) }))].filter(g => g.cards.length)
+      : [{ key: 'all', title: null, cards: shown }]).map(group =>
+      <section key={group.key} aria-label={group.title ?? `${tabLabel} cards`} className="space-y-3">
+        {group.title !== null && <h2 className="m-0 flex items-baseline gap-2 border-b border-divider pb-1.5 font-display text-lg text-accent-300">
+          {group.title}<span className="font-sans text-xs font-normal text-ink/45">{group.cards.length} card{group.cards.length === 1 ? '' : 's'}</span>
         </h2>}
         <div className="grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
           {group.cards.map(card => <CombatTile key={card.id} card={card} image={template.image} template={layout} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} onRendered={onRendered} {...selectProps(card)} />)}

@@ -53,10 +53,12 @@ export function resourceToken(layer: ResourceLayer, style: IconStyle | undefined
   const tokens: Partial<Record<IconStyle, string>> = RESOURCE_TOKENS[layer]
   return tokens[style ?? 'badge'] ?? (layer === 'guns' ? 'GUN' : layer === 'shields' ? 'SKULL' : 'MORALE')
 }
-export type Run = { text: string; icon: boolean; italic: boolean; unframed?: boolean; dice?: boolean }
-const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSMD]\\)|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*)`, 'g')
+export type Run = { text: string; icon: boolean; italic: boolean; bold?: boolean; unframed?: boolean; dice?: boolean }
+const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSMD]\\)|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*|__[^_\\n]+__)`, 'g')
 export function textRuns(text: string): Run[] {
   return text.split(TOKEN_PATTERN).filter(Boolean).flatMap<Run>(part => {
+    // __bold__; it can be nested with italics, e.g. *__both__* or __*both*__.
+    if (part.length > 4 && part.startsWith('__') && part.endsWith('__')) return textRuns(part.slice(2, -2)).map(run => ({ ...run, bold: true }))
     if (part.startsWith('*') && part.endsWith('*')) {
       const markers = part.startsWith('**') && part.endsWith('**') ? 2 : 1
       return textRuns(part.slice(markers, -markers)).map(run => ({ ...run, italic: true }))
@@ -71,7 +73,7 @@ export type Placement = { x: number; y: number; width: number; height: number; s
 export const LAYERS = ['name', 'level', 'resource_cost', 'resources', 'upper_text', 'lower_text', 'logo', 'order_icon', 'subtype'] as const
 export type Layer = typeof LAYERS[number]
 export type Layout = Record<Layer, Placement>
-export const LAYER_LABELS: Record<Layer, string> = { name: 'Title', level: 'Level', resource_cost: 'Resource price', resources: 'Resource icons (guns, shields, morale)', upper_text: 'Upper text', lower_text: 'Lower text', logo: 'Faction logo (level 0)', order_icon: 'Order icon', subtype: 'Scheme / tactic label' }
+export const LAYER_LABELS: Record<Layer, string> = { name: 'Title', level: 'Level', resource_cost: 'Resource price', resources: 'Resource icons (guns, shields, morale)', upper_text: 'Upper text', lower_text: 'Lower text', logo: 'Faction logo (starting cards)', order_icon: 'Order icon', subtype: 'Scheme / tactic label' }
 // Upgrade cards use the same layers with their own names: the rules text
 // is the card's text, and only these layers are painted.
 export const UPGRADE_LAYERS = ['name', 'level', 'resource_cost', 'order_icon', 'logo', 'upper_text'] as const satisfies readonly Layer[]

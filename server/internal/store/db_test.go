@@ -95,3 +95,41 @@ func TestUpgradeCardsMigrationKeepsAssemblies(t *testing.T) {
 		t.Fatalf("assembly lost on down: %q %v", key, err)
 	}
 }
+
+// Migration 0031 drops combat cards (and their assemblies) and nothing else.
+func TestDropCombatCardsMigration(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	src, _ := iofs.New(migrationsFS, "migrations")
+	drv, _ := migratesqlite.WithInstance(db, &migratesqlite.Config{})
+	m, err := migrate.NewWithInstance("iofs", src, "sqlite", drv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Migrate(30); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO factions(id, name, dlc) VALUES (1, 'Orks', 'Darkest Dawn')`,
+		`INSERT INTO cards(id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text) VALUES (1, 1, 'Waaagh', 'combat', 0, 0, 1, 1, 1, '', '')`,
+		`INSERT INTO cards(id, faction_id, name, category, level, resource_cost, text, upgrade_type) VALUES (2, 1, 'Forge', 'upgrade', 1, 0, 'x', 'deploy')`,
+		`INSERT INTO card_assemblies(card_id, image_key, artwork_path) VALUES (1, 'art', 'card-artwork/a.png')`,
+	} {
+		if _, err = db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err = m.Migrate(31); err != nil {
+		t.Fatal(err)
+	}
+	var combat, other, assemblies int
+	db.QueryRow(`SELECT COUNT(*) FROM cards WHERE category = 'combat'`).Scan(&combat)
+	db.QueryRow(`SELECT COUNT(*) FROM cards WHERE category != 'combat'`).Scan(&other)
+	db.QueryRow(`SELECT COUNT(*) FROM card_assemblies`).Scan(&assemblies)
+	if combat != 0 || other != 1 || assemblies != 0 {
+		t.Fatalf("combat %d other %d assemblies %d", combat, other, assemblies)
+	}
+}

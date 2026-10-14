@@ -85,6 +85,9 @@ func (h *CardsHandler) decode(raw json.RawMessage) (store.CardInput, []cardIssue
 		return in, []cardIssue{issue(field, "has an invalid JSON type")}, nil
 	}
 	issues := []cardIssue{}
+	if in.Category == "combat" && in.Starting != nil && *in.Starting {
+		startingDefaults(&in)
+	}
 	for _, e := range store.ValidateCard(in) {
 		issues = append(issues, issue(e.Field, e.Message))
 	}
@@ -239,4 +242,16 @@ func (h *CardsHandler) Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 201, map[string]any{"cards": cards, "count": len(cards)})
+}
+
+// startingDefaults fills a starting card's level and price: both are 0, so
+// they may be left out of an import. Other values are rejected by validation.
+func startingDefaults(in *store.CardInput) {
+	zero := int64(0)
+	if in.Level == nil {
+		in.Level = &zero
+	}
+	if in.ResourceCost == nil {
+		in.ResourceCost = &zero
+	}
 }

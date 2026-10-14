@@ -22,12 +22,17 @@ export type UnitStats = { name: string; dice: number; health: number; morale: nu
 // `relief` boosts fine surface relief that ordinary lighting leaves flat.
 // The drop shadow and outline are fractions of the icon size; the light is a
 // directional light (angles in degrees) plus ambient light.
-export type Orientation = { rx: number; ry: number; rz: number; scale: number; x: number; y: number; shadow: number; shadowBlur: number; shadowX: number; shadowY: number; outline: number; lightAzimuth: number; lightElevation: number; lightPower: number; lightAmbient: number; detail: number; relief: number }
-export const DEFAULT_ORIENTATION: Orientation = { rx: -90, ry: 0, rz: 0, scale: 1, x: 0, y: 0, shadow: 0.45, shadowBlur: 0.04, shadowX: 0.01, shadowY: 0.03, outline: 0.012, lightAzimuth: -35, lightElevation: 50, lightPower: 2.8, lightAmbient: 0.18, detail: 0.6, relief: 0.8 }
+export type Orientation = { rx: number; ry: number; rz: number; scale: number; x: number; y: number; shadow: number; shadowBlur: number; shadowX: number; shadowY: number; outline: number; innerShadow: number; innerShadowSize: number; contrast: number; lightAzimuth: number; lightElevation: number; lightPower: number; lightAmbient: number; detail: number; relief: number }
+export const DEFAULT_ORIENTATION: Orientation = { rx: -90, ry: 0, rz: 0, scale: 1, x: 0, y: 0, shadow: 0.45, shadowBlur: 0.04, shadowX: 0.01, shadowY: 0.03, outline: 0.012, innerShadow: 0, innerShadowSize: 0.03, contrast: 1, lightAzimuth: -35, lightElevation: 50, lightPower: 2.8, lightAmbient: 0.18, detail: 0.6, relief: 0.8 }
+// Drop shadow, inner shadow (darkening along the inside of the edge), contrast
+// and outline are set once for the whole faction card (every unit
+// icon shares them); they override whatever a unit's own pose holds.
+export type ModelStyle = Pick<Orientation, 'shadow' | 'shadowBlur' | 'shadowX' | 'shadowY' | 'outline' | 'innerShadow' | 'innerShadowSize' | 'contrast'>
+export const DEFAULT_MODEL_STYLE: ModelStyle = { shadow: DEFAULT_ORIENTATION.shadow, shadowBlur: DEFAULT_ORIENTATION.shadowBlur, shadowX: DEFAULT_ORIENTATION.shadowX, shadowY: DEFAULT_ORIENTATION.shadowY, outline: DEFAULT_ORIENTATION.outline, innerShadow: DEFAULT_ORIENTATION.innerShadow, innerShadowSize: DEFAULT_ORIENTATION.innerShadowSize, contrast: DEFAULT_ORIENTATION.contrast }
 // Poses saved before the shadow existed get the default shadow.
 export const withDefaults = (o: Partial<Orientation> | undefined): Orientation => ({ ...DEFAULT_ORIENTATION, ...o })
 // A row of the back's initial forces: a unit slot, a structure, reinforcements, materiel or a library card.
-export type ForcesIcon = SlotKey | 'city' | 'factory' | 'reinforcement' | 'materiel' | 'card'
+export type ForcesIcon = SlotKey | 'city' | 'factory' | 'reinforcement' | 'forge_token' | 'materiel' | 'card'
 // `card_id` is the library card shown when the icon is 'card' (e.g. an order upgrade).
 export type InitialRow = { icon: ForcesIcon; count: number; label: string; card_id?: number }
 export type Objective = { name: string; text: string }
@@ -86,7 +91,7 @@ export const DEFAULT_ICONS = [
   { key: 'city', label: 'City' }, { key: 'factory', label: 'Factory' }, { key: 'bastion', label: 'Bastion' },
   { key: 'gear', label: 'Materiel (gear)' },
   { key: 'forge', label: 'Forge requirement' }, { key: 'tech', label: 'Tech level badge' },
-  { key: 'reinforce', label: 'Reinforcement token' }, { key: 'dice', label: 'Dice (power)' }, { key: 'health', label: 'Health' }, { key: 'morale', label: 'Morale' },
+  { key: 'reinforce', label: 'Reinforcement token' }, { key: 'forge-token', label: 'Forge token' }, { key: 'dice', label: 'Dice (power)' }, { key: 'health', label: 'Health' }, { key: 'morale', label: 'Morale' },
 ] as const
 export type DefaultIconKey = typeof DEFAULT_ICONS[number]['key']
 
@@ -94,3 +99,12 @@ export type DefaultIconKey = typeof DEFAULT_ICONS[number]['key']
 export const initialCardIds = (data: FactionCardData) => data.initial.flatMap(r => r.icon === 'card' && r.card_id ? [r.card_id] : [])
 
 export const downloadName = (faction: string, side: 'front' | 'back') => `${faction.trim().replace(/[\\/:*?"<>|]/g, '-') || 'faction'} faction card ${side}.png`
+
+// The picked front or back image: 'upload' is a file uploaded for this card
+// (stored as the `front-image` / `back-image` asset), anything else a generated
+// library image by key.
+export const UPLOADED_IMAGE = 'upload'
+export function backgroundUrl(key: string, side: 'front' | 'back', assets: Record<string, string>, library: { key: string; url: string }[]): string | null {
+  if (key === UPLOADED_IMAGE) return assets[`${side}-image`] ?? null
+  return library.find(i => i.key === key)?.url ?? null
+}

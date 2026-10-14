@@ -10,10 +10,21 @@ export function validateCard(value: unknown, factionIds: readonly number[]): Val
   if (typeof v.name !== 'string' || !v.name.trim()) add('name', 'A non-empty name is required')
   if (!CATEGORIES.includes(v.category as Category)) { add('category', 'Must be combat, schema, or upgrade'); return errors }
   const fields = FIELDS[v.category as Category]
-  const allowed = ['faction_id', 'name', 'category', ...fields.map(f => f.key)]
+  const allowed = ['faction_id', 'name', 'category', ...(v.category === 'combat' ? ['starting'] : []), ...fields.map(f => f.key)]
   for (const key of Object.keys(v)) if (!allowed.includes(key)) add(key, 'Unknown field or field from another category')
+  // A combat card is a starting card only with "starting": true (level 0, no
+  // price; both default to that); otherwise it is a regular card of level 0–3.
+  let effective = v
+  if (v.category === 'combat' && 'starting' in v) {
+    if (typeof v.starting !== 'boolean') add('starting', 'Must be true or false')
+    else if (v.starting) {
+      effective = { ...v, level: v.level ?? 0, resource_cost: v.resource_cost ?? 0 }
+      if (effective.level !== 0) add('level', 'Must be 0 for a starting card')
+      if (effective.resource_cost !== 0) add('resource_cost', 'Must be 0 for a starting card')
+    }
+  }
   for (const f of fields) {
-    const x = v[f.key]
+    const x = effective[f.key]
     if (f.kind === 'number' || f.key === 'level') {
       const max = f.key === 'level' ? 3 : Number.MAX_SAFE_INTEGER
       if (typeof x !== 'number' || !Number.isSafeInteger(x) || x < 0 || x > max) add(f.key, `Must be an integer from 0 to ${max}`)
@@ -27,6 +38,7 @@ export function draftInput(draft: CardDraft): unknown {
   const category = draft.category as Category
   const input: Record<string, unknown> = { faction_id: numeric(draft.faction_id), name: draft.name.trim(), category }
   for (const f of FIELDS[category] ?? []) input[f.key] = f.kind === 'number' || f.key === 'level' ? numeric(draft[f.key]) : draft[f.key]
+  if (category === 'combat') input.starting = draft.starting === 'true'
   return input
 }
 function numeric(value: string): number { return /^\d+$/.test(value) ? Number(value) : NaN }
@@ -43,7 +55,7 @@ export function parseImport(source: string, factionIds: readonly number[]): { ca
     if (!card || typeof card !== 'object' || Array.isArray(card)) return card
     const c = card as Record<string, unknown>
     const fields = CATEGORIES.includes(c.category as Category) ? FIELDS[c.category as Category] : []
-    const allowed = ['faction_id', 'name', 'category', ...fields.map(f => f.key)]
+    const allowed = ['faction_id', 'name', 'category', ...(c.category === 'combat' ? ['starting'] : []), ...fields.map(f => f.key)]
     return Object.fromEntries(Object.entries(c).filter(([key]) => allowed.includes(key)))
   })
   cards.forEach((c: unknown, index: number) => errors.push(...validateCard(c, factionIds).map(e => ({ ...e, index }))))

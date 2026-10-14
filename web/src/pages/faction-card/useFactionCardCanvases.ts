@@ -5,7 +5,7 @@ import { useFactions } from '../factions/api'
 import { useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
 import { useFactionCardLayout } from './layout'
 import { useCardImages } from './useCardImages'
-import { initialCardIds, normalizeData } from './model'
+import { backgroundUrl, initialCardIds, normalizeData } from './model'
 import { renderFactionCard } from './render'
 
 // The faction's logo (uploaded on Library → Factions), if it has one.
@@ -26,8 +26,8 @@ export function useFactionCardCanvases(factionId: number) {
   const data = useMemo(() => record.data && faction ? normalizeData(record.data.data, faction.name) : null, [record.data, faction])
   const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
   const shared = useMemo(() => byKey(defaults.data), [defaults.data])
-  const front = images.data.find(i => i.key === record.data?.front_image_key)?.url ?? null
-  const back = images.data.find(i => i.key === record.data?.back_image_key)?.url ?? null
+  const front = backgroundUrl(record.data?.front_image_key ?? '', 'front', assets, images.data)
+  const back = backgroundUrl(record.data?.back_image_key ?? '', 'back', assets, images.data)
   const cards = useCardImages(data ? initialCardIds(data) : [])
   const ready = !!data && !defaults.isPending && !images.isPending && !layoutQuery.isPending && !cards.pending
   const color = record.data?.unit_color ?? ''

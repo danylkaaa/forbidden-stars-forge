@@ -52,3 +52,11 @@ test('auto text is centred in the visible parchment between borders, divider bar
   expect(lowerAbove).toBeCloseTo(lowerBelow)
   expect(upperAbove).toBeCloseTo(40)
 })
+
+test('a bottom inset lifts the whole stack, keeping the bottom border inside the cut card', () => {
+  const block = { text: 'x', height: 40, placement: defaultLayout().upper_text }
+  const flat = combatPanels(816, 1104, 32, block, { ...block, placement: defaultLayout().lower_text })
+  const lifted = combatPanels(816, 1104, 32, block, { ...block, placement: defaultLayout().lower_text }, undefined, 32.5)
+  expect(lifted.bottomY).toBeCloseTo(flat.bottomY - 32.5)
+  expect(lifted.foregroundY! ).toBeCloseTo(flat.foregroundY! - 32.5)
+})

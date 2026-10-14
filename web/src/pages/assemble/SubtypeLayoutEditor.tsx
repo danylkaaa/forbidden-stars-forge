@@ -5,7 +5,7 @@ import { PositionEditor } from './PositionEditor'
 import { saveSubtypeLayout, type Subtype } from './subtypes'
 
 // Positions resources, the level badge and the faction logo on this
-// subtype's overlays. Level 0 cards have a logo instead of a level and price.
+// subtype's overlays. Starting cards have a logo instead of a level and price.
 export function SubtypeLayoutEditor({ subtype }: { subtype: Subtype }) {
   const queryClient = useQueryClient()
   const compose = useCallback((draft: Partial<Layout>, _level: number, base: Layout) =>

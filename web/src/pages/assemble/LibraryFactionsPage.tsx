@@ -47,7 +47,7 @@ export default function LibraryFactionsPage() {
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wider text-ink/60">
             <th className="px-4 py-3.5 font-medium">Faction</th>
-            <th className="px-4 py-3.5 font-medium">Logo <span className="normal-case tracking-normal text-ink/40">(level 0 cards)</span></th>
+            <th className="px-4 py-3.5 font-medium">Logo <span className="normal-case tracking-normal text-ink/40">(starting cards)</span></th>
             <th className="px-4 py-3.5 font-medium">DLC</th>
             {LIBRARY_TABS.map(t => <th key={t.category} className="px-4 py-3.5 text-right font-medium">{t.label}</th>)}
             <th className="px-4 py-3.5 text-right font-medium">Faction card</th>

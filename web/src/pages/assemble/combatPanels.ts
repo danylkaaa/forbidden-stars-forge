@@ -10,14 +10,16 @@ const NO_INSETS: PanelInsets = { background: 0, dividerTop: 0, foreground: 0 }
 // Each auto-placed block is centred in the visible parchment of its panel:
 // equal padding above (below the border/bar) and below (to the divider bar or
 // the bottom decoration).
-export function combatPanels(width: number, height: number, bottomHeight: number, upper: TextBlock, lower: TextBlock, insets: PanelInsets = NO_INSETS) {
+// `bottomInset` lifts the whole stack off the image's bottom edge: the part of
+// the image beyond the cut line is bleed, and the bottom border must sit inside the cut card.
+export function combatPanels(width: number, height: number, bottomHeight: number, upper: TextBlock, lower: TextBlock, insets: PanelInsets = NO_INSETS, bottomInset = 0) {
   // Padding above and below each block, as a percentage of card width.
   const padTop = (b: TextBlock) => width * (b.placement.paddingTop ?? 4) / 100
   const padBottom = (b: TextBlock) => width * (b.placement.paddingBottom ?? 4) / 100
   const upperPad = padTop(upper), lowerPad = padTop(lower)
   const hasUpper = !!upper.text.trim(), hasLower = !!lower.text.trim()
   const upperHeight = hasUpper ? upper.height : 0, lowerHeight = hasLower ? lower.height : 0
-  const bottomY = height - bottomHeight
+  const bottomY = height - bottomInset - bottomHeight
   const defaults = defaultLayout()
   const isAuto = (p: Placement, key: 'upper_text' | 'lower_text') => p.autoY ?? p.y === defaults[key].y
   const lowerAuto = isAuto(lower.placement, 'lower_text'), upperAuto = isAuto(upper.placement, 'upper_text')

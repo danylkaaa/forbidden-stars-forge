@@ -40,6 +40,11 @@ func main() {
 	if dataDir == "" {
 		dataDir = "./data"
 	}
+	if n, err := api.RemoveOrphanArtwork(db, dataDir); err != nil {
+		log.Printf("remove orphan artwork: %v", err)
+	} else if n > 0 {
+		log.Printf("removed %d orphan card artwork files", n)
+	}
 	if err := api.EnsureBackTemplates(db, dataDir); err != nil {
 		log.Fatalf("seed card back templates: %v", err)
 	}

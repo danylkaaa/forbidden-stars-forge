@@ -2,21 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { deleteAsset, uploadAsset } from './api'
-import { DEFAULT_ORIENTATION, assetKeys, withDefaults, type Orientation, type SlotKey } from './model'
+import { DEFAULT_ORIENTATION, assetKeys, withDefaults, type ModelStyle, type Orientation, type SlotKey } from './model'
 import { renderModelIcon } from './stl'
 
 const round = (n: number, digits = 2) => Math.round(n * 10 ** digits) / 10 ** digits
 type Slider = readonly [keyof Orientation, string, number, number, number]
 // Pose, light and shadow settings, grouped in accordions.
+// Shadow and outline are not here: they are shared by the whole faction card.
 const GROUPS: { title: string; open?: boolean; sliders: Slider[] }[] = [
   { title: 'Position', open: true, sliders: [['rx', 'Tilt (X)', -180, 180, 1], ['ry', 'Turn (Y)', -180, 180, 1], ['rz', 'Roll (Z)', -180, 180, 1], ['scale', 'Size', 0.3, 3, 0.01], ['x', 'Shift left/right', -0.5, 0.5, 0.01], ['y', 'Shift up/down', -0.5, 0.5, 0.01]] },
   { title: 'Light', sliders: [['lightAzimuth', 'Light direction', -180, 180, 1], ['lightElevation', 'Light height', 0, 90, 1], ['lightPower', 'Light strength', 0.3, 5, 0.05], ['lightAmbient', 'Ambient light', 0, 1, 0.01], ['relief', 'Relief boost', 0, 4, 0.05], ['detail', 'Detail lines', 0, 1, 0.01]] },
-  { title: 'Shadow and outline', sliders: [['shadow', 'Shadow strength', 0, 1, 0.01], ['shadowBlur', 'Shadow softness', 0, 0.2, 0.005], ['shadowX', 'Shadow left/right', -0.15, 0.15, 0.005], ['shadowY', 'Shadow up/down', -0.15, 0.15, 0.005], ['outline', 'White outline width', 0, 0.04, 0.001]] },
 ]
 
 // Upload a unit's STL, pose it (drag the preview to turn it, wheel to resize)
 // and see exactly the icon the card will use. A PNG can replace the model.
-export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orientation, color, onChange }: {
+export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orientation, color, style, onChange }: {
+  style: ModelStyle
   factionId: number; slot: SlotKey; label: string; stlUrl?: string; iconUrl?: string; orientation: Partial<Orientation> | undefined; color: string
   onChange: (o: Orientation) => void
 }) {
@@ -43,13 +44,13 @@ export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orien
     const target = canvas.current
     if (!stlUrl || !target) return
     let cancelled = false
-    const frame = requestAnimationFrame(() => renderModelIcon(stlUrl, o, color, 256).then(icon => {
+    const frame = requestAnimationFrame(() => renderModelIcon(stlUrl, { ...o, ...style }, color, 256).then(icon => {
       if (cancelled) return
       setError(''); target.width = icon.width; target.height = icon.height
       target.getContext('2d')?.drawImage(icon, 0, 0)
     }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not render the model.') }))
     return () => { cancelled = true; cancelAnimationFrame(frame) }
-  }, [stlUrl, o, color])
+  }, [stlUrl, o, color, style])
   const drag = useRef<{ x: number; y: number; start: Orientation } | null>(null)
   useEffect(() => {
     const el = canvas.current
@@ -93,7 +94,7 @@ export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orien
               <input type="range" min={min} max={max} step={step} value={o[key]} className="w-full" onChange={e => change({ ...o, [key]: Number(e.target.value) })} /></label>)}
           </div>
         </details>)}
-        <Button onClick={() => change(DEFAULT_ORIENTATION)}>Reset pose, shadow and light</Button>
+        <Button onClick={() => change(DEFAULT_ORIENTATION)}>Reset pose and light</Button>
         <p className="m-0 text-xs text-ink/55">Drag the preview to turn the model, scroll to resize. Most miniature STLs are Z-up, which the default tilt handles.</p>
       </>}
       {iconUrl && <p className="m-0 text-xs text-ink/55">This PNG is used instead of the STL.</p>}

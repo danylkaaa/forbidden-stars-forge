@@ -1,0 +1,1 @@
+-- Dropped cards cannot be restored.

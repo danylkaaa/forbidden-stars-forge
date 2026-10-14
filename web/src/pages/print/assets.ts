@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useBackOverlayScale, useNebulaPicture } from '../assemble/api'
+import { renderBack } from '../assemble/backDecor'
+import type { Category } from '../cards/model'
 
 // A rendered card (or card back) as JPEG bytes for the PDF plus a blob URL
 // for the on-screen preview.
@@ -16,38 +19,16 @@ export async function canvasAsset(source: HTMLCanvasElement, size?: { width: num
   return { jpeg: new Uint8Array(await blob.arrayBuffer()), width: flat.width, height: flat.height, url: URL.createObjectURL(blob) }
 }
 
-function load(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img); img.onerror = () => reject(new Error('Could not load the card back image.'))
-    img.src = url
-  })
-}
-// Mirrors BackImage: the image covers the card, the logo is contained in a
-// centred square of `scale` × the card width and height.
-export async function renderBack(url: string, logoUrl: string | undefined, scale: number): Promise<HTMLCanvasElement> {
-  const [img, logo] = await Promise.all([load(url), logoUrl ? load(logoUrl) : null])
-  const canvas = document.createElement('canvas'); canvas.width = 816; canvas.height = 1104
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Your browser could not create a canvas.')
-  const cover = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
-  ctx.drawImage(img, (canvas.width - img.naturalWidth * cover) / 2, (canvas.height - img.naturalHeight * cover) / 2, img.naturalWidth * cover, img.naturalHeight * cover)
-  if (logo) {
-    const bw = canvas.width * scale, bh = canvas.height * scale, fit = Math.min(bw / logo.naturalWidth, bh / logo.naturalHeight)
-    ctx.drawImage(logo, (canvas.width - logo.naturalWidth * fit) / 2, (canvas.height - logo.naturalHeight * fit) / 2, logo.naturalWidth * fit, logo.naturalHeight * fit)
-  }
-  return canvas
-}
-
-export function useBackAsset(url: string | undefined, logoUrl: string | undefined, scale: number | undefined, size: { width: number; height: number }) {
+export function useBackAsset(url: string | undefined, logoUrl: string | undefined, scale: number | undefined, size: { width: number; height: number }, category: Category = 'combat') {
+  const overlayScale = useBackOverlayScale(category), picture = useNebulaPicture(category)
   const [state, setState] = useState<{ asset: PrintAsset | null; error: string }>({ asset: null, error: '' })
   useEffect(() => {
     if (!url) { setState({ asset: null, error: '' }); return }
     let cancelled = false, made: PrintAsset | null = null
-    renderBack(url, logoUrl, scale ?? 0.5).then(canvas => canvasAsset(canvas, size)).then(asset => {
+    renderBack(url, logoUrl, scale ?? 0.5, category, undefined, undefined, overlayScale, picture).then(canvas => canvasAsset(canvas, size)).then(asset => {
       if (cancelled) URL.revokeObjectURL(asset.url); else { made = asset; setState({ asset, error: '' }) }
     }).catch(e => { if (!cancelled) setState({ asset: null, error: e instanceof Error ? e.message : 'Could not render the card back.' }) })
     return () => { cancelled = true; if (made) URL.revokeObjectURL(made.url) }
-  }, [url, logoUrl, scale, size])
+  }, [url, logoUrl, scale, size, category, overlayScale, picture])
   return state
 }

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import { UNIT_SLOTS, defaultData, normalizeData } from './model'
+import { mergeLayout } from './layout'
 import { richSpans } from './render'
 
 test('every faction starts with the same seven unit rows and six objectives', () => {
@@ -33,4 +34,11 @@ test('poses saved before the shadow existed get the default shadow', async () =>
 test('cache token rows from older saves are dropped', () => {
   const data = normalizeData({ initial: [{ icon: 'cache', count: 2, label: 'Cache tokens' }, { icon: 'materiel', count: 6, label: 'Materiel' }] } as never, 'Tau')
   expect(data.initial).toEqual([{ icon: 'materiel', count: 6, label: 'Materiel' }])
+})
+
+test('shadow, outline and contrast are one shared setting in the layout', () => {
+  const layout = mergeLayout({ modelStyle: { shadow: 0.1, contrast: 1.4 } })
+  expect(layout.modelStyle).toMatchObject({ shadow: 0.1, contrast: 1.4, innerShadow: 0, outline: 0.012 })
+  expect(mergeLayout(undefined).modelStyle.contrast).toBe(1)
+  expect(mergeLayout({ title: { x: 5, y: 6 } }).title).toMatchObject({ x: 5, y: 6 })
 })

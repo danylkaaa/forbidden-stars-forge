@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom'
 import { Button } from '../../components/Button'
 import { CubeIcon } from '../../components/icons'
 import { BackImage } from './BackImage'
+import type { Category } from '../cards/model'
 
 type Rotation = { x: number; y: number }
 const START: Rotation = { x: -8, y: -22 }
 
 // A physical-looking card: front and back images on a rotating plane. Drag
 // to turn it (it keeps spinning briefly when let go), scroll to zoom.
-export function Card3DViewer({ title, front, back, backLogoUrl, backLogoScale, initialSide = 'front', controls, onClose }: { title: string; front: string | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; initialSide?: 'front' | 'back'; controls?: ReactNode; onClose: () => void }) {
+export function Card3DViewer({ title, front, back, backLogoUrl, backLogoScale, category, factionId, initialSide = 'front', controls, onClose }: { category?: Category; factionId?: number; title: string; front: string | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; initialSide?: 'front' | 'back'; controls?: ReactNode; onClose: () => void }) {
   const initialRotation = { ...START, y: START.y + (initialSide === 'back' ? 180 : 0) }
   const [rotation, setRotation] = useState<Rotation>(initialRotation)
   const [zoom, setZoom] = useState(1)
@@ -90,7 +91,7 @@ export function Card3DViewer({ title, front, back, backLogoUrl, backLogoScale, i
         </div>
         <div className={`${face} [transform:rotateY(180deg)]`}>
           {back
-            ? <BackImage url={back} logoUrl={backLogoUrl} scale={controls ? backLogoScale : logoScale} alt={`${title} back`} />
+            ? <BackImage category={category} factionId={factionId} url={back} logoUrl={backLogoUrl} scale={controls ? backLogoScale : logoScale} alt={`${title} back`} />
             : <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle,#3a2a20,#120c09)] p-6 text-center text-sm text-ink/60">No card back chosen for this faction and type yet.</div>}
           <div aria-hidden="true" className="absolute inset-0" style={{ background: shine }} />
         </div>
@@ -101,7 +102,7 @@ export function Card3DViewer({ title, front, back, backLogoUrl, backLogoScale, i
 }
 
 // Opens the card in the 3D viewer: the rendered front and the deck's back.
-export function Preview3DButton({ title, canvas, back, backLogoUrl, backLogoScale, className = '' }: { title: string; canvas: HTMLCanvasElement | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; className?: string }) {
+export function Preview3DButton({ title, canvas, back, backLogoUrl, backLogoScale, category, factionId, className = '' }: { category?: Category; factionId?: number; title: string; canvas: HTMLCanvasElement | null; back: string | null; backLogoUrl?: string; backLogoScale?: number; className?: string }) {
   const [front, setFront] = useState<string | null>(null)
   return <>
     <button type="button" aria-label={`3D preview of ${title}`} title="3D preview" disabled={!canvas}
@@ -109,6 +110,6 @@ export function Preview3DButton({ title, canvas, back, backLogoUrl, backLogoScal
       className={`grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-white/20 bg-black/60 text-ink/85 shadow backdrop-blur-sm hover:border-accent hover:text-accent disabled:hidden ${className}`}>
       <CubeIcon />
     </button>
-    {front && <Card3DViewer title={title} front={front} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} onClose={() => setFront(null)} />}
+    {front && <Card3DViewer category={category} factionId={factionId} title={title} front={front} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} onClose={() => setFront(null)} />}
   </>
 }

@@ -106,7 +106,7 @@ test('the resource column has no box to resize; its icon size is editable instea
   fireEvent.change(within(panel).getByLabelText('Icon size (%)'), { target: { value: '8' } })
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ layout: expect.objectContaining({ resources: expect.objectContaining({ size: 8 }) }) })))
   await userEvent.selectOptions(within(panel).getByLabelText('Layer'), 'logo')
-  expect(within(panel).getByRole('button', { name: 'Resize Faction logo (level 0)' })).toBeInTheDocument()
+  expect(within(panel).getByRole('button', { name: 'Resize Faction logo (starting cards)' })).toBeInTheDocument()
 })
 
 test('the preview resource price can be changed for levels 1–3', async () => {

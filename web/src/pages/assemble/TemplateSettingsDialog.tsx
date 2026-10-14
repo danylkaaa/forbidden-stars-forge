@@ -16,6 +16,7 @@ import { useAssembledPreview, usePreviewCard } from './previewCard'
 import { backTypeName, labLink, matchesCategory, useLibraryImages, type LibraryImage } from './library'
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
+import { FactionNebulaSection } from './NebulaEditor'
 import { BackLogoEditor } from './BackLogoEditor'
 import { ImageSelectionCheckbox, ImageSelectionControls } from '../../components/ImageSelection'
 import { DeleteImageButton } from '../../components/DeleteImageButton'
@@ -77,6 +78,7 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, init
           className={`cursor-pointer border-0 px-3 py-1.5 capitalize ${side === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{value}</button>)}
       </div>
     </div>
+    {factionId && <FactionNebulaSection key={factionId} factionId={factionId} />}
     <CategoryTabs value={category} onChange={setCategory} badges={counts} />
     {side === 'back' && selectedTemplate && selectedImage && <BackLogoEditor key={`${factionId}-${category}-${selected}-${selectedTemplate.logo_scale}`} template={selectedTemplate} imageUrl={selectedImage.url} />}
     {side === 'back' && !selectedImage && <p className="m-0 text-sm text-ink/60">Choose a back image below to upload a centered logo.</p>}
