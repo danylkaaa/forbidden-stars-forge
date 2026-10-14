@@ -1,15 +1,16 @@
 import { Link } from 'react-router'
-import { CogMechanicumIcon, TestGenIcon, LibraryIcon } from './icons'
+import { CogMechanicumIcon, TestGenIcon, LibraryIcon, PrintIcon } from './icons'
 import type { WorkspaceMode } from './workspaceMode'
 
 const modes = [
   { mode: 'generation', to: '/faction-lab', label: 'AI Image Generation', Icon: TestGenIcon },
   { mode: 'library', to: '/assemble', label: 'Library', Icon: LibraryIcon },
+  { mode: 'print', to: '/print', label: 'Print', Icon: PrintIcon },
 ] as const
 
 export function ModeNavbar({ mode }: { mode: WorkspaceMode }) {
   return <header className="flex flex-none flex-wrap items-center justify-between gap-3 border-b border-accent/30 bg-surface px-4 py-3 sm:px-6">
-    <Link to={mode === 'library' ? '/assemble' : '/faction-lab'} aria-label="Card Forge home" className="flex items-center gap-2.5 font-display text-sm font-bold tracking-widest text-accent-300 no-underline">
+    <Link to={mode === 'library' ? '/assemble' : mode === 'print' ? '/print' : '/faction-lab'} aria-label="Card Forge home" className="flex items-center gap-2.5 font-display text-sm font-bold tracking-widest text-accent-300 no-underline">
       <CogMechanicumIcon className="h-8 w-8 text-accent" />Card Forge
     </Link>
     <nav aria-label="Workspace mode" className="flex gap-1 rounded-md border border-divider bg-bg p-1">

@@ -11,6 +11,7 @@ import NewBatchPage from './pages/batches/NewBatchPage'
 import BatchDetailPage from './pages/batches/BatchDetailPage'
 import SettingsPage from './pages/settings/SettingsPage'
 import GenerationsPage from './pages/generations/GenerationsPage'
+import PrintPage from './pages/print/PrintPage'
 import FactionLabPage from './pages/faction-lab/FactionLabPage'
 
 export const routes: RouteObject[] = [
@@ -21,6 +22,7 @@ export const routes: RouteObject[] = [
       { path: '/assemble', element: <AssemblePage /> },
       { path: '/assemble/cards/new', element: <NewCardPage /> },
       { path: '/assemble/cards/:id', element: <CardEditorPage /> },
+      { path: '/print', element: <PrintPage /> },
       { path: '/factions', element: <FactionsRoute /> },
       { path: '/card-types', element: <CardTypesPage /> },
       { path: '/subtypes', element: <SubtypesPage /> },
