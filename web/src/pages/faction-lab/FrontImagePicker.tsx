@@ -9,8 +9,8 @@ export type FrontImageOption = {
   libraryKey: string
   name: string
   url: string
-  source: 'Lab' | 'Batch'
-  ref: { kind: 'generation' | 'batch-item'; id: number; batch_id?: number }
+  source: 'Lab'
+  ref: { kind: 'generation'; id: number }
 }
 
 export function FrontImagePicker({ options, selectedKey, onSelect, factionId, frontTypeName, loading, error }: {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"io/fs"
@@ -11,9 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"cardforge/internal/batchpoller"
 	"cardforge/internal/jobs"
-	"cardforge/internal/openai"
 	"cardforge/internal/store"
 )
 
@@ -31,7 +28,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			factionsStore := store.NewFactionsStore(db)
 			cardTypesStore := store.NewCardTypesStore(db)
 			cardsStore := store.NewCardsStore(db)
-			batchesStore := store.NewBatchesStore(db)
 			usageStore := store.NewUsageStore(db)
 
 			settings := &SettingsHandler{Store: settingsStore}
@@ -41,7 +37,7 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Post("/settings/test-claude", settings.TestClaude)
 			r.Post("/settings/openai-models", settings.OpenAIModels)
 
-			factions := &FactionsHandler{Store: factionsStore, Batches: batchesStore, Cards: cardsStore}
+			factions := &FactionsHandler{Store: factionsStore, Cards: cardsStore}
 			r.Get("/factions", factions.List)
 			r.Post("/factions", factions.Create)
 			r.Put("/factions/{id}", factions.Update)
@@ -111,7 +107,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			cardTypes := &CardTypesHandler{
 				Store:    cardTypesStore,
 				Settings: settingsStore,
-				Batches:  batchesStore,
 				DataDir:  dataDir,
 			}
 			r.Get("/card-types", cardTypes.List)
@@ -130,7 +125,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 				Factions:  factionsStore,
 				CardTypes: cardTypesStore,
 				Settings:  settingsStore,
-				Batches:   batchesStore,
 				Usage:     usageStore,
 				DataDir:   dataDir,
 			}
@@ -144,40 +138,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Delete("/generations/{id}", gens.Delete)
 			r.Get("/generations/{id}/image", gens.ServeImage)
 			r.Put("/generations/{id}/favorite", gens.SetFavorite)
-
-			// The poller's own client factory reads openAIBaseURL/resolveOpenAIKey
-			// fresh on every call, so tests that swap openAIBaseURL for a fake
-			// server also cover any request the poller makes.
-			poller := batchpoller.New(batchesStore, settingsStore, dataDir, func() (*openai.Client, error) {
-				all, err := settingsStore.GetAll()
-				if err != nil {
-					return nil, err
-				}
-				c := openai.New(resolveOpenAIKey(all))
-				c.BaseURL = openAIBaseURL
-				return c, nil
-			})
-			go poller.Start(context.Background())
-
-			batches := &BatchesHandler{
-				Store:     batchesStore,
-				Factions:  factionsStore,
-				CardTypes: cardTypesStore,
-				Settings:  settingsStore,
-				Usage:     usageStore,
-				Poller:    poller,
-				DataDir:   dataDir,
-			}
-			r.Post("/batches/preview", batches.Preview)
-			r.Post("/batches", batches.Create)
-			r.Get("/batches", batches.List)
-			r.Get("/batches/{id}", batches.Get)
-			r.Post("/batches/{id}/cancel", batches.Cancel)
-			r.Get("/batches/{id}/items/{itemID}/image", batches.ItemImage)
-			r.Delete("/batches/{id}/items/{itemID}", batches.DeleteItem)
-			r.Put("/batches/{id}/items/{itemID}/favorite", batches.SetItemFavorite)
-			r.Get("/batches/{id}/download", batches.Download)
-			r.Get("/batch-items", batches.DoneItems)
 		}
 	})
 

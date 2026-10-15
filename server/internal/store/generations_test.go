@@ -158,35 +158,17 @@ func TestCardTypeDeleteCascadesGenerations(t *testing.T) {
 	}
 }
 
-func TestImageNamesNumberPerPairAcrossSources(t *testing.T) {
+func TestImageNamesNumberPerPair(t *testing.T) {
 	s, fid, ctid := genFixtures(t)
 	a, _ := s.Create(fid, ctid, "draft", "m", "low", ImageNameSuffix("Sisters of Battle", "combat", "low"), "p")
 	b, _ := s.Create(fid, ctid, "final", "m", "high", ImageNameSuffix("Sisters of Battle", "combat", "high"), "p")
 	if a.Name != "1-sisters_of_battle-combat-low" || b.Name != "2-sisters_of_battle-combat-high" || b.Quality != "high" {
 		t.Fatalf("names: %q %q", a.Name, b.Name)
 	}
-	bs := NewBatchesStore(s.db)
-	batch, err := bs.Create("draft", "m", "x", []BatchItemInput{
-		{FactionID: fid, CardTypeID: ctid, CustomID: "x", Quality: "low", NameSuffix: "-sisters_of_battle-combat-low"},
-		{FactionID: fid, CardTypeID: ctid, CustomID: "y", Quality: "low", NameSuffix: "-sisters_of_battle-combat-low"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	items, _ := bs.Items(batch.ID)
-	if items[0].Name != "3-sisters_of_battle-combat-low" || items[1].Name != "4-sisters_of_battle-combat-low" {
-		t.Fatalf("batch names: %q %q", items[0].Name, items[1].Name)
-	}
 	if err := s.SetFavorite(a.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.Get(a.ID); !got.Favorite {
 		t.Fatal("favorite not saved")
-	}
-	if err := bs.SetItemFavorite(batch.ID, items[1].ID, true); err != nil {
-		t.Fatal(err)
-	}
-	if done, _ := bs.Items(batch.ID); !done[1].Favorite || done[0].Favorite {
-		t.Fatalf("item favorites: %+v", done)
 	}
 }

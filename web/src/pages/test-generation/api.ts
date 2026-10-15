@@ -12,9 +12,8 @@ export type Generation = {
   name: string // "<n>-<faction>-<type>-<quality>"
   favorite: boolean
   // Set when this is an area edit of an earlier image.
-  parent_kind: '' | 'generation' | 'batch-item'
+  parent_kind: '' | 'generation'
   parent_id: number
-  parent_batch_id: number
   parent_name: string
   edit_instruction: string
   prompt: string
@@ -79,7 +78,7 @@ export function startGeneration(body: {
   mode: 'draft' | 'final'
   prompt_override?: string
   model?: string
-  front_image?: { kind: 'generation' | 'batch-item'; id: number; batch_id?: number }
+  front_image?: { kind: 'generation'; id: number }
 }): Promise<Generation> {
   return apiSend<Generation>('POST', '/api/generate', body)
 }

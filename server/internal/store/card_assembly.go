@@ -98,8 +98,6 @@ func (s *CardsStore) AssemblySource(key string) (string, error) {
 	switch parts[0] {
 	case "test":
 		table = "generations"
-	case "batch":
-		table = "batch_items"
 	default:
 		return "", ErrNotFound
 	}

@@ -18,13 +18,12 @@ import (
 const maxMaskBytes = 20 << 20
 
 type imageSource struct {
-	Kind    string `json:"kind"`
-	ID      int64  `json:"id"`
-	BatchID int64  `json:"batch_id"`
+	Kind string `json:"kind"`
+	ID   int64  `json:"id"`
 }
 
 type imageEditRequest struct {
-	// The image to edit: a generation, or a batch item (BatchID + ID).
+	// The image to edit: a generation.
 	Parent      imageSource `json:"parent"`
 	Mask        string      `json:"mask"` // PNG data URL; transparent pixels = edit here; empty edits the whole image
 	Instruction string      `json:"instruction"`
@@ -152,39 +151,8 @@ func (h *GenerationsHandler) loadEditParent(req imageEditRequest) (editParent, i
 			factionID: g.FactionID, cardTypeID: g.CardTypeID, mode: g.Mode, model: g.Model,
 			quality: g.Quality, prompt: g.Prompt, imagePath: g.ImagePath,
 		}, 0, nil
-	case "batch-item":
-		b, err := h.Batches.Get(req.Parent.BatchID)
-		if err != nil {
-			return editParent{}, http.StatusNotFound, fmt.Errorf("batch not found")
-		}
-		items, err := h.Batches.Items(b.ID)
-		if err != nil {
-			return editParent{}, http.StatusInternalServerError, err
-		}
-		for _, it := range items {
-			if it.ID != req.Parent.ID {
-				continue
-			}
-			if it.Status != "done" || it.ImagePath == "" {
-				return editParent{}, http.StatusConflict, fmt.Errorf("batch item has no finished image")
-			}
-			// Batch items don't store their prompt; rebuild it from the
-			// current faction/card type.
-			f, err1 := h.Factions.Get(it.FactionID)
-			ct, err2 := h.CardTypes.Get(it.CardTypeID)
-			if err1 != nil || err2 != nil {
-				return editParent{}, http.StatusNotFound, fmt.Errorf("faction or card type not found")
-			}
-			return editParent{
-				origin:    store.EditOrigin{Kind: "batch-item", ID: it.ID, BatchID: b.ID, Name: it.Name},
-				factionID: it.FactionID, cardTypeID: it.CardTypeID, mode: b.Mode, model: b.Model,
-				quality: it.Quality, prompt: prompt.ImageEdit(ct.Description, ct.Constraints, factionStyle(f)),
-				imagePath: it.ImagePath,
-			}, 0, nil
-		}
-		return editParent{}, http.StatusNotFound, fmt.Errorf("batch item not found")
 	}
-	return editParent{}, http.StatusBadRequest, fmt.Errorf(`parent.kind must be "generation" or "batch-item"`)
+	return editParent{}, http.StatusBadRequest, fmt.Errorf(`parent.kind must be "generation"`)
 }
 
 // decodePNGDataURL accepts "data:image/png;base64,…" (or bare base64).

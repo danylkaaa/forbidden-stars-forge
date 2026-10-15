@@ -25,7 +25,6 @@ beforeEach(() => {
     http.get('/api/faction-logos', () => HttpResponse.json([{ faction_id: 1, url: '/logo' }])),
     http.get('/api/assembly-templates', () => HttpResponse.json([])),
     http.get('/api/generations', () => HttpResponse.json([])),
-    http.get('/api/batch-items', () => HttpResponse.json([])),
     http.get('/api/card-types', () => HttpResponse.json([])),
   )
 })

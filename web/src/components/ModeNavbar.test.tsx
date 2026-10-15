@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './AppLayout'
 
 function mount(path: string) {
-  const router = createMemoryRouter([{ element: <AppLayout />, children: ['factions', 'card-types', 'cards', 'assemble', 'faction-lab', 'generations', 'batches/:id', 'settings', 'card-templates'].map(path => ({ path: `/${path}`, element: <p>Page content</p> })) }], { initialEntries: [path] })
+  const router = createMemoryRouter([{ element: <AppLayout />, children: ['factions', 'card-types', 'cards', 'assemble', 'faction-lab', 'generations', 'settings', 'card-templates'].map(path => ({ path: `/${path}`, element: <p>Page content</p> })) }], { initialEntries: [path] })
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
   return router
 }
@@ -15,7 +15,7 @@ const modes = () => within(screen.getByRole('navigation', { name: 'Workspace mod
 test('top navbar switches between generation and library sections', async () => {
   mount('/faction-lab')
   expect(modes().getByRole('link', { name: 'AI Image Generation' })).toHaveAttribute('aria-current', 'page')
-  expect(sections().getByRole('link', { name: 'Batch Processing' })).toBeInTheDocument()
+  expect(sections().getByRole('link', { name: 'Assets' })).toBeInTheDocument()
   expect(sections().queryByRole('link', { name: 'Cards' })).not.toBeInTheDocument()
   expect(sections().queryByRole('link', { name: 'Test Generation' })).not.toBeInTheDocument()
   await userEvent.click(modes().getByRole('link', { name: 'Library' }))
@@ -43,7 +43,7 @@ test('shared management pages preserve library mode through navigation and Back'
 
 test.each([
   ['/assemble', 'Library'], ['/factions?mode=library', 'Library'],
-  ['/card-types?mode=library', 'Library'], ['/batches/42', 'AI Image Generation'], ['/settings', 'AI Image Generation'],
+  ['/card-types?mode=library', 'Library'], ['/generations', 'AI Image Generation'], ['/settings', 'AI Image Generation'],
 ])('deep link %s opens the correct mode', (path, mode) => {
   mount(path)
   expect(modes().getByRole('link', { name: mode })).toHaveAttribute('aria-current', 'page')

@@ -8,11 +8,10 @@ import (
 )
 
 // nextImageNumber is a SQL expression for the next image number of a
-// faction × card type pair, counted across Test Generation and batches.
-// Args: factionID, cardTypeID, factionID, cardTypeID. The single-writer
+// faction × card type pair, counted across Test Generation.
+// Args: factionID, cardTypeID. The single-writer
 // connection (db.go) serializes inserts, so numbers don't collide.
-const nextImageNumber = `(SELECT COUNT(*) FROM generations WHERE faction_id = ? AND card_type_id = ?) +
-	(SELECT COUNT(*) FROM batch_items WHERE faction_id = ? AND card_type_id = ?) + 1`
+const nextImageNumber = `(SELECT COUNT(*) FROM generations WHERE faction_id = ? AND card_type_id = ?) + 1`
 
 var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
@@ -36,9 +35,8 @@ type Generation struct {
 	Name       string `json:"name"` // "<n>-<faction>-<type>-<quality>", searchable
 	Favorite   bool   `json:"favorite"`
 	// Set when this generation is an area edit of an earlier image.
-	ParentKind      string  `json:"parent_kind"` // "", "generation" or "batch-item"
+	ParentKind      string  `json:"parent_kind"` // "", "generation"
 	ParentID        int64   `json:"parent_id"`
-	ParentBatchID   int64   `json:"parent_batch_id"` // batch of a batch-item parent
 	ParentName      string  `json:"parent_name"`
 	EditInstruction string  `json:"edit_instruction"`
 	Prompt          string  `json:"prompt"`
@@ -61,14 +59,14 @@ func NewGenerationsStore(db *sql.DB) *GenerationsStore {
 }
 
 const generationCols = `id, faction_id, card_type_id, mode, model, quality, name, favorite,
-	parent_kind, parent_id, parent_batch_id, parent_name, edit_instruction, prompt, status,
+	parent_kind, parent_id, parent_name, edit_instruction, prompt, status,
 	COALESCE(image_path,''), COALESCE(input_tokens,0), COALESCE(output_tokens,0),
 	COALESCE(cost_usd,0), COALESCE(duration_ms,0), COALESCE(error,''), created_at`
 
 func scanGeneration(row interface{ Scan(...any) error }) (Generation, error) {
 	var g Generation
 	err := row.Scan(&g.ID, &g.FactionID, &g.CardTypeID, &g.Mode, &g.Model, &g.Quality, &g.Name, &g.Favorite,
-		&g.ParentKind, &g.ParentID, &g.ParentBatchID, &g.ParentName, &g.EditInstruction, &g.Prompt, &g.Status,
+		&g.ParentKind, &g.ParentID, &g.ParentName, &g.EditInstruction, &g.Prompt, &g.Status,
 		&g.ImagePath, &g.InputTokens, &g.OutputTokens, &g.CostUSD, &g.DurationMS, &g.Error, &g.CreatedAt)
 	if err == sql.ErrNoRows {
 		return g, ErrNotFound
@@ -82,7 +80,7 @@ func (s *GenerationsStore) Create(factionID, cardTypeID int64, mode, model, qual
 	res, err := s.db.Exec(
 		`INSERT INTO generations (faction_id, card_type_id, mode, model, quality, name, prompt, status)
 		 VALUES (?, ?, ?, ?, ?, (`+nextImageNumber+`) || ?, ?, 'pending')`,
-		factionID, cardTypeID, mode, model, quality, factionID, cardTypeID, factionID, cardTypeID, nameSuffix, prompt)
+		factionID, cardTypeID, mode, model, quality, factionID, cardTypeID, nameSuffix, prompt)
 	if err != nil {
 		return Generation{}, err
 	}
@@ -132,17 +130,16 @@ func (s *GenerationsStore) MarkDone(id int64, imagePath string, inTok, outTok in
 
 // EditOrigin describes the image an area edit was made from.
 type EditOrigin struct {
-	Kind        string // "generation" or "batch-item"
+	Kind        string // "generation"
 	ID          int64
-	BatchID     int64 // for batch-item parents
 	Name        string
 	Instruction string
 }
 
 // SetEditOrigin marks a (just created) generation as an edit of origin.
 func (s *GenerationsStore) SetEditOrigin(id int64, o EditOrigin) (Generation, error) {
-	res, err := s.db.Exec(`UPDATE generations SET parent_kind = ?, parent_id = ?, parent_batch_id = ?,
-		parent_name = ?, edit_instruction = ? WHERE id = ?`, o.Kind, o.ID, o.BatchID, o.Name, o.Instruction, id)
+	res, err := s.db.Exec(`UPDATE generations SET parent_kind = ?, parent_id = ?,
+		parent_name = ?, edit_instruction = ? WHERE id = ?`, o.Kind, o.ID, o.Name, o.Instruction, id)
 	if err != nil {
 		return Generation{}, err
 	}

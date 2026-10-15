@@ -80,7 +80,7 @@ bottom decoration. Artwork shows only where the template is transparent.
 ## Workspace modes
 
 Use the top navbar to switch between **AI Image Generation** (Faction Lab,
-Generations, batches, and API settings) and **Library**
+Generations, and API settings) and **Library**
 (the card library). Factions and Card Types are available in
 both modes. Shared pages retain library mode in their URL for reloads and
 browser history. On narrow screens, section links appear below the navbar.
@@ -90,7 +90,7 @@ browser history. On narrow screens, section links appear below the navbar.
 Open **Library** (`/assemble`) and pick a faction. The gear button (top
 left) opens **Card templates** (preview with the demo card at any level
 or one of the faction's cards; **Favourites only** filters images): for each faction and tab (Combat, Events,
-Upgrades) choose the finished generated image (Faction Lab or batch) every
+Upgrades) choose the finished generated image (Faction Lab) every
 card is assembled on. Options render as demo cards. Choices are stored in
 SQLite (`assembly_templates`).
 

@@ -87,11 +87,9 @@ const (
 	// prompt, roughly half image and half text tokens.
 	defaultImageInputTokens = 900
 	defaultTextInputTokens  = 800
-	BatchDiscount           = 0.5 // Batch API price is 50% of standard
 )
 
-// PastRun is a finished run's output tokens and its cost at standard
-// (non-batch) prices — batch costs doubled back.
+// PastRun is a finished run's output tokens and its cost at standard prices.
 type PastRun struct {
 	OutputTokens int64
 	StandardCost float64
@@ -112,7 +110,7 @@ func OutputTokens(quality, size string) int64 {
 	return base * w * h / measuredArea
 }
 
-// EstimatePerImage estimates one standard (non-batch) image's cost: the
+// EstimatePerImage estimates one image's cost: the
 // output part from quality+size, the input part (template image + prompt,
 // text and image tokens priced differently) from the median input cost of
 // recent real runs, or a typical default. Returns 0 when the model has no

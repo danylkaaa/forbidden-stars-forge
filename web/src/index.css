@@ -114,7 +114,7 @@ h2 {
 }
 
 /* App-wide checkbox look: dark box, accent fill + check when checked.
-   Applies to every <input type="checkbox"> (batch wizard, filters, …). */
+   Applies to every <input type="checkbox"> (filters, …). */
 input[type='checkbox'] {
   appearance: none;
   flex: none;

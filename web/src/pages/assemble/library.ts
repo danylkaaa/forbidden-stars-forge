@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCardTypes, type CardType } from '../card-types/api'
 import { useGenerations, generationImageUrl } from '../test-generation/api'
-import { useDoneBatchItems } from '../generations/api'
-import { batchItemImageUrl } from '../batches/api'
 import type { Category } from '../cards/model'
 import { useFactions } from '../factions/api'
 import { useFactionLogos } from './logos'
@@ -12,16 +10,15 @@ import { useAssemblyTemplates, useBackLogoScale, useCardTypeLayouts, useFactionB
 import { LIBRARY_TABS, assemblyLayout } from './model'
 import type { ImageRef } from '../../lib/favorites'
 
-// A finished generated image (Faction Lab or batch) usable as a card template.
-export type LibraryImage = { key: string; name: string; factionId: number; cardTypeId: number; url: string; createdAt: string; source: 'Lab' | 'Batch'; favorite: boolean; generationId?: number; logoUrl?: string; logoScale?: number; elementUrl?: string; ref: ImageRef }
+// A finished generated image (Faction Lab) usable as a card template.
+export type LibraryImage = { key: string; name: string; factionId: number; cardTypeId: number; url: string; createdAt: string; source: 'Lab'; favorite: boolean; generationId?: number; logoUrl?: string; logoScale?: number; elementUrl?: string; ref: ImageRef }
 
 export function useLibraryImages() {
-  const generations = useGenerations(), batches = useDoneBatchItems()
+  const generations = useGenerations()
   const data = useMemo(() => [
     ...(generations.data ?? []).flatMap<LibraryImage>(g => { const url = generationImageUrl(g); return url ? [{ key: `test-${g.id}`, name: g.name || `Generation #${g.id}`, factionId: g.faction_id, cardTypeId: g.card_type_id, url, createdAt: g.created_at, source: 'Lab', favorite: g.favorite, generationId: g.id, ref: { kind: 'generation', id: g.id } }] : [] }),
-    ...(batches.data ?? []).flatMap<LibraryImage>(b => { const url = batchItemImageUrl(b.batch_id, b); return url ? [{ key: `batch-${b.id}`, name: b.name || `Batch image #${b.id}`, factionId: b.faction_id, cardTypeId: b.card_type_id, url, createdAt: b.completed_at, source: 'Batch', favorite: b.favorite, ref: { kind: 'batch-item', batchId: b.batch_id, itemId: b.id } }] : [] }),
-  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [generations.data, batches.data])
-  return { data, queries: [generations, batches], isPending: generations.isPending || batches.isPending }
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [generations.data])
+  return { data, queries: [generations], isPending: generations.isPending }
 }
 
 // Card types whose name suggests the category come first in the picker.

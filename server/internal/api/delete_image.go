@@ -33,18 +33,3 @@ func (h *GenerationsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	path, err := h.Gens.Delete(id)
 	finishImageDelete(w, h.DataDir, path, err)
 }
-
-func (h *BatchesHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
-	batchID, ok := idParam(r, "id")
-	if !ok {
-		writeError(w, 400, "invalid batch id")
-		return
-	}
-	itemID, ok := idParam(r, "itemID")
-	if !ok {
-		writeError(w, 400, "invalid image id")
-		return
-	}
-	path, err := h.Store.DeleteItem(batchID, itemID)
-	finishImageDelete(w, h.DataDir, path, err)
-}

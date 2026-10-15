@@ -47,17 +47,6 @@ export function TestGenIcon({ className }: IconProps) {
   )
 }
 
-export function BatchIcon({ className }: IconProps) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className}>
-      <rect x="2" y="2" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="10" y="2" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="10" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="10" y="10" width="6" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
 export function SettingsIcon({ className }: IconProps) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className}>

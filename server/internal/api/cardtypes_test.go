@@ -262,7 +262,7 @@ func putOverlay(t *testing.T, h http.Handler, id int64, fileName string) (*httpt
 }
 
 func TestCardTypeOverlayUploadServeReplaceDelete(t *testing.T) {
-	h, _, dataDir := newTestRouterWithStore(t)
+	h, dataDir := newTestRouterWithStore(t)
 	_, ct := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "combat"}, "", nil)
 	id := int64(ct["id"].(float64))
 

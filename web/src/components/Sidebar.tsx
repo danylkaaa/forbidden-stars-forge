@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router'
 import type { ComponentType } from 'react'
-import { FactionsIcon, CardTypesIcon, LibraryIcon, LayersIcon, LabIcon, GalleryIcon, BatchIcon, SettingsIcon } from './icons'
+import { FactionsIcon, CardTypesIcon, LibraryIcon, LayersIcon, LabIcon, GalleryIcon, SettingsIcon } from './icons'
 
 import { workspaceLink, type WorkspaceMode } from './workspaceMode'
 
@@ -12,7 +12,6 @@ const items: { to: string; label: string; Icon: ComponentType<{ className?: stri
   { to: '/card-types', label: 'Card Templates', Icon: CardTypesIcon },
   { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
   { to: '/generations', label: 'Assets', Icon: GalleryIcon },
-  { to: '/batches', label: 'Batch Processing', Icon: BatchIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]
 

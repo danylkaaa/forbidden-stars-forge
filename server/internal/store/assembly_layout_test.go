@@ -48,6 +48,10 @@ func TestSharedLayoutMigrationKeepsLatestCombination(t *testing.T) {
 	if _, err := s.db.Exec("DROP TABLE assembly_layouts"); err != nil {
 		t.Fatal(err)
 	}
+	// Batch processing is gone; the historical migration under test still reads its table.
+	if _, err := s.db.Exec("CREATE TABLE batch_items (id INTEGER PRIMARY KEY, faction_id INTEGER, card_type_id INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
 	migration, err := migrationsFS.ReadFile("migrations/0017_shared_assembly_layouts.up.sql")
 	if err != nil {
 		t.Fatal(err)

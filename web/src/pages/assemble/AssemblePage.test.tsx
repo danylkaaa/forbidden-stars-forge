@@ -40,8 +40,7 @@ beforeEach(() => {
     http.get('/api/cards/:id', ({ params }) => HttpResponse.json(records.find(c => c.id === Number(params.id)))),
     http.get('/api/factions', () => HttpResponse.json([{ id: 1, name: 'Tau' }])),
     http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }])),
-    http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
-    http.get('/api/batch-items', () => HttpResponse.json([{ id: 6, batch_id: 2, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', completed_at: '2025' }])),
+    http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }, { id: 6, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', created_at: '2025' }])),
     http.put('/api/cards/:id', async ({ request, params }) => { const input = await request.json() as CardInput; updates.push(input); const saved = { ...input, id: Number(params.id), created_at: '', updated_at: '' } as Card; records = records.map(c => c.id === saved.id ? saved : c); return HttpResponse.json(saved) }),
   )
 })
@@ -71,15 +70,16 @@ test('library renders every combat card of the faction on the chosen template', 
   expect(screen.queryByRole('link', { name: 'Edit Winged Horror' })).not.toBeInTheDocument()
 })
 
-test.each(['Lab', 'Batch'])('library deletes an unwanted %s experiment only after confirmation', async source => {
+const GENERATION_5 = { id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }
+const GENERATION_6 = { id: 6, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', created_at: '2025' }
+
+test('library deletes an unwanted experiment only after confirmation', async () => {
   templates = []
-  const name = source === 'Lab' ? 'Generated art' : 'Batch art'
-  const path = source === 'Lab' ? '/api/generations/5' : '/api/batches/2/items/6'
+  const name = 'Generated art'
   let removed = false
   server.use(
-    http.delete(path, () => { removed = true; return new HttpResponse(null, { status: 204 }) }),
-    http.get('/api/generations', () => HttpResponse.json(removed && source === 'Lab' ? [] : [{ id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
-    http.get('/api/batch-items', () => HttpResponse.json(removed && source === 'Batch' ? [] : [{ id: 6, batch_id: 2, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', completed_at: '2025' }])),
+    http.delete('/api/generations/5', () => { removed = true; return new HttpResponse(null, { status: 204 }) }),
+    http.get('/api/generations', () => HttpResponse.json(removed ? [GENERATION_6] : [GENERATION_5, GENERATION_6])),
   )
   mount('/assemble')
   await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
@@ -93,7 +93,7 @@ test.each(['Lab', 'Batch'])('library deletes an unwanted %s experiment only afte
   confirmation = await screen.findByRole('dialog', { name: 'Delete generated image?' })
   await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete image' }))
   await waitFor(() => expect(within(picker).queryByRole('button', { name: `Use ${name}` })).not.toBeInTheDocument())
-  expect(within(picker).getByRole('button', { name: `Use ${source === 'Lab' ? 'Batch art' : 'Generated art'}` })).toBeInTheDocument()
+  expect(within(picker).getByRole('button', { name: 'Use Batch art' })).toBeInTheDocument()
 })
 
 test('library explains why a used template cannot be deleted', async () => {
@@ -114,10 +114,10 @@ test('settings dialog lists faction images as demo cards and saves the choice', 
   expect(await screen.findByText(/No combat template chosen for Tau/)).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Card template settings' }))
   const dialog = await screen.findByRole('dialog', { name: 'Card templates' })
-  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Righteous Fury' }), imageUrl: '/api/batches/2/items/6/image' })))
+  await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Righteous Fury' }), imageUrl: '/api/generations/6/image' })))
   await userEvent.click(within(dialog).getByRole('button', { name: 'Use Batch art' }))
   await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Use Batch art' })).toHaveAttribute('aria-pressed', 'true'))
-  expect(templates).toEqual([{ faction_id: 1, category: 'combat', side: 'front', image_key: 'batch-6' }])
+  expect(templates).toEqual([{ faction_id: 1, category: 'combat', side: 'front', image_key: 'test-6' }])
 })
 
 test('editor previews text edits and saves card and artwork position together; text cannot be repositioned', async () => {
@@ -298,13 +298,13 @@ test('the deck back is listed first and chosen on its own page', async () => {
 })
 
 test('the cube opens a 3D preview with the rendered front and the deck back, turned by dragging', async () => {
-  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'batch-6' })
+  templates.push({ faction_id: 1, category: 'combat', side: 'back', image_key: 'test-6' })
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,front')
   mount('/assemble')
   await userEvent.click(await screen.findByRole('button', { name: '3D preview of Winged Horror' }))
   const viewer = await screen.findByRole('dialog', { name: '3D preview of Winged Horror' })
   expect(within(viewer).getByRole('img', { name: 'Winged Horror front' })).toHaveAttribute('src', 'data:image/png;base64,front')
-  expect(within(viewer).getByRole('img', { name: 'Winged Horror back' })).toHaveAttribute('src', '/api/batches/2/items/6/image')
+  expect(within(viewer).getByRole('img', { name: 'Winged Horror back' })).toHaveAttribute('src', '/api/generations/6/image')
   const card = within(viewer).getByTestId('card-3d'), before = card.style.transform
   const scene = card.parentElement!
   fireEvent.pointerDown(scene, { button: 0, clientX: 100, clientY: 100, pointerId: 1 })

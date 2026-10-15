@@ -11,7 +11,7 @@ import { labLink, useLibraryImages, type LibraryImage } from './library'
 type Upload = { url?: string; pending?: boolean; onPick: (file: File) => void }
 type PickerProps = { selectedKey: string; onSelect: (key: string) => void; factionId: number | null; title: string; preferredType?: string; upload?: Upload }
 
-// Choose a generated image (Faction Lab or batch) in a popup: filtered to the
+// Choose a generated image (Faction Lab) in a popup: filtered to the
 // faction by default (untick to see every faction), searchable by name, type or
 // faction. The selected image can be opened in Faction Lab from the field.
 export function ImagePickerDialog({ selectedKey, onSelect, factionId, title, preferredType, upload, onClose }: PickerProps & { onClose: () => void }) {

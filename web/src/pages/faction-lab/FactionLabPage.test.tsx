@@ -46,7 +46,6 @@ beforeEach(() => {
   server.use(
     http.get('/api/factions', () => HttpResponse.json([faction])),
     http.get('/api/card-types', () => HttpResponse.json(cardTypes)),
-    http.get('/api/batch-items', () => HttpResponse.json([])),
     http.get('/api/assembly-templates', () => HttpResponse.json([])),
     http.get('/api/generations', () => HttpResponse.json(gens)),
     http.get('/api/generate/preview', () => HttpResponse.json({ prompt: 'saved prompt', has_file: true, est_draft_usd: 0.015, est_final_usd: 0.048 })),
@@ -189,30 +188,30 @@ test('a finished run can be previewed as a card with an existing card of the fac
 })
 
 
-test('back generation attaches a selected lab or batch front and clears it when the pair changes', async () => {
+test('back generation attaches a selected front and clears it when the pair changes', async () => {
   const back = { ...cardTypes[0], id: 2, name: 'card back' }
   gens = [
     { ...gen, id: 41, name: 'lab-front', status: 'done', image_path: 'front' },
     { ...gen, id: 42, status: 'pending' },
     { ...gen, id: 43, faction_id: 99, status: 'done' },
     { ...gen, id: 44, card_type_id: 2, status: 'done' },
+    { ...gen, id: 9, status: 'done', name: 'second-front', image_path: 'front2' },
   ]
   server.use(
     http.get('/api/card-types', () => HttpResponse.json([...cardTypes, back])),
-    http.get('/api/batch-items', () => HttpResponse.json([{ ...gen, id: 9, batch_id: 3, status: 'done', name: 'batch-front' }])),
     http.get('/api/assembly-templates', () => HttpResponse.json([
       { faction_id: 99, category: 'combat', image_key: 'test-41' },
       { faction_id: 1, category: 'combat', side: 'back', image_key: 'test-41' },
-      { faction_id: 1, category: 'combat', side: 'front', image_key: 'batch-9' },
+      { faction_id: 1, category: 'combat', side: 'front', image_key: 'test-9' },
     ])),
   )
   renderAt('/faction-lab?faction=1&card_type=2')
   await userEvent.click(await screen.findByRole('button', { name: 'Choose front image' }))
   const popup = screen.getByRole('dialog', { name: 'Choose front image' })
-  await waitFor(() => expect(within(popup).getAllByRole('button', { name: /^Use (lab-front|batch-front)$/ })).toHaveLength(2))
+  await waitFor(() => expect(within(popup).getAllByRole('button', { name: /^Use (lab-front|second-front)$/ })).toHaveLength(2))
   await waitFor(() => expect(within(popup).getByText('Current faction front')).toBeInTheDocument())
-  expect(within(popup).getAllByRole('img').map((img) => img.getAttribute('src'))).toEqual(['/api/batches/3/items/9/image', '/api/generations/41/image'])
-  expect(within(popup).getByRole('button', { name: 'Use batch-front' })).toHaveTextContent('Current faction front')
+  expect(within(popup).getAllByRole('img').map((img) => img.getAttribute('src'))).toEqual(['/api/generations/9/image', '/api/generations/41/image'])
+  expect(within(popup).getByRole('button', { name: 'Use second-front' })).toHaveTextContent('Current faction front')
   expect(within(popup).getByRole('button', { name: 'Use lab-front' })).not.toHaveTextContent('Current faction front')
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByRole('dialog', { name: 'Choose front image' })).not.toBeInTheDocument()
@@ -226,14 +225,14 @@ test('back generation attaches a selected lab or batch front and clears it when 
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
   await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'generation', id: 41 } }))
   await userEvent.click(screen.getByAltText('Selected front reference'))
-  await userEvent.click(screen.getByRole('button', { name: 'Use batch-front' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Use second-front' }))
   await userEvent.click(screen.getByAltText('Selected front reference'))
-  expect(screen.getByRole('button', { name: 'Use batch-front' })).toHaveAttribute('aria-pressed', 'true')
-  expect(screen.getByRole('button', { name: 'Use batch-front' })).toHaveTextContent('Selected reference')
+  expect(screen.getByRole('button', { name: 'Use second-front' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: 'Use second-front' })).toHaveTextContent('Selected reference')
   await userEvent.click(within(screen.getByRole('dialog', { name: 'Choose front image' })).getByRole('button', { name: 'Close' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
-  await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'batch-item', id: 9, batch_id: 3 } }))
+  await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'generation', id: 9 } }))
   await userEvent.selectOptions(screen.getByLabelText('Card Type'), '1')
   expect(screen.queryByRole('button', { name: 'Choose front image' })).not.toBeInTheDocument()
   await userEvent.selectOptions(screen.getByLabelText('Card Type'), '2')
@@ -255,7 +254,6 @@ test.each(['combat', 'card back'])('%s opens a 3D preview on the generated side'
   server.use(
     http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name }])),
     http.get('/api/assembly-templates', () => HttpResponse.json([])),
-    http.get('/api/batch-items', () => HttpResponse.json([])),
     http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', lower_text: '', created_at: '', updated_at: '' }])),
     http.get('/api/cards/7/assembly', () => HttpResponse.json({ image_url: '/api/cards/7/artwork', subtype_id: 0, transform: { scale: 1.5, x: 3, y: 0 }, layout: {} })),
     http.get('/api/card-type-layouts', () => HttpResponse.json([])),

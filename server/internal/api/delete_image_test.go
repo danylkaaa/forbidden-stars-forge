@@ -2,7 +2,6 @@ package api
 
 import (
 	"cardforge/internal/store"
-	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestDeleteGeneratedImages(t *testing.T) {
-	for _, source := range []string{"generation", "batch"} {
+	for _, source := range []string{"generation"} {
 		t.Run(source, func(t *testing.T) {
 			dir := t.TempDir()
 			db, err := store.Open(filepath.Join(dir, "test.db"))
@@ -26,13 +25,13 @@ func TestDeleteGeneratedImages(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gens, batches := store.NewGenerationsStore(db), store.NewBatchesStore(db)
+			gens := store.NewGenerationsStore(db)
 			path := "experiment.png"
 			if err := os.WriteFile(filepath.Join(dir, path), artworkPNG(t), 0644); err != nil {
 				t.Fatal(err)
 			}
 			var endpoint, imageURL, key, table string
-			var imageID, batchID int64
+			var imageID int64
 			kind := "generation"
 			if source == "generation" {
 				g, err := gens.Create(fid, ct.ID, "draft", "m", "low", "-tau-combat-low", "p")
@@ -47,31 +46,10 @@ func TestDeleteGeneratedImages(t *testing.T) {
 				if err := gens.MarkDone(g.ID, path, 1, 2, 0.5, 100); err != nil {
 					t.Fatal(err)
 				}
-			} else {
-				b, err := batches.Create("draft", "m", "requests.jsonl", []store.BatchItemInput{{FactionID: fid, CardTypeID: ct.ID, CustomID: "a", Quality: "low", NameSuffix: "-tau-combat-low"}, {FactionID: fid, CardTypeID: ct.ID, CustomID: "b", Quality: "low", NameSuffix: "-tau-combat-low"}})
-				if err != nil {
-					t.Fatal(err)
-				}
-				items, _ := batches.Items(b.ID)
-				imageID, batchID, kind = items[0].ID, b.ID, "batch-item"
-				endpoint, key, table = fmt.Sprintf("/api/batches/%d/items/%d", b.ID, imageID), fmt.Sprintf("batch-%d", imageID), "batch_items"
-				if err := batches.MarkItemDone(b.ID, "a", path, 1, 2, 0.5); err != nil {
-					t.Fatal(err)
-				}
-				if rec, _ := doJSON(t, h, "DELETE", endpoint, ""); rec.Code != 409 {
-					t.Fatal("deleted image in active batch")
-				}
-				if err := batches.Complete(b.ID, "output.jsonl", 0.5); err != nil {
-					t.Fatal(err)
-				}
-				wrong := fmt.Sprintf("/api/batches/%d/items/%d", b.ID+999, imageID)
-				if rec, _ := doJSON(t, h, "DELETE", wrong, ""); rec.Code != 404 {
-					t.Fatal("wrong batch accepted")
-				}
 			}
 			imageURL = endpoint + "/image"
 			descendant, _ := gens.Create(fid, ct.ID, "draft", "m", "low", "-tau-combat-low", "edited")
-			gens.SetEditOrigin(descendant.ID, store.EditOrigin{Kind: kind, ID: imageID, BatchID: batchID, Name: "original", Instruction: "change sky"})
+			gens.SetEditOrigin(descendant.ID, store.EditOrigin{Kind: kind, ID: imageID, Name: "original", Instruction: "change sky"})
 			cards := store.NewCardsStore(db)
 			choice := store.AssemblyTemplate{FactionID: fid, Category: "combat", Side: "back", ImageKey: key}
 			if err := cards.SaveAssemblyTemplate(choice); err != nil {
@@ -124,29 +102,13 @@ func TestDeleteGeneratedImages(t *testing.T) {
 			}
 			next, _ := gens.Create(fid, ct.ID, "draft", "m", "low", "-tau-combat-low", "next")
 			expected := "3-tau-combat-low"
-			if source == "batch" {
-				expected = "4-tau-combat-low"
-			}
 			if next.Name != expected {
 				t.Fatalf("numbering: %s", next.Name)
 			}
-			if source == "generation" {
-				list, _ := gens.List()
-				for _, g := range list {
-					if g.ID == imageID {
-						t.Fatal("deleted experiment listed")
-					}
-				}
-			} else {
-				rec, _ := doJSON(t, h, "GET", "/api/batch-items", "")
-				var list []store.GalleryItem
-				json.Unmarshal(rec.Body.Bytes(), &list)
-				if len(list) != 0 {
-					t.Fatal("deleted batch image listed")
-				}
-				items, _ := batches.Items(batchID)
-				if len(items) != 1 {
-					t.Fatal("other batch item lost")
+			list, _ := gens.List()
+			for _, g := range list {
+				if g.ID == imageID {
+					t.Fatal("deleted experiment listed")
 				}
 			}
 		})

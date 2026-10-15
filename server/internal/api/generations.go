@@ -25,7 +25,6 @@ type GenerationsHandler struct {
 	Factions  *store.FactionsStore
 	CardTypes *store.CardTypesStore
 	Settings  *store.SettingsStore
-	Batches   *store.BatchesStore // for editing batch item images
 	Usage     *store.UsageStore
 	DataDir   string
 }

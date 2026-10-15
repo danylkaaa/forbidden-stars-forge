@@ -12,7 +12,6 @@ import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
-import { useDoneBatchItems } from '../generations/api'
 import { QuickCardPreview } from '../assemble/QuickCardPreview'
 import { GenerationPreview3D } from '../assemble/GenerationPreview3D'
 import { BackFlatPreview } from '../assemble/BackLogoPreview'
@@ -50,7 +49,6 @@ export default function FactionLabPage() {
   const { data: factions } = useFactions()
   const { data: cardTypes } = useCardTypes()
   const { data: gens, isPending: gensLoading, error: gensError } = useGenerations()
-  const batchImages = useDoneBatchItems()
   const [frontKey, setFrontKey] = useState('')
   const queryClient = useQueryClient()
   const start = useStartGeneration()
@@ -84,11 +82,6 @@ export default function FactionLabPage() {
       key: `generation-${g.id}`, name: g.name || `Generation #${g.id}`, url: `/api/generations/${g.id}/image`,
       libraryKey: `test-${g.id}`, source: 'Lab' as const,
       ref: { kind: 'generation' as const, id: g.id },
-    })),
-    ...(batchImages.data ?? []).filter((b) => b.faction_id === faction?.id && isFrontType(b.card_type_id)).map((b) => ({
-      key: `batch-${b.batch_id}-${b.id}`, name: b.name || `Batch image #${b.id}`, url: `/api/batches/${b.batch_id}/items/${b.id}/image`,
-      libraryKey: `batch-${b.id}`, source: 'Batch' as const,
-      ref: { kind: 'batch-item' as const, id: b.id, batch_id: b.batch_id },
     })),
   ]
   const frontImage = isBack ? frontOptions.find((image) => image.key === frontKey) : undefined
@@ -236,7 +229,7 @@ export default function FactionLabPage() {
           {isBack && (
             <FrontImagePicker key={`${lab.factionId}-${lab.cardTypeId}`} options={frontOptions} selectedKey={frontImage?.key ?? ''}
               onSelect={setFrontKey} factionId={lab.factionId} frontTypeName={frontNames.join(' or ')}
-              loading={gensLoading || batchImages.isPending} error={!!gensError || !!batchImages.error} />
+              loading={gensLoading} error={!!gensError} />
           )}
 
           <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">

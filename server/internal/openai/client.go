@@ -206,7 +206,7 @@ func usesV2(model string) bool {
 }
 
 // EditBody is the JSON body for POST /v1/images/edits, shared by the
-// direct call and batch JSONL lines. Uses the `images` array of file
+// direct call. Uses the `images` array of file
 // references; output is always PNG so a transparent background works.
 // Moderation is always "low": grimdark Warhammer subjects (skulls, war,
 // gore) trip the default "auto" filter.

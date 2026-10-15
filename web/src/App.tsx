@@ -7,9 +7,6 @@ import FactionCardPage from './pages/faction-card/FactionCardPage'
 import FactionsRoute from './pages/factions/FactionsRoute'
 import CardTemplatesPage from './pages/assemble/CardTemplatesPage'
 import CardTypesPage from './pages/card-types/CardTypesPage'
-import BatchesPage from './pages/batches/BatchesPage'
-import NewBatchPage from './pages/batches/NewBatchPage'
-import BatchDetailPage from './pages/batches/BatchDetailPage'
 import SettingsPage from './pages/settings/SettingsPage'
 import GenerationsPage from './pages/generations/GenerationsPage'
 import BackPage from './pages/assemble/BackPage'
@@ -34,9 +31,6 @@ export const routes: RouteObject[] = [
       { path: '/faction-lab', element: <FactionLabPage /> },
       { path: '/test-generation', element: <Navigate to="/faction-lab" replace /> },
       { path: '/generations', element: <GenerationsPage /> },
-      { path: '/batches', element: <BatchesPage /> },
-      { path: '/batches/new', element: <NewBatchPage /> },
-      { path: '/batches/:id', element: <BatchDetailPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],
   },

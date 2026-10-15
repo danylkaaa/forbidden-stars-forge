@@ -36,7 +36,7 @@ test('sidebar renders all five section links', () => {
     ),
   )
   renderAt('/settings')
-  for (const label of ['Factions', 'Card Templates', 'Faction Lab', 'Assets', 'Batch Processing', 'Settings']) {
+  for (const label of ['Factions', 'Card Templates', 'Faction Lab', 'Assets', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
 })

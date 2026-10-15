@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"cardforge/internal/prompt"
-	"cardforge/internal/store"
 )
 
 // setupGenFixtures creates a faction and a card type WITH an openai file id
@@ -328,9 +327,6 @@ func TestFavoriteEndpoints(t *testing.T) {
 	if rec, _ := doJSON(t, h, http.MethodPut, "/api/generations/999/favorite", `{"favorite":true}`); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown: %d", rec.Code)
 	}
-	if rec, _ := doJSON(t, h, http.MethodPut, "/api/batches/1/items/1/favorite", `{"favorite":true}`); rec.Code != http.StatusNotFound {
-		t.Fatalf("unknown item: %d", rec.Code)
-	}
 }
 
 func TestAssembleUsesUnsavedCardTypeText(t *testing.T) {
@@ -347,7 +343,7 @@ func TestAssembleUsesUnsavedCardTypeText(t *testing.T) {
 
 func TestGenerateBackWithFrontReference(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
-	h, batches, dataDir := newTestRouterWithStore(t)
+	h, _ := newTestRouterWithStore(t)
 	fid, frontType := setupGenFixtures(t, h)
 	_, back := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "combat back", "constraints": "keep back layout"}, "back.png", pngBytes)
 	backType := int64(back["id"].(float64))
@@ -372,23 +368,8 @@ func TestGenerateBackWithFrontReference(t *testing.T) {
 	_, front := doJSON(t, h, http.MethodPost, "/api/generate", fmt.Sprintf(`{"faction_id":%d,"card_type_id":%d,"mode":"draft"}`, fid, frontType))
 	frontID := int64(front["id"].(float64))
 	pollGeneration(t, h, frontID)
-	b, err := batches.Create("draft", "gpt-image-2", "x", []store.BatchItemInput{{FactionID: fid, CardTypeID: frontType, CustomID: "front"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dataDir, "front.png"), pngBytes, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := batches.MarkItemDone(b.ID, "front", "front.png", 0, 0, 0); err != nil {
-		t.Fatal(err)
-	}
-	items, err := batches.Items(b.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, source := range []string{
 		fmt.Sprintf(`{"kind":"generation","id":%d}`, frontID),
-		fmt.Sprintf(`{"kind":"batch-item","batch_id":%d,"id":%d}`, b.ID, items[0].ID),
 	} {
 		// Previewed overrides must retain the instruction exactly once.
 		override := prompt.WithFrontReference("custom back prompt")

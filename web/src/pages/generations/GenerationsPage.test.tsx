@@ -19,10 +19,9 @@ const gen = (id: number, faction_id: number, card_type_id: number, status = 'don
   quality: 'low', name: `${id}-f${faction_id}-ct${card_type_id}-low`, favorite: id === 2,
   input_tokens: 0, output_tokens: 0, cost_usd: 0.1, duration_ms: 1, error: '', created_at: `2026-10-0${id} 10:00:00`,
 })
-const batchItem = {
-  id: 7, batch_id: 3, faction_id: 2, card_type_id: 2, custom_id: 'sisters__upgrade', status: 'done', image_path: 'y',
-  quality: 'high', name: '1-sisters-upgrade-high', favorite: false,
-  input_tokens: 0, output_tokens: 0, cost_usd: 0.05, error: '', mode: 'final', model: 'gpt-image-2.5-flare', completed_at: '2026-10-09 10:00:00',
+const upgradeGen = {
+  ...gen(7, 2, 2), mode: 'final', model: 'gpt-image-2.5-flare', quality: 'high', name: '1-sisters-upgrade-high', favorite: false,
+  cost_usd: 0.05, created_at: '2026-10-09 10:00:00',
 }
 
 function Search() {
@@ -44,18 +43,16 @@ beforeEach(() => {
   server.use(
     http.get('/api/factions', () => HttpResponse.json(factions)),
     http.get('/api/card-types', () => HttpResponse.json(cardTypes)),
-    http.get('/api/generations', () => HttpResponse.json([gen(1, 1, 1), gen(2, 2, 1), gen(4, 1, 2, 'pending')])),
-    http.get('/api/batch-items', () => HttpResponse.json([batchItem])),
+    http.get('/api/generations', () => HttpResponse.json([gen(1, 1, 1), gen(2, 2, 1), gen(4, 1, 2, 'pending'), upgradeGen])),
   )
 })
 
 const cards = () => screen.getAllByRole('button', { name: /^Open / }).map((b) => b.getAttribute('aria-label'))
 
-test('shows finished test generations and batch items, newest first', async () => {
+test('shows finished generations, newest first', async () => {
   renderAt('/generations')
   await screen.findByText('3 images')
   expect(cards()).toEqual(['Open Sisters × upgrade', 'Open Sisters × combat', 'Open Tau Empire × combat'])
-  expect(screen.getByRole('link', { name: 'batch #3' })).toHaveAttribute('href', '/batches/3')
 })
 
 test('filters are prefilled from the URL', async () => {
@@ -68,9 +65,9 @@ test('filters are prefilled from the URL', async () => {
 test('changing filters updates the URL; clear resets', async () => {
   renderAt('/generations?card_type=1')
   await screen.findByText('2 of 3 images')
-  await userEvent.click(screen.getByRole('button', { name: 'Source: All' }))
-  await userEvent.click(within(screen.getByRole('group', { name: 'Source' })).getByLabelText('Batch'))
-  expect(screen.getByTestId('search')).toHaveTextContent('?card_type=1&source=batch')
+  await userEvent.click(screen.getByRole('button', { name: 'Origin: All' }))
+  await userEvent.click(within(screen.getByRole('group', { name: 'Origin' })).getByLabelText('Uploaded'))
+  expect(screen.getByTestId('search')).toHaveTextContent('?card_type=1&origin=uploaded')
   expect(screen.getByText('No assets match the filters.')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
   expect(screen.getByTestId('search')).toBeEmptyDOMElement()
@@ -95,15 +92,15 @@ test('star toggles favorite through the right endpoint', async () => {
   let put: unknown = null
   let fav = false
   server.use(
-    http.put('/api/batches/3/items/7/favorite', async ({ request }) => {
+    http.put('/api/generations/7/favorite', async ({ request }) => {
       put = await request.json()
       fav = true
       return HttpResponse.json({ favorite: true })
     }),
-    http.get('/api/batch-items', () => HttpResponse.json([{ ...batchItem, favorite: fav }])),
+    http.get('/api/generations', () => HttpResponse.json([{ ...upgradeGen, favorite: fav }])),
   )
-  renderAt('/generations?source=batch')
-  await screen.findByText('1 of 3 images')
+  renderAt('/generations')
+  await screen.findByText('1 images')
   await userEvent.click(screen.getByRole('button', { name: 'Add to favorites' }))
   await waitFor(() => expect(put).toEqual({ favorite: true }))
   expect(await screen.findByRole('button', { name: 'Remove from favorites' })).toBeInTheDocument()
@@ -113,14 +110,14 @@ test('image popup has a favorite button', async () => {
   let put: unknown = null
   let fav = false
   server.use(
-    http.put('/api/batches/3/items/7/favorite', async ({ request }) => {
+    http.put('/api/generations/7/favorite', async ({ request }) => {
       put = await request.json()
       fav = true
       return HttpResponse.json({ favorite: true })
     }),
-    http.get('/api/batch-items', () => HttpResponse.json([{ ...batchItem, favorite: fav }])),
+    http.get('/api/generations', () => HttpResponse.json([{ ...upgradeGen, favorite: fav }])),
   )
-  renderAt('/generations?source=batch')
+  renderAt('/generations')
   await userEvent.click(await screen.findByRole('button', { name: 'Open Sisters × upgrade' }))
   const dialog = screen.getByRole('dialog', { name: 'Sisters × upgrade' })
   await userEvent.click(within(dialog).getByRole('button', { name: 'Add to favorites' }))
@@ -135,7 +132,6 @@ test('paginates 24 per page; page and per-page live in the URL; filters reset to
   }))
   server.use(
     http.get('/api/generations', () => HttpResponse.json(many)),
-    http.get('/api/batch-items', () => HttpResponse.json([])),
   )
   renderAt('/generations')
   expect((await screen.findAllByText('1–24 of 30')).length).toBe(2) // pager above and below
@@ -159,14 +155,12 @@ test('paginates 24 per page; page and per-page live in the URL; filters reset to
 })
 
 test('corner controls select images without opening them; bulk deletion waits for confirmation', async () => {
-  let generations = [gen(1, 1, 1), gen(2, 2, 1)]
-  let batches = [batchItem]
+  let generations = [gen(1, 1, 1), gen(2, 2, 1), upgradeGen]
   const deleted: string[] = []
   server.use(
     http.get('/api/generations', () => HttpResponse.json(generations)),
-    http.get('/api/batch-items', () => HttpResponse.json(batches)),
     http.delete('/api/generations/1', () => { deleted.push('generation-1'); generations = generations.filter(g => g.id !== 1); return new HttpResponse(null, { status: 204 }) }),
-    http.delete('/api/batches/3/items/7', () => { deleted.push('batch-7'); batches = []; return new HttpResponse(null, { status: 204 }) }),
+    http.delete('/api/generations/7', () => { deleted.push('generation-7'); generations = generations.filter(g => g.id !== 7); return new HttpResponse(null, { status: 204 }) }),
   )
   renderAt('/generations')
   await screen.findByText('3 images')
@@ -198,7 +192,6 @@ test('bulk deletion keeps blocked images selected and retries only failures', as
   const deleted: number[] = []
   server.use(
     http.get('/api/generations', () => HttpResponse.json(generations)),
-    http.get('/api/batch-items', () => HttpResponse.json([])),
     http.delete('/api/generations/1', () => { deleted.push(1); generations = generations.filter(g => g.id !== 1); return new HttpResponse(null, { status: 204 }) }),
     http.delete('/api/generations/2', () => { deleted.push(2); return HttpResponse.json({ error: 'Image is used by a template' }, { status: 409 }) }),
   )
@@ -217,7 +210,7 @@ test('bulk deletion keeps blocked images selected and retries only failures', as
 
 test('selection survives paging and clears when filters change', async () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ ...gen(i + 1, 1, 1), created_at: String(i).padStart(3, '0') }))
-  server.use(http.get('/api/generations', () => HttpResponse.json(many)), http.get('/api/batch-items', () => HttpResponse.json([])))
+  server.use(http.get('/api/generations', () => HttpResponse.json(many)))
   renderAt('/generations')
   await screen.findByText('30 images')
   await userEvent.click(screen.getAllByRole('checkbox')[0])

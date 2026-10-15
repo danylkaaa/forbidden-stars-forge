@@ -35,7 +35,7 @@ var (
 
 func TestAreaEditCreatesLinkedGenerationAndProtectsUnmaskedArea(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
-	h, _, dataDir := newTestRouterWithStore(t)
+	h, dataDir := newTestRouterWithStore(t)
 	fid, ctid := setupGenFixtures(t, h)
 
 	original := pngOf(40, 10, func(int, int) color.NRGBA { return red })
@@ -119,7 +119,7 @@ func TestAreaEditValidation(t *testing.T) {
 
 func TestAnEditWithNoMaskChangesTheWholeImage(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
-	h, _, dataDir := newTestRouterWithStore(t)
+	h, dataDir := newTestRouterWithStore(t)
 	fid, ctid := setupGenFixtures(t, h)
 	original := pngOf(40, 10, func(int, int) color.NRGBA { return red })
 	edited := pngOf(40, 10, func(int, int) color.NRGBA { return blue })

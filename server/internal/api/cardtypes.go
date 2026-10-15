@@ -23,7 +23,6 @@ const maxTemplateBytes = 20 << 20 // 20 MB
 type CardTypesHandler struct {
 	Store    *store.CardTypesStore
 	Settings *store.SettingsStore
-	Batches  *store.BatchesStore
 	DataDir  string
 }
 
@@ -196,15 +195,6 @@ func (h *CardTypesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	ref, err := h.Batches.CardTypeReferenced(id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if ref {
-		writeError(w, http.StatusConflict, "referenced by a batch — cannot delete")
 		return
 	}
 	ct, err := h.Store.Get(id)
