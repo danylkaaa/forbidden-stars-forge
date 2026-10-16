@@ -31,7 +31,7 @@ const FIELD_HELP: Record<string, string> = {
   units: 'the unit names the lower text is about, one entry per name, e.g. ["Skitarii", "Light Cruiser"]; they are printed joined with "/" in italics, followed by " : " (a space, a colon, a space) and the unit text',
   unit_text: 'the lower panel\'s rules text for those units, without the names or the colon',
   subtype: 'whether the card is a "schema" or a "tactic"',
-  action: 'the movement the card gives: rotate_clockwise, rotate_counterclockwise, move_vertical or move_horizontal',
+  action: 'the movement the card gives: rotate_clockwise, rotate_counterclockwise, move_vertical, move_horizontal or move_everywhere',
   text: 'the card\'s rules text',
   upgrade_type: 'the order the upgrade belongs to (printed as its order icon)',
   limitation: 'an optional bottom line restricting the upgrade, e.g. "Limit one per area."; leave the key out when there is none',

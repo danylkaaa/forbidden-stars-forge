@@ -6,7 +6,7 @@ export type UpgradeType = typeof UPGRADE_TYPES[number]
 type Common = { faction_id: number; name: string; category: Category }
 export type CardInput = Common & (
   | { category: 'combat'; starting?: boolean; level: number; resource_cost: number; shields: number; guns: number; eagles: number; upper_text: string; units: string[]; unit_text: string }
-  | { category: 'schema'; subtype: 'schema' | 'tactic'; text: string; action: 'rotate_clockwise' | 'rotate_counterclockwise' | 'move_vertical' | 'move_horizontal' }
+  | { category: 'schema'; subtype: 'schema' | 'tactic'; text: string; action: 'rotate_clockwise' | 'rotate_counterclockwise' | 'move_vertical' | 'move_horizontal' | 'move_everywhere' }
   | { category: 'upgrade'; upgrade_type: UpgradeType; level: number; resource_cost: number; text: string; limitation?: string }
 )
 export type Card = CardInput & { id: number; created_at: string; updated_at: string }
@@ -25,7 +25,7 @@ export const FIELDS: Record<Category, CardField[]> = {
   ],
   schema: [
     { key: 'subtype', label: 'Subtype', kind: 'select', options: ['schema', 'tactic'] },
-    { key: 'action', label: 'Action', kind: 'select', options: ['rotate_clockwise', 'rotate_counterclockwise', 'move_vertical', 'move_horizontal'] },
+    { key: 'action', label: 'Action', kind: 'select', options: ['rotate_clockwise', 'rotate_counterclockwise', 'move_vertical', 'move_horizontal', 'move_everywhere'] },
     { key: 'text', label: 'Text', kind: 'text' },
   ],
   upgrade: [
@@ -38,7 +38,7 @@ export const FIELDS: Record<Category, CardField[]> = {
 }
 export const ACTION_LABELS: Record<string, string> = {
   rotate_clockwise: 'Rotate clockwise', rotate_counterclockwise: 'Rotate counterclockwise',
-  move_vertical: 'Move vertically', move_horizontal: 'Move horizontally',
+  move_vertical: 'Move vertically', move_horizontal: 'Move horizontally', move_everywhere: 'Move everywhere',
 }
 export type CardDraft = Record<string, string>
 export function newDraft(category: Category, factionId = ''): CardDraft {

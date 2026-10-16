@@ -201,3 +201,54 @@ func TestExtendArtworkPaintsMoreAroundItAndReplacesIt(t *testing.T) {
 		t.Fatalf("the artwork is now %dx%d (%v), want 1536x1536", cfg.Width, cfg.Height, err)
 	}
 }
+
+func TestEnhanceArtworkKeepsItsShapeAndPlace(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-env")
+	h := newTestRouter(t)
+	f := createFaction(t, h, "Tau")
+	_, c := doJSON(t, h, "POST", "/api/cards", combatJSON(int64(f["id"].(float64))))
+	base := fmt.Sprintf("/api/cards/%.0f", c["id"])
+	if rec, _ := doJSON(t, h, "POST", base+"/artwork/enhance", ""); rec.Code != 400 {
+		t.Fatalf("a card with no artwork = %d, want 400", rec.Code)
+	}
+	body, kind := multipartBody(t, nil, "image", "art.png", artworkPNG(t)) // 20 x 30
+	req := httptest.NewRequest("POST", base+"/artwork", body)
+	req.Header.Set("Content-Type", kind)
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	doJSON(t, h, "PUT", base+"/assembly", `{"image_key":"upload","overlay_id":"auto","transform":{"scale":1.5,"x":4,"y":-3},"layout":{}}`)
+	var asked map[string]any
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&asked)
+		var sw, sh int
+		fmt.Sscanf(asked["size"].(string), "%dx%d", &sw, &sh)
+		img := image.NewNRGBA(image.Rect(0, 0, sw, sh))
+		for i := range img.Pix {
+			img.Pix[i] = 180
+		}
+		var pngBuf bytes.Buffer
+		_ = png.Encode(&pngBuf, img)
+		fmt.Fprintf(w, `{"data":[{"b64_json":%q}],"usage":{"input_tokens":100,"output_tokens":400}}`, base64.StdEncoding.EncodeToString(pngBuf.Bytes()))
+	}))
+	defer fake.Close()
+	old := openAIBaseURL
+	openAIBaseURL = fake.URL
+	defer func() { openAIBaseURL = old }()
+	rec, _ := doJSON(t, h, "POST", base+"/artwork/enhance", `{"prompt":"keep the banner crisp"}`)
+	if rec.Code != 200 {
+		t.Fatalf("enhance = %d %s", rec.Code, rec.Body)
+	}
+	if asked["size"] != "1360x2048" || asked["quality"] != "high" || asked["mask"] != nil || !strings.Contains(fmt.Sprint(asked["prompt"]), "resolution") || !strings.Contains(fmt.Sprint(asked["prompt"]), "keep the banner crisp") {
+		t.Fatalf("request: %v", asked)
+	}
+	var a map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &a)
+	tr := a["transform"].(map[string]any)
+	if tr["scale"] != 1.5 || tr["x"] != 4.0 || tr["y"] != -3.0 || a["cost_usd"] == nil {
+		t.Fatalf("response: %v", a)
+	}
+	img := httptest.NewRecorder()
+	h.ServeHTTP(img, httptest.NewRequest("GET", a["image_url"].(string), nil))
+	if cfg, _, err := image.DecodeConfig(img.Body); err != nil || cfg.Width != 1360 || cfg.Height != 2048 {
+		t.Fatalf("the artwork is now %dx%d (%v)", cfg.Width, cfg.Height, err)
+	}
+}

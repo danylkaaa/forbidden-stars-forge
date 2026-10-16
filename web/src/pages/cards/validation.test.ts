@@ -74,3 +74,9 @@ test('an import accepts a null limitation as none, and keeps limitation text', (
   expect(parseImport(card(null), [1]).cards[0]).not.toHaveProperty('limitation')
   expect(parseImport(card('Limit one.'), [1]).cards[0]).toHaveProperty('limitation', 'Limit one.')
 })
+
+test('an event may move everywhere; any other direction is refused', () => {
+  const event = { faction_id: 1, name: 'Anywhere', category: 'schema', subtype: 'tactic', text: 'Go.', action: 'move_everywhere' }
+  expect(parseImport(JSON.stringify({ cards: [event] }), [1]).errors).toEqual([])
+  expect(parseImport(JSON.stringify({ cards: [{ ...event, action: 'teleport' }] }), [1]).errors).toHaveLength(1)
+})

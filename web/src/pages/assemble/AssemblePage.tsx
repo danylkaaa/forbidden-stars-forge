@@ -164,7 +164,7 @@ export default function AssemblePage() {
   }) as MouseEventHandler<HTMLDivElement> })
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center gap-3">
-      <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen(true)} className="px-2!"><GearIcon /></Button>
+      <Button aria-label="Open faction config" title="Faction config" aria-pressed={configTab} onClick={() => setConfigTab(true)} className="px-2!"><GearIcon /></Button>
       <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
       {faction && <span className="font-mono text-xs uppercase tracking-[0.18em] text-ink/60">{faction.dlc} / <span className="text-ink">{faction.name}</span></span>}
       {factionId && !configTab && <div className="ml-auto flex gap-2">
@@ -189,7 +189,10 @@ export default function AssemblePage() {
     {factionId && !template.isPending && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink/60">
       {template.image
         ? <><span>Template: <span className="text-ink">{template.image.name}</span></span><Link to={labLink(template.image)} className="text-accent underline">Edit in AI Lab</Link></>
-        : <><span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span><Button onClick={() => setSettingsOpen(true)}>Choose template</Button></>}
+        : <span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span>}
+      {template.image
+        ? <button type="button" onClick={() => setSettingsOpen(true)} className="cursor-pointer border-0 bg-transparent p-0 text-sm text-accent underline">Card template settings</button>
+        : <Button aria-label="Card template settings" onClick={() => setSettingsOpen(true)}>Choose template</Button>}
     </div>}
     {!factions.isPending && !factions.data?.length && <p className="text-sm text-ink/60"><Link to="/factions?mode=library" className="text-accent underline">Create a faction</Link> first.</p>}
     {factionId && <section aria-label="Card back" className="space-y-3">

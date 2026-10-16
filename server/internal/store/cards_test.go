@@ -260,3 +260,16 @@ func TestUnitsMigrationSplitsTheLowerText(t *testing.T) {
 		}
 	}
 }
+
+func TestAnEventCanMoveEverywhere(t *testing.T) {
+	s, faction, _ := setupCards(t)
+	in := CardInput{FactionID: faction, Name: "Anywhere", Category: "schema", Subtype: ptr("tactic"), Text: ptr("Go."), Action: ptr("move_everywhere")}
+	c, err := s.Create(in)
+	if err != nil || c.Action == nil || *c.Action != "move_everywhere" {
+		t.Fatalf("create: %+v %v", c, err)
+	}
+	in.Action = ptr("teleport")
+	if _, err := s.Create(in); err == nil {
+		t.Fatal("an unknown direction was accepted")
+	}
+}

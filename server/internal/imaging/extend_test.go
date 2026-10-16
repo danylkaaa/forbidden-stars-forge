@@ -16,6 +16,17 @@ func TestExtendSizeHoldsTheShapeToWhatTheModelAccepts(t *testing.T) {
 	}
 }
 
+func TestEnhanceSizeKeepsTheShapeWithMorePixels(t *testing.T) {
+	for _, c := range []struct {
+		w, h int
+		want string
+	}{{600, 900, "1360x2048"}, {1000, 1000, "2048x2048"}, {3000, 1000, "2048x688"}, {5000, 1000, "2048x688"}, {0, 0, "2048x2048"}} {
+		if got := EnhanceSize(c.w, c.h); got != c.want {
+			t.Errorf("EnhanceSize(%d, %d) = %s, want %s", c.w, c.h, got, c.want)
+		}
+	}
+}
+
 func TestAsPNGConvertsJPEGAndKeepsPNG(t *testing.T) {
 	var jpg bytes.Buffer
 	if err := jpeg.Encode(&jpg, image.NewRGBA(image.Rect(0, 0, 4, 4)), nil); err != nil {

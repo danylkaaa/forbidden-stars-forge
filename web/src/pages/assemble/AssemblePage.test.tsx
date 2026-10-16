@@ -70,6 +70,16 @@ test('library renders every combat card of the faction on the chosen template', 
   expect(screen.queryByRole('link', { name: 'Edit Winged Horror' })).not.toBeInTheDocument()
 })
 
+test('the gear in the library header opens the faction config; the template settings stay one click away', async () => {
+  mount('/assemble')
+  await userEvent.click(await screen.findByRole('button', { name: 'Open faction config' }))
+  expect(await screen.findByRole('region', { name: 'Faction logo' })).toBeInTheDocument()
+  expect(screen.queryByRole('dialog', { name: 'Card templates' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('tab', { name: /Combat/ }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Card template settings' }))
+  expect(await screen.findByRole('dialog', { name: 'Card templates' })).toBeInTheDocument()
+})
+
 const GENERATION_5 = { id: 5, name: 'Generated art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'art.png', created_at: '2026' }
 const GENERATION_6 = { id: 6, name: 'Batch art', status: 'done', card_type_id: 3, faction_id: 1, image_path: 'batch.png', created_at: '2025' }
 

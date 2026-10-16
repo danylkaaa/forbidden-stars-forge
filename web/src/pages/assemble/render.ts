@@ -18,6 +18,7 @@ import clockwiseIcon from '../../images/events/clockwise.png?url'
 import counterclockwiseIcon from '../../images/events/counterclockwise.png?url'
 import horizontalIcon from '../../images/events/horizontal.png?url'
 import verticalIcon from '../../images/events/vertical.png?url'
+import everywhereIcon from '../../images/events/everywhere.png?url'
 import eventChainsSrc from '../../images/events/events-chains.png?url'
 import eventBannersSrc from '../../images/events/event-banners.png?url'
 import { keyedElement } from './backDecor'
@@ -44,7 +45,7 @@ const CARD_CUT_HEIGHT_MM = 88
 // The hexagon in the middle of an upgrade card shows its order.
 export const ORDER_ICONS: Record<UpgradeType, string> = { deploy: deployIcon, advance: advanceIcon, strategize: strategizeIcon, dominate: dominateIcon, orbital_strike: orbitalStrikeIcon }
 // The dial on an event card shows how it moves the schema or tactic.
-export const ACTION_ICONS: Record<string, string> = { rotate_clockwise: clockwiseIcon, rotate_counterclockwise: counterclockwiseIcon, move_vertical: verticalIcon, move_horizontal: horizontalIcon }
+export const ACTION_ICONS: Record<string, string> = { rotate_clockwise: clockwiseIcon, rotate_counterclockwise: counterclockwiseIcon, move_vertical: verticalIcon, move_horizontal: horizontalIcon, move_everywhere: everywhereIcon }
 
 let fonts: Promise<unknown> | undefined
 export function loadFonts() {

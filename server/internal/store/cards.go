@@ -120,7 +120,7 @@ func ValidateCard(in CardInput) []CardFieldError {
 	case "schema":
 		enum("subtype", in.Subtype, "schema", "tactic")
 		text("text", in.Text)
-		enum("action", in.Action, "rotate_clockwise", "rotate_counterclockwise", "move_vertical", "move_horizontal")
+		enum("action", in.Action, "rotate_clockwise", "rotate_counterclockwise", "move_vertical", "move_horizontal", "move_everywhere")
 	case "upgrade":
 		enum("upgrade_type", in.UpgradeType, "deploy", "advance", "strategize", "dominate", "orbital_strike")
 		number("level", in.Level, 3)

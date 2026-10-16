@@ -100,7 +100,9 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/cards/{id}/assembly", cards.GetAssembly)
 			r.Put("/cards/{id}/assembly", cards.SaveAssembly)
 			r.Post("/cards/{id}/artwork", cards.UploadArtwork)
-			r.Post("/cards/{id}/artwork/extend", (&ArtworkExtendHandler{Cards: cards, Settings: settingsStore}).Extend)
+			artworkAI := &ArtworkExtendHandler{Cards: cards, Settings: settingsStore}
+			r.Post("/cards/{id}/artwork/extend", artworkAI.Extend)
+			r.Post("/cards/{id}/artwork/enhance", artworkAI.Enhance)
 			r.Get("/cards/{id}/artwork", cards.Artwork)
 
 			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}

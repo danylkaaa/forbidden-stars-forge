@@ -111,6 +111,7 @@ func (s *CardsStore) SaveAssembly(a CardAssembly) (CardAssembly, error) {
 	}
 	return s.Assembly(a.CardID)
 }
+
 func (s *CardsStore) AssemblySource(key string) (string, error) {
 	parts := strings.Split(key, "-")
 	if len(parts) != 2 {

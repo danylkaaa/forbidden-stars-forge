@@ -30,6 +30,10 @@ export function uploadArtwork(id: string, image: File) {
 // replaces the artwork with the result. `cost_usd` is what it cost.
 export const extendArtwork = (id: string, ratio: number, prompt = '') => apiSend<Assembly & { cost_usd: number }>('POST', `/api/cards/${id}/artwork/extend`, { ratio, prompt })
 
+// Asks the model (at final quality) to improve the card's artwork: more resolution and detail, the same picture and
+// shape. The artwork keeps its place on the card.
+export const enhanceArtwork = (id: string, prompt = '') => apiSend<Assembly & { cost_usd: number }>('POST', `/api/cards/${id}/artwork/enhance`, { prompt })
+
 // Title and rules text positions per card category, shared by every card.
 // `back` holds settings shared by every faction's card back.
 // `overlay_scale`: the size of the banner (combat, upgrade) or hexagon (event) on this card type's back, the same for every faction.

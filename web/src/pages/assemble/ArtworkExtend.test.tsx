@@ -42,3 +42,20 @@ test('is off while the card is not saved or busy', () => {
   renderIt(vi.fn(), true)
   expect(screen.getByRole('button', { name: 'Extend with AI' })).toBeDisabled()
 })
+
+test('improve quality asks for the same picture at a higher resolution and hands back the new assembly', async () => {
+  let body: Record<string, unknown> | null = null
+  server.use(http.post('/api/cards/7/artwork/enhance', async ({ request }) => {
+    body = (await request.json()) as Record<string, unknown>
+    return HttpResponse.json({ image_key: 'upload', image_url: '/api/cards/7/artwork?v=sharp.png', overlay_id: 'auto', transform: { scale: 1.5, x: 4, y: 0 }, layout: {}, cost_usd: 0.2 })
+  }))
+  const onDone = renderIt()
+  await userEvent.click(screen.getByRole('button', { name: 'Improve quality' }))
+  expect(screen.getByText(/higher resolution/)).toBeInTheDocument()
+  await userEvent.type(screen.getByLabelText('What to improve'), 'the face')
+  await userEvent.click(screen.getByRole('button', { name: 'Improve artwork' }))
+  await waitFor(() => expect(onDone).toHaveBeenCalled())
+  expect(body).toEqual({ prompt: 'the face' })
+  expect(onDone.mock.calls[0][0]).toMatchObject({ image_url: '/api/cards/7/artwork?v=sharp.png' })
+  expect(await screen.findByRole('status')).toHaveTextContent('Artwork improved ($0.20)')
+})
