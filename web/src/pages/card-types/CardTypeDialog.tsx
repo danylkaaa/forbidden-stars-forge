@@ -14,6 +14,12 @@ import { OpenAIFilePanel } from './OpenAIFilePanel'
 import { TemplateDropzone } from './TemplateDropzone'
 import { useCardTypeDraft, useCardTypesUi } from './store'
 
+// Why the finished card size cannot be saved (null when it is fine).
+const cutSizeError = (d: { card_width_mm?: string; card_height_mm?: string }) => {
+  const ok = (v?: string) => { const n = Number(v ?? ''); return v !== '' && Number.isFinite(n) && n >= 10 && n <= 1000 }
+  return ok(d.card_width_mm ?? '63.5') && ok(d.card_height_mm ?? '88') ? null : 'Card size: width and height must be between 10 and 1000 mm'
+}
+
 export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
   const ui = useCardTypesUi()
   const draftState = useCardTypeDraft()
@@ -27,10 +33,11 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
       const d = useCardTypeDraft.getState().draft
       const { dialogMode, editingId, stagedFile } = useCardTypesUi.getState()
       if (!d || !d.name.trim()) return { error: 'Name is required' }
+      if (cutSizeError(d)) return { error: cutSizeError(d)! }
       const sizeProblem = sizeError(d.image_size ?? '')
       if (sizeProblem) return { error: `AI image size: ${sizeProblem}` }
       const form = buildCardTypeForm(
-        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '' },
+        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm },
         stagedFile,
       )
       try {
@@ -119,6 +126,18 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
         {textField('description', 'Description', 'What this image is, overall aesthetic…')}
         {textField('constraints', 'Constraints', 'Zones, chromakey color, do-not-touch areas…')}
         <div>
+          <div className="mb-1 text-xs text-ink/70">Card size (cut), mm</div>
+          <div className="grid grid-cols-2 gap-3.5">
+            <Field label="Width (mm)">
+              {(id) => <input id={id} type="number" min={10} step={0.5} value={draft.card_width_mm ?? '63.5'} onChange={(e) => draftState.setField('card_width_mm', e.target.value)} className={inputClass} />}
+            </Field>
+            <Field label="Height (mm)">
+              {(id) => <input id={id} type="number" min={10} step={0.5} value={draft.card_height_mm ?? '88'} onChange={(e) => draftState.setField('card_height_mm', e.target.value)} className={inputClass} />}
+            </Field>
+          </div>
+          <p className="m-0 mt-1 text-[11px] text-ink/45">The finished card after cutting. Print uses it for the layout and the cutting lines.</p>
+        </div>
+        <div>
           <div className="mb-1 text-xs text-ink/70">AI image size</div>
           <ImageSizeField value={draft.image_size ?? ''} onChange={(size) => draftState.setField('image_size', size)}
             previewSrc={ui.stagedMeta?.url ?? (persistedCt ? templateUrl(persistedCt) : null)} />
@@ -132,6 +151,8 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
               { field: 'description', before: persisted.description, after: draft.description },
               { field: 'constraints', before: persisted.constraints, after: draft.constraints },
               { field: 'image size', before: persisted.image_size, after: draft.image_size },
+              { field: 'card width (mm)', before: persisted.card_width_mm, after: draft.card_width_mm },
+              { field: 'card height (mm)', before: persisted.card_height_mm, after: draft.card_height_mm },
             ]} />
         )}
 
@@ -152,7 +173,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
           <form action={saveAction} className="flex gap-2">
             {dirty && <Button type="button" onClick={discardAll}>Discard</Button>}
             <Button type="button" onClick={requestClose}>Cancel</Button>
-            <Button variant="primary" type="submit" disabled={!draft.name.trim() || saving || sizeError(draft.image_size ?? '') !== null}>
+            <Button variant="primary" type="submit" disabled={!draft.name.trim() || saving || sizeError(draft.image_size ?? '') !== null || cutSizeError(draft) !== null}>
               {saving ? 'Saving…' : 'Save Image Type'}
             </Button>
           </form>

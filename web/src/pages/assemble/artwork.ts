@@ -1,4 +1,9 @@
-export type ArtworkTransform = { scale: number; x: number; y: number }
+// Tone and colour correction of the artwork. Brightness, contrast and saturation are -100–100 and sharpness 0–100 (0 is
+// unchanged); levels are a black point, a white point (0–255) and a gamma (1 is unchanged).
+export type ArtworkAdjust = { brightness: number; contrast: number; saturation: number; sharpness: number; black: number; white: number; gamma: number }
+export const NEUTRAL_ADJUST: ArtworkAdjust = { brightness: 0, contrast: 0, saturation: 0, sharpness: 0, black: 0, white: 255, gamma: 1 }
+export const isNeutralAdjust = (a?: ArtworkAdjust) => !a || (Object.keys(NEUTRAL_ADJUST) as (keyof ArtworkAdjust)[]).every(k => a[k] === NEUTRAL_ADJUST[k])
+export type ArtworkTransform = { scale: number; x: number; y: number; adjust?: ArtworkAdjust }
 export const defaultArtwork = (): ArtworkTransform => ({ scale: 1, x: 0, y: 0 })
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 export function panArtwork(start: ArtworkTransform, dx: number, dy: number): ArtworkTransform {
@@ -8,7 +13,7 @@ export function panArtwork(start: ArtworkTransform, dx: number, dy: number): Art
 // artwork point beneath the cursor stationary while zooming.
 export function zoomArtwork(t: ArtworkTransform, scale: number, px = 0, py = 0): ArtworkTransform {
   const next = clamp(scale, .1, 5), ratio = next / t.scale
-  return { scale: next, x: clamp(px - (px - t.x) * ratio, -200, 200), y: clamp(py - (py - t.y) * ratio, -200, 200) }
+  return { ...t, scale: next, x: clamp(px - (px - t.x) * ratio, -200, 200), y: clamp(py - (py - t.y) * ratio, -200, 200) }
 }
 
 // Where the artwork's own edges are on the card, in % of the card (the part outside the artwork window is clipped when

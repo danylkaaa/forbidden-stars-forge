@@ -20,6 +20,7 @@ import { useFactions } from '../factions/api'
 import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, useSharedLogoScale, type Assembly } from './api'
 import { useFileDrag } from '../../lib/useFileDrag'
 import { DropImageIcon } from '../../components/icons'
+import { ArtworkAdjustPanel } from './ArtworkAdjustPanel'
 import { artworkRect, defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
 import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS, libraryLink } from './model'
 import { pngBlob } from './render'
@@ -253,7 +254,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   }
   // An icon bar over the top-right corner of a text field, shown when the field is pointed at or focused: it inserts at the cursor.
   const withSymbols = (field: ReactNode) => <div className="group/symbols relative">{field}
-    <div className="absolute right-1 top-1 z-[1] opacity-0 transition-opacity focus-within:opacity-100 group-focus-within/symbols:opacity-100 group-hover/symbols:opacity-100"><SymbolButtons insert={insertSymbol} disabled={busy} /></div></div>
+    <div className="absolute bottom-full right-0 z-[1] pb-1 opacity-0 transition-opacity focus-within:opacity-100 group-focus-within/symbols:opacity-100 group-hover/symbols:opacity-100"><SymbolButtons insert={insertSymbol} disabled={busy} /></div></div>
   function discard() {
     save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearTextPadding(id)
     if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
@@ -420,10 +421,11 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               {hasArtwork && (artSelected
                 ? <><Button variant="primary" onClick={confirmArtwork}>Apply (Enter)</Button><Button onClick={cancelArtwork}>Cancel (Esc)</Button></>
                 : <Button onClick={selectArtwork}>Move artwork</Button>)}
-              {hasArtwork && <Button disabled={transform.scale === 1 && transform.x === 0 && transform.y === 0} onClick={() => setTransform(defaultArtwork())}>Reset position</Button>}
+              {hasArtwork && <Button disabled={transform.scale === 1 && transform.x === 0 && transform.y === 0} onClick={() => setTransform({ ...defaultArtwork(), adjust: transform.adjust })}>Reset position</Button>}
               {artwork.isPending && <span role="status" className="text-xs text-ink/60">Updating artwork…</span>}
             </div>
             <p className="m-0 text-xs text-ink/60">{artworkDrag === 'block' ? 'Drop the image here.' : hasArtwork ? 'Drop another image here to replace it. Click the artwork on the preview, then drag it to move and scroll to zoom.' : 'Drop an image here or use the button (PNG, JPEG, WebP, AVIF …; saved as PNG, up to 20 MiB). It is placed in the frame’s open art area.'}</p>
+            {hasArtwork && <ArtworkAdjustPanel adjust={transform.adjust} onChange={next => { record(400); setTransform({ ...transform, adjust: next }, false) }} />}
           </section>}
           <div className="border-t border-divider pt-2">
             <ReferenceField category={source.category} side="front" />

@@ -116,3 +116,13 @@ test('__double underscores__ make bold text, which can be combined with italics'
   expect(textRuns('__*Both*__')).toEqual([{ text: 'Both', icon: false, italic: true, bold: true }])
   expect(textRuns('snake_case and __ alone')).toEqual([{ text: 'snake_case and __ alone', icon: false, italic: false }])
 })
+test('a number is never separated from the icon after it', () => {
+  const measure = (r: { text: string; icon: boolean }) => r.icon ? 1 : r.text.length
+  const text = (width: number, source: string) => wrapText(textRuns(source), width, measure).map(line => line.map(a => a.text).join(''))
+  // The icon does not fit after "1 ": the number moves down with it.
+  expect(text(7, 'lose 1 [GUN]')).toEqual(['lose ', '1 #'])
+  // The number fits but the space after it does not: the icon still brings the number along.
+  expect(text(6, 'lose 1 [GUN]')).toEqual(['lose ', '1 #'])
+  // Without a number the icon wraps alone as before.
+  expect(text(5, 'lose [GUN]')).toEqual(['lose ', '#'])
+})

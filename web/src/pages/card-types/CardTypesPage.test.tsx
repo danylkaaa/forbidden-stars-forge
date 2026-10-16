@@ -228,3 +228,23 @@ test('clicking outside the form asks before discarding changes', async () => {
   const confirm = screen.getAllByRole('dialog').at(-1)!
   expect(confirm).toHaveAccessibleName(/Discard/)
 })
+
+test('the form carries the finished card size and rejects a tiny one', async () => {
+  let body = ''
+  server.use(http.put('/api/card-types/1', async ({ request }) => { body = await request.text(); return HttpResponse.json(cardTypes[0]) }))
+  renderPage()
+  await screen.findByText('combat')
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
+  expect(within(dialog).getAllByLabelText('Width (mm)')[0]).toHaveValue(63.5)
+  const width = within(dialog).getAllByLabelText('Width (mm)')[0]
+  await userEvent.clear(width)
+  await userEvent.type(width, '5')
+  expect(within(dialog).getByRole('button', { name: 'Save Image Type' })).toBeDisabled()
+  await userEvent.clear(width)
+  await userEvent.type(width, '70')
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save Image Type' }))
+  await screen.findByText('combat')
+  expect(body).toMatch(/name="card_width_mm"\r\n\r\n70\r\n/)
+  expect(body).toMatch(/name="card_height_mm"\r\n\r\n88\r\n/)
+})

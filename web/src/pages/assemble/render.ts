@@ -1,6 +1,7 @@
 import { BUNDLED_ICONS } from '../faction-card/bundled'
 import { combatRibbon } from './ribbons'
-import { defaultArtwork, type ArtworkTransform } from './artwork'
+import { defaultArtwork, isNeutralAdjust, type ArtworkTransform } from './artwork'
+import { adjustPixels } from './artworkAdjust'
 import backgroundSrc from '../../images/combat/background.png?url'
 import foregroundSrc from '../../images/combat/foreground.png?url'
 import bottomSrc from '../../images/combat/bottom.png?url'
@@ -17,6 +18,8 @@ import clockwiseIcon from '../../images/events/clockwise.png?url'
 import counterclockwiseIcon from '../../images/events/counterclockwise.png?url'
 import horizontalIcon from '../../images/events/horizontal.png?url'
 import verticalIcon from '../../images/events/vertical.png?url'
+import eventChainsSrc from '../../images/events/events-chains.png?url'
+import eventBannersSrc from '../../images/events/event-banners.png?url'
 import { lowerText, type UpgradeType } from '../cards/model'
 import { LAYERS, LAYER_LABELS, artWindow, defaultLayout, framedLayers, layerLabel, textRuns, type CombatCard, type Layout, type Placement, type Run, type FramedCard } from './model'
 
@@ -74,18 +77,37 @@ function font(run: Run, size: number, family: string) { return `${run.italic ? '
 export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => number): Atom[][] {
   const lines: Atom[][] = [[]]
   let width = 0
+  // The space dropped where the last line broke, in case the next icon needs it to stay with its number.
+  let dropped: Atom | null = null
   const newline = () => { lines.push([]); width = 0 }
+  const blank = (atom: Atom) => !atom.icon && /^\s+$/.test(atom.text)
+  // Takes a number (and the spaces after it) off the end of a line, so an icon never starts a line without it.
+  const takeNumber = (line: Atom[], space: Atom | null): Atom[] => {
+    const spaces: Atom[] = []
+    while (line.length && blank(line.at(-1)!)) spaces.unshift(line.pop()!)
+    const num = line.at(-1)
+    if (!num || num.icon || !/^\d+$/.test(num.text)) { line.push(...spaces); return [] }
+    line.pop()
+    return [num, ...(spaces.length ? spaces : space ? [space] : [])]
+  }
+  const place = (atoms: Atom[]) => { for (const atom of atoms) { lines.at(-1)!.push(atom); width += atom.width } }
   for (const run of runs) {
     const parts = run.icon ? [run.text] : run.text.split(/(\n|[^\S\n]+|[^\s]+)/g).filter(Boolean)
     for (const text of parts) {
-      if (text === '\n') { newline(); continue }
+      if (text === '\n') { newline(); dropped = null; continue }
       const word = { ...run, text }
       const wordWidth = measure(word)
       if (/^\s+$/.test(text) && width === 0) continue
       if (width > 0 && width + wordWidth > maxWidth) {
+        const carry = run.icon ? takeNumber(lines.at(-1)!, null) : []
         newline()
-        if (/^\s+$/.test(text)) continue
+        if (carry.length) place(carry)
+        else if (/^\s+$/.test(text)) { dropped = { ...word, width: wordWidth }; continue }
+      } else if (run.icon && width === 0 && lines.length > 1 && dropped) {
+        // The number stayed at the end of the previous line and the space between was dropped.
+        place(takeNumber(lines.at(-2)!, dropped))
       }
+      dropped = null
       if (wordWidth > maxWidth && !run.icon) {
         for (const char of text) {
           const atom = { ...run, text: char, width: measure({ ...run, text: char }) }
@@ -206,33 +228,56 @@ function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Plac
   // The column sizes itself from icon size and spacing; only the card edge limits it.
   return count > 0 && (x < 0 || y < 0 || x + size > w || y + (count - 1) * size * p.lineHeight + size > h)
 }
+// The artwork scaled to cover its window, moved by the transform, clipped to the window and colour-corrected.
+function paintArtwork(ctx: CanvasRenderingContext2D, art: HTMLImageElement, win: { x: number; y: number; width: number; height: number }, w: number, h: number, artwork: ArtworkTransform) {
+  const wx = win.x * w / 100, wy = win.y * h / 100, ww = win.width * w / 100, wh = win.height * h / 100
+  const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
+  const dw = art.naturalWidth * scale, dh = art.naturalHeight * scale
+  const dx = wx + (ww - dw) / 2 + artwork.x * w / 100, dy = wy + (wh - dh) / 2 + artwork.y * h / 100
+  ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip()
+  const adjust = artwork.adjust
+  if (isNeutralAdjust(adjust)) ctx.drawImage(art, dx, dy, dw, dh)
+  else {
+    // Correct only the visible window, not the whole (possibly huge) scaled image.
+    const part = document.createElement('canvas'); part.width = Math.max(1, Math.round(ww)); part.height = Math.max(1, Math.round(wh))
+    const pctx = part.getContext('2d', { willReadFrequently: true })
+    if (pctx) {
+      pctx.drawImage(art, dx - wx, dy - wy, dw, dh)
+      const pixels = pctx.getImageData(0, 0, part.width, part.height)
+      adjustPixels(pixels.data, part.width, part.height, adjust!)
+      pctx.putImageData(pixels, 0, 0)
+      ctx.drawImage(part, wx, wy, ww, wh)
+    } else ctx.drawImage(art, dx, dy, dw, dh)
+  }
+  ctx.restore()
+}
 // Layers, bottom first: the card's artwork (positioned by `artwork` inside
 // ART_WINDOW), the faction template (generated image), overlays, panels, text.
 // The artwork only shows where the template is transparent.
 export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
 export type RenderOutput = { canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }
 // Upgrade and event cards. Layers, bottom first: the card's artwork (events
-// only, inside its window), the faction template, overlays, then the icon,
-// logo and text. The frame supplies the panels.
+// only, inside its window), then for events the chains, the faction template
+// (generated or uploaded), for events the banners, then the icons and logo, and
+// the text on top. The frame supplies the panels.
 async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
   const iconUrl = card.category === 'upgrade' ? ORDER_ICONS[card.upgrade_type] : ACTION_ICONS[card.action]
   const upgrade = card.category === 'upgrade'
-  const [template, icon, logo, levelBadge, gear, art] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, loadFonts()])
+  const event = card.category === 'schema'
+  const [template, icon, logo, levelBadge, gear, art, chains, banners] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, event ? loadImage(eventChainsSrc) : null, event ? loadImage(eventBannersSrc) : null, loadFonts()])
   const w = outputSize?.width ?? template.naturalWidth
   const h = outputSize?.height ?? template.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
-  if (art) {
-    const win = artWindow(card.category)
-    const wx = win.x * w / 100, wy = win.y * h / 100, ww = win.width * w / 100, wh = win.height * h / 100
-    const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
-    ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip()
-    ctx.drawImage(art, wx + (ww - art.naturalWidth * scale) / 2 + artwork.x * w / 100, wy + (wh - art.naturalHeight * scale) / 2 + artwork.y * h / 100, art.naturalWidth * scale, art.naturalHeight * scale)
-    ctx.restore()
+  if (art) paintArtwork(ctx, art, artWindow(card.category), w, h, artwork)
+  const coverDraw = (image: HTMLImageElement) => {
+    const cover = Math.max(w / image.naturalWidth, h / image.naturalHeight)
+    ctx.drawImage(image, (w - image.naturalWidth * cover) / 2, (h - image.naturalHeight * cover) / 2, image.naturalWidth * cover, image.naturalHeight * cover)
   }
-  const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
-  ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
+  if (chains) coverDraw(chains)
+  coverDraw(template)
+  if (banners) coverDraw(banners)
   const colors = defaultLayout(card.category), warnings: string[] = []
   const texts: Partial<Record<typeof LAYERS[number], string>> = card.category === 'upgrade'
     ? { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.text, limitation: card.limitation ?? '' }
@@ -241,7 +286,10 @@ async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
     const bw = p.width * w / 100, bh = p.height * h / 100, f = Math.min(bw / image.naturalWidth, bh / image.naturalHeight) * scale
     ctx.drawImage(image, p.x * w / 100 + (bw - image.naturalWidth * f) / 2, p.y * h / 100 + (bh - image.naturalHeight * f) / 2, image.naturalWidth * f, image.naturalHeight * f)
   }
-  for (const layer of framedLayers(card.category)) {
+  // Icons and the logo go under the text.
+  const isIcon = (layer: typeof LAYERS[number]) => layer === 'order_icon' || layer === 'level_icon' || layer === 'cost_icon' || layer === 'logo'
+  const ordered = [...framedLayers(card.category)].sort((a, b) => Number(isIcon(b)) - Number(isIcon(a)))
+  for (const layer of ordered) {
     const p = { ...layout[layer], color: colors[layer].color }
     if (layer === 'order_icon') { if (icon) fit(icon, p); continue }
     if (layer === 'level_icon' || layer === 'cost_icon') {
@@ -255,7 +303,7 @@ async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
     }
     const shadowed = layer === 'resource_cost' || layer === 'level'
     if (shadowed) { ctx.save(); setCardShadow(ctx, h) }
-    const overflow = paintText(ctx, texts[layer] ?? '', p, layer === 'upper_text' || layer === 'limitation' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' || layer === 'limitation' || (layer === 'name' && card.category === 'upgrade') ? 'center' : layer === 'level' || layer === 'resource_cost' ? 'digit' : 'left')
+    const overflow = paintText(ctx, texts[layer] ?? '', p, event && layer === 'subtype' ? 'CardEvent' : layer === 'upper_text' || layer === 'limitation' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' || layer === 'limitation' || (layer === 'name' && card.category === 'upgrade') ? 'center' : layer === 'level' || layer === 'resource_cost' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
     if (overflow) warnings.push(`${layerLabel(layer, card.category)} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
@@ -273,14 +321,7 @@ async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
-  if (art) {
-    const ART_WINDOW = artWindow('combat')
-    const wx = ART_WINDOW.x * w / 100, wy = ART_WINDOW.y * h / 100, ww = ART_WINDOW.width * w / 100, wh = ART_WINDOW.height * h / 100
-    const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
-    ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip()
-    ctx.drawImage(art, wx + (ww - art.naturalWidth * scale) / 2 + artwork.x * w / 100, wy + (wh - art.naturalHeight * scale) / 2 + artwork.y * h / 100, art.naturalWidth * scale, art.naturalHeight * scale)
-    ctx.restore()
-  }
+  if (art) paintArtwork(ctx, art, artWindow('combat'), w, h, artwork)
   const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
   ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
   ctx.drawImage(ribbon, 0, 0, w, h)

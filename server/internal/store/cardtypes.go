@@ -14,8 +14,11 @@ type CardType struct {
 	NoTemplate bool `json:"no_template"`
 	// ImageSize is the AI image size in pixels, "<width>x<height>"; empty lets the model follow the template.
 	ImageSize string `json:"image_size"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	// CardWidthMM and CardHeightMM are the finished (cut) card size in millimetres.
+	CardWidthMM  float64 `json:"card_width_mm"`
+	CardHeightMM float64 `json:"card_height_mm"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -26,11 +29,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -112,6 +115,18 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 // SetImageSize sets (or with "" clears) the type's AI image size.
 func (s *CardTypesStore) SetImageSize(id int64, size string) (CardType, error) {
 	res, err := s.db.Exec(`UPDATE card_types SET image_size = ?, updated_at = datetime('now') WHERE id = ?`, size, id)
+	if err != nil {
+		return CardType{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return CardType{}, ErrNotFound
+	}
+	return s.Get(id)
+}
+
+// SetCardSize sets the type's finished card size in millimetres.
+func (s *CardTypesStore) SetCardSize(id int64, widthMM, heightMM float64) (CardType, error) {
+	res, err := s.db.Exec(`UPDATE card_types SET card_width_mm = ?, card_height_mm = ?, updated_at = datetime('now') WHERE id = ?`, widthMM, heightMM, id)
 	if err != nil {
 		return CardType{}, err
 	}
@@ -228,7 +243,11 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 		} else if d, ok := factionCardDescriptions[name]; ok {
 			description, constraints = d, factionCardConstraints
 		}
-		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints) VALUES(?,?,?)`, name, description, constraints); err != nil {
+		w, h := 63.5, 88.0
+		if IsFactionCardType(name) {
+			w, h = 258, 170
+		}
+		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints,card_width_mm,card_height_mm) VALUES(?,?,?,?,?)`, name, description, constraints, w, h); err != nil {
 			return err
 		}
 		if _, ok := factionCardDescriptions[name]; ok {

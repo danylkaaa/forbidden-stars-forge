@@ -108,7 +108,7 @@ function schemaLayout(): Layout {
     ...base,
     name: { ...box(8.6, 5.2, 62, 6, 3.7), font: 'headline', align: 'left', verticalAlign: 'center' },
     subtype: { ...box(15, 54.2, 70, 4.6, 3.5), font: 'headline', align: 'center', verticalAlign: 'center' },
-    upper_text: { ...box(11.5, 65.5, 78, 28, 2.8), lineHeight: 1.3, autoY: false, align: 'left' },
+    upper_text: { ...box(11.5, 65.5, 78, 28, 2.8), lineHeight: 1.3, autoY: false, align: 'left', verticalAlign: 'center' },
     order_icon: box(74.8, 24.2, 18, 13.5, 10),
     logo: box(74.8, 1.8, 17.5, 13.5, 10),
   }

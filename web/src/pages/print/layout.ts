@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useCardTypes, type CardType } from '../card-types/api'
 
 export type LineStyle = 'dashed' | 'dotted' | 'solid'
 export type PrintSettings = {
-  orientation: 'portrait' | 'landscape'
-  cardWidth: number; cardHeight: number; // the finished (cut) card size
+  paper: 'a4' | 'a5' | 'a6'; orientation: 'portrait' | 'landscape'
+  cardWidth: number; cardHeight: number; // the finished (cut) card size: set by the card type, not stored
   gap: number; margin: number // mm
   evenSpacing: boolean // spread the free space equally around and between cards (margin is the minimum)
   flip: 'long' | 'short'; includeBacks: boolean
@@ -15,7 +16,7 @@ export type PrintSettings = {
   lineWidth: number; lineColor: string; lineStyle: LineStyle // width in CSS px
 }
 export const DEFAULT_SETTINGS: PrintSettings = {
-  orientation: 'portrait', cardWidth: 63.5, cardHeight: 88, gap: 0, margin: 8, evenSpacing: true,
+  paper: 'a4', orientation: 'portrait', cardWidth: 63.5, cardHeight: 88, gap: 0, margin: 8, evenSpacing: true,
   flip: 'long', includeBacks: true, backsBeside: false,
   cutLines: true, cutLinesOnBacks: false, guidesToEdge: true, trimBleed: true, lineWidth: 2, lineColor: '#00a651', lineStyle: 'dashed',
 }
@@ -27,9 +28,9 @@ export const usePrintSettings = create<{ settings: PrintSettings; update: (patch
 
 export const MM_PT = 72 / 25.4
 export const PX_PT = 0.75
-const A4 = [210, 297] as const
+export const PAPERS = { a4: { label: 'A4', mm: [210, 297] }, a5: { label: 'A5', mm: [148, 210] }, a6: { label: 'A6', mm: [105, 148] } } as const
 export const pageSize = (s: PrintSettings) => {
-  const [w, h] = A4
+  const [w, h] = (PAPERS[s.paper] ?? PAPERS.a4).mm
   return s.orientation === 'portrait' ? { width: w, height: h } : { width: h, height: w }
 }
 
@@ -165,7 +166,12 @@ export function strokeFor(s: PrintSettings) {
 }
 
 // The finished card size, for safe-area lines on previews.
+export const cutSizeOf = (types: CardType[] | undefined, name: string): Mm => {
+  const t = types?.find(c => c.name === name)
+  return { width: t?.card_width_mm ?? DEFAULT_SETTINGS.cardWidth, height: t?.card_height_mm ?? DEFAULT_SETTINGS.cardHeight }
+}
 export function useCutMm() {
-  const width = usePrintSettings(s => s.settings.cardWidth), height = usePrintSettings(s => s.settings.cardHeight)
+  const { data } = useCardTypes()
+  const { width, height } = cutSizeOf(data, 'combat')
   return useMemo(() => ({ width, height }), [width, height])
 }

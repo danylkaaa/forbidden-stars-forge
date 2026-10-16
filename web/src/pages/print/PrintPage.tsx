@@ -9,13 +9,13 @@ import { useFactions } from '../factions/api'
 import { LIBRARY_TABS } from '../assemble/model'
 import { useTemplate, useTemplateLayout } from '../assemble/library'
 import { useCardRenderInput, useRenderedCard } from '../assemble/useCardView'
-import { backSlot, besideSlots, pairOfSlot, pairsPerRow, mmToPx, cutGuides, gridFor, PRINT_DPI, type Grid, mirrorPage, MM_PT, reconcile, reflow, slotRect, strokeFor, swapSlots, usePrintSettings, type Pages, type PrintSettings } from './layout'
+import { useCardTypes } from '../card-types/api'
+import { PAPERS, cutSizeOf, backSlot, besideSlots, pairOfSlot, pairsPerRow, mmToPx, cutGuides, gridFor, PRINT_DPI, type Grid, mirrorPage, MM_PT, reconcile, reflow, slotRect, strokeFor, swapSlots, usePrintSettings, type Pages, type PrintSettings } from './layout'
 import { canvasAsset, useBackAsset, type PrintAsset } from './assets'
 import { useFactionCardCanvases } from '../faction-card/useFactionCardCanvases'
 
 // A faction card is 258 × 170 mm (268 × 180 mm with 5 mm bleed: 3165 × 2126 px at 300 dpi). It prints on its
 // own: its size replaces the page's card size, landscape.
-const FACTION_CARD_MM = { cardWidth: 258, cardHeight: 170 }
 
 // Renders a faction's card (front and back) off-screen as print assets.
 function FactionCardRenderer({ factionId, onFront, onBack }: { factionId: number; onFront: (id: number, asset: PrintAsset | null) => void; onBack: (id: number, asset: PrintAsset | null) => void }) {
@@ -110,7 +110,10 @@ export default function PrintPage() {
   const { settings: stored, update, reset } = usePrintSettings()
   const [mode, setMode] = useState<'cards' | 'faction'>('cards')
   const factionMode = mode === 'faction'
-  const settings = useMemo<PrintSettings>(() => factionMode ? { ...stored, ...FACTION_CARD_MM, orientation: 'landscape' } : stored, [stored, factionMode])
+  const cardTypes = useCardTypes()
+  // The cut size comes from the card type: the combat type for cards, the faction card type for faction cards.
+  const cut = cutSizeOf(cardTypes.data, factionMode ? 'faction card' : 'combat')
+  const settings = useMemo<PrintSettings>(() => ({ ...stored, cardWidth: cut.width, cardHeight: cut.height, ...(factionMode ? { orientation: 'landscape' as const } : {}) }), [stored, factionMode, cut.width, cut.height])
   const cards = useCards('', ''), layout = useTemplateLayout()
 
   const [categories, setCategories] = useState<Set<Category>>(new Set(['combat']))
@@ -321,12 +324,12 @@ export default function PrintPage() {
         </Group>
         <Group title="Page">
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Page size">{id => <select id={id} className={selectClass} value={settings.paper} onChange={e => update({ paper: e.target.value as PrintSettings['paper'] })}>{Object.entries(PAPERS).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}</select>}</Field>
             <Field label="Orientation">{id => <select id={id} className={selectClass} value={settings.orientation} disabled={factionMode} onChange={e => update({ orientation: e.target.value as PrintSettings['orientation'] })}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>}</Field>
-            <NumberField label="Cut width (mm)" value={settings.cardWidth} min={10} step={0.5} disabled={factionMode} onChange={setNum('cardWidth')} />
-            <NumberField label="Cut height (mm)" value={settings.cardHeight} min={10} step={0.5} disabled={factionMode} onChange={setNum('cardHeight')} />
             <NumberField label="Gap (mm)" value={settings.gap} step={0.5} disabled={settings.evenSpacing} onChange={setNum('gap')} />
             <NumberField label="Min margin (mm)" value={settings.margin} step={0.5} onChange={setNum('margin')} />
           </div>
+          <p className="m-0 text-sm text-ink/70">Cut size {settings.cardWidth} × {settings.cardHeight} mm, set on the {factionMode ? 'faction card' : 'combat'} <Link to="/card-types" className="text-accent underline">image type</Link>.</p>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.trimBleed} onChange={e => update({ trimBleed: e.target.checked })} className="accent-[var(--color-accent)]" />Trim bleed to fit more cards per sheet</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.evenSpacing} onChange={e => update({ evenSpacing: e.target.checked })} className="accent-[var(--color-accent)]" />Space cards evenly on the sheet</label>
           <p className="m-0 text-xs text-ink/50">Cards print at their native 300 dpi size{imageMm ? ` (${imageMm.width.toFixed(1)} × ${imageMm.height.toFixed(1)} mm)` : ''}. Anything beyond the card size is bleed, outside the cutting guides{settings.trimBleed ? ` (${grid.bleedX.toFixed(1)} × ${grid.bleedY.toFixed(1)} mm kept per side)` : ''}.</p>

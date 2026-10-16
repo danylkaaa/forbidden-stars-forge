@@ -175,3 +175,27 @@ func TestCardTypeImageSize(t *testing.T) {
 		t.Fatalf("unknown id: %v", err)
 	}
 }
+
+func TestCardTypeCutSize(t *testing.T) {
+	s := openCardTypes(t)
+	if err := s.EnsureBuiltins(); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := s.List()
+	for _, ct := range all {
+		wantW, wantH := 63.5, 88.0
+		if IsFactionCardType(ct.Name) {
+			wantW, wantH = 258, 170
+		}
+		if ct.CardWidthMM != wantW || ct.CardHeightMM != wantH {
+			t.Fatalf("%s: %v x %v", ct.Name, ct.CardWidthMM, ct.CardHeightMM)
+		}
+	}
+	got, err := s.SetCardSize(all[0].ID, 70, 100)
+	if err != nil || got.CardWidthMM != 70 || got.CardHeightMM != 100 {
+		t.Fatalf("set: %+v %v", got, err)
+	}
+	if _, err := s.SetCardSize(999, 70, 100); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: %v", err)
+	}
+}

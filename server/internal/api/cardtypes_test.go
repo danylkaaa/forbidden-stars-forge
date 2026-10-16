@@ -347,3 +347,19 @@ func TestImageSizeProblem(t *testing.T) {
 		}
 	}
 }
+
+func TestCardTypeCutSizeIsSavedAndValidated(t *testing.T) {
+	h, _ := newTestRouterWithStore(t)
+	rec, ct := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "custom", "card_width_mm": "70", "card_height_mm": "120.5"}, "", nil)
+	if rec.Code != http.StatusCreated || ct["card_width_mm"] != 70.0 || ct["card_height_mm"] != 120.5 {
+		t.Fatalf("create: %d %v", rec.Code, ct)
+	}
+	id := int64(ct["id"].(float64))
+	_, ct = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "custom"}, "", nil)
+	if ct["card_width_mm"] != 70.0 {
+		t.Fatalf("size lost: %v", ct)
+	}
+	if rec, _ = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "custom", "card_width_mm": "5", "card_height_mm": "88"}, "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("tiny size accepted: %d", rec.Code)
+	}
+}

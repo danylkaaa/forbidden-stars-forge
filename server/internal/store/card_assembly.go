@@ -9,11 +9,34 @@ import (
 	"strings"
 )
 
-type ArtworkTransform struct {
-	Scale float64 `json:"scale"`
-	X     float64 `json:"x"`
-	Y     float64 `json:"y"`
+// ArtworkAdjust is the tone and colour correction applied to a card's artwork. Brightness,
+// contrast, saturation and sharpness are 0 when neutral; levels are a black point, a white
+// point (0–255) and a gamma.
+type ArtworkAdjust struct {
+	Brightness float64 `json:"brightness"` // -100–100
+	Contrast   float64 `json:"contrast"`   // -100–100
+	Saturation float64 `json:"saturation"` // -100–100
+	Sharpness  float64 `json:"sharpness"`  // 0–100
+	Black      float64 `json:"black"`      // 0–254
+	White      float64 `json:"white"`      // 1–255, above black
+	Gamma      float64 `json:"gamma"`      // 0.2–5
 }
+type ArtworkTransform struct {
+	Scale  float64        `json:"scale"`
+	X      float64        `json:"x"`
+	Y      float64        `json:"y"`
+	Adjust *ArtworkAdjust `json:"adjust,omitempty"`
+}
+
+func validAdjust(a *ArtworkAdjust) bool {
+	if a == nil {
+		return true
+	}
+	in := func(v, lo, hi float64) bool { return !math.IsNaN(v) && v >= lo && v <= hi }
+	return in(a.Brightness, -100, 100) && in(a.Contrast, -100, 100) && in(a.Saturation, -100, 100) && in(a.Sharpness, 0, 100) &&
+		in(a.Black, 0, 254) && in(a.White, 1, 255) && a.White > a.Black && in(a.Gamma, 0.2, 5)
+}
+
 type CardAssembly struct {
 	CardID      int64            `json:"card_id"`
 	ImageKey    string           `json:"image_key"`
@@ -33,6 +56,9 @@ func ValidateAssembly(a CardAssembly) error {
 	t := a.Transform
 	if math.IsNaN(t.Scale) || math.IsInf(t.Scale, 0) || t.Scale < .1 || t.Scale > 5 || math.IsNaN(t.X) || math.IsInf(t.X, 0) || math.Abs(t.X) > 200 || math.IsNaN(t.Y) || math.IsInf(t.Y, 0) || math.Abs(t.Y) > 200 {
 		return errors.New("artwork scale must be 0.1–5 and position must be -200–200")
+	}
+	if !validAdjust(t.Adjust) {
+		return errors.New("artwork adjustments are out of range")
 	}
 	if a.OverlayID != "auto" && a.OverlayID != "none" {
 		n, e := strconv.ParseInt(a.OverlayID, 10, 64)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,7 +90,8 @@ type cardTypeFields struct {
 	Name        string
 	Description string
 	Constraints string
-	ImageSize   *string // nil when the form does not carry it
+	ImageSize   *string     // nil when the form does not carry it
+	CardSizeMM  *[2]float64 // width, height; nil when the form does not carry it
 }
 
 var imageSizeRe = regexp.MustCompile(`^\d{2,5}x\d{2,5}$`)
@@ -141,6 +143,16 @@ func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, 
 		}
 		f.ImageSize = &size
 	}
+	_, hasW := r.MultipartForm.Value["card_width_mm"]
+	_, hasH := r.MultipartForm.Value["card_height_mm"]
+	if hasW || hasH {
+		w, errW := strconv.ParseFloat(strings.TrimSpace(r.FormValue("card_width_mm")), 64)
+		h, errH := strconv.ParseFloat(strings.TrimSpace(r.FormValue("card_height_mm")), 64)
+		if errW != nil || errH != nil || w < 10 || h < 10 || w > 1000 || h > 1000 {
+			return f, "card size must be between 10 and 1000 mm on both sides"
+		}
+		f.CardSizeMM = &[2]float64{w, h}
+	}
 	return f, ""
 }
 
@@ -183,6 +195,12 @@ func (h *CardTypesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if fields.ImageSize != nil {
 		if ct, err = h.Store.SetImageSize(ct.ID, *fields.ImageSize); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
+	if fields.CardSizeMM != nil {
+		if ct, err = h.Store.SetCardSize(ct.ID, fields.CardSizeMM[0], fields.CardSizeMM[1]); err != nil {
 			h.cardTypeErr(w, err)
 			return
 		}
@@ -230,6 +248,12 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if fields.ImageSize != nil {
 		if ct, err = h.Store.SetImageSize(ct.ID, *fields.ImageSize); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
+	if fields.CardSizeMM != nil {
+		if ct, err = h.Store.SetCardSize(ct.ID, fields.CardSizeMM[0], fields.CardSizeMM[1]); err != nil {
 			h.cardTypeErr(w, err)
 			return
 		}

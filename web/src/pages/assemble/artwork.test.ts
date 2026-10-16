@@ -22,3 +22,18 @@ test('the artwork edges follow how the renderer covers the window, centres and m
   const zoomed = artworkRect(win, { width: 500, height: 500 }, card, { scale: 2, x: 5, y: -3 })
   expect([zoomed.x, zoomed.y, zoomed.width, zoomed.height].map(Math.round)).toEqual([-5, -28, 120, 120])
 })
+
+test('neutral adjustments leave pixels alone and each control moves them the expected way', async () => {
+  const { adjustPixels } = await import('./artworkAdjust')
+  const { NEUTRAL_ADJUST, isNeutralAdjust } = await import('./artwork')
+  const px = () => new Uint8ClampedArray([200, 100, 50, 255, 10, 10, 10, 128])
+  const same = px(); adjustPixels(same, 2, 1, NEUTRAL_ADJUST)
+  expect([...same]).toEqual([...px()])
+  const bright = px(); adjustPixels(bright, 2, 1, { ...NEUTRAL_ADJUST, brightness: 50 })
+  expect(bright[0]).toBeGreaterThan(200); expect(bright[3]).toBe(255)
+  const gray = px(); adjustPixels(gray, 2, 1, { ...NEUTRAL_ADJUST, saturation: -100 })
+  expect(gray[0]).toBe(gray[1]); expect(gray[1]).toBe(gray[2])
+  const levels = px(); adjustPixels(levels, 2, 1, { ...NEUTRAL_ADJUST, black: 50, white: 150 })
+  expect([levels[0], levels[4]]).toEqual([255, 0])
+  expect(isNeutralAdjust({ ...NEUTRAL_ADJUST, gamma: 1.2 })).toBe(false)
+})

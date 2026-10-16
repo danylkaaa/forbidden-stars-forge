@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/msw'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ZoomableImage } from './ImageLightbox'
 import { usePreviewLayers } from '../lib/previewLayers'
 
@@ -9,9 +10,11 @@ beforeEach(() => usePreviewLayers.setState({ mask: false, maskOpacity: 0.5 }))
 
 function renderThumb() {
   render(
-    <ZoomableImage src="/img.png" alt="Tau × combat">
-      <img src="/img.png" alt="thumb" />
-    </ZoomableImage>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ZoomableImage src="/img.png" alt="Tau × combat">
+        <img src="/img.png" alt="thumb" />
+      </ZoomableImage>
+    </QueryClientProvider>,
   )
 }
 
@@ -67,9 +70,11 @@ test('download saves the raw image', async () => {
 
 test('mask layer shows the template at adjustable opacity', async () => {
   render(
-    <ZoomableImage src="/img.png" alt="Card" maskSrc="/template.png">
-      <img src="/img.png" alt="thumb" />
-    </ZoomableImage>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ZoomableImage src="/img.png" alt="Card" maskSrc="/template.png">
+        <img src="/img.png" alt="thumb" />
+      </ZoomableImage>
+    </QueryClientProvider>,
   )
   await userEvent.click(screen.getByRole('button', { name: 'Open Card' }))
   expect(screen.queryByTestId('mask')).not.toBeInTheDocument()
