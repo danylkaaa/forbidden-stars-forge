@@ -211,3 +211,15 @@ func TestEditImageAPIError(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestEmptySizeIsLeftOutOfTheRequest(t *testing.T) {
+	if _, ok := EditBody(ImageEditRequest{Model: "gpt-image-2", FileID: "file-1"})["size"]; ok {
+		t.Fatal("an empty size must not be sent: OpenAI rejects it")
+	}
+	if _, ok := GenerateBody(ImageEditRequest{Model: "gpt-image-2"})["size"]; ok {
+		t.Fatal("an empty size must not be sent: OpenAI rejects it")
+	}
+	if EditBody(ImageEditRequest{FileID: "file-1", Size: "816x1104"})["size"] != "816x1104" {
+		t.Fatal("a set size is sent")
+	}
+}

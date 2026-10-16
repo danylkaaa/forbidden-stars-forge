@@ -125,7 +125,7 @@ func TestEnsureBuiltinCardTypesIsIdempotent(t *testing.T) {
 		}
 	}
 	list, err := s.List()
-	if err != nil || len(list) != 7 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "card back" || list[3].Description == "" || list[3].Constraints == "" {
+	if err != nil || len(list) != 8 || list[0].Name != "combat" || list[0].Description != "kept" || list[3].Name != "card back" || list[3].Description == "" || list[3].Constraints == "" {
 		t.Fatalf("builtins: %+v %v", list, err)
 	}
 }
@@ -190,6 +190,10 @@ func TestCardTypeCutSize(t *testing.T) {
 		if ct.CardWidthMM != wantW || ct.CardHeightMM != wantH {
 			t.Fatalf("%s: %v x %v", ct.Name, ct.CardWidthMM, ct.CardHeightMM)
 		}
+		// Elements are not cards: they come with an AI image size of their own.
+		if wantSize := map[bool]string{true: ElementImageSize, false: ""}[IsElementCardType(ct.Name)]; ct.ImageSize != wantSize {
+			t.Fatalf("%s image size %q, want %q", ct.Name, ct.ImageSize, wantSize)
+		}
 	}
 	got, err := s.SetCardSize(all[0].ID, 70, 100)
 	if err != nil || got.CardWidthMM != 70 || got.CardHeightMM != 100 {
@@ -197,5 +201,21 @@ func TestCardTypeCutSize(t *testing.T) {
 	}
 	if _, err := s.SetCardSize(999, 70, 100); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id: %v", err)
+	}
+}
+
+func TestFactionEventElementIsSavedAndValidated(t *testing.T) {
+	cards, faction, _ := setupCards(t)
+	if err := cards.SaveFactionEventElement(FactionEventElement{FactionID: faction, ElementScale: 0.5}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := cards.FactionEventElements()
+	if err != nil || len(list) != 1 || list[0].ElementScale != 0.5 {
+		t.Fatalf("list: %+v %v", list, err)
+	}
+	for _, bad := range []FactionEventElement{{FactionID: faction, ElementScale: 3}, {FactionID: faction, ElementScale: 0.5, ElementX: 2}, {FactionID: faction, ElementScale: 0.5, ElementKey: "test-999"}} {
+		if cards.SaveFactionEventElement(bad) == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
 	}
 }

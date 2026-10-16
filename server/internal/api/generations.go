@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"cardforge/internal/imaging"
 	"cardforge/internal/openai"
 	"cardforge/internal/pricing"
 	"cardforge/internal/prompt"
@@ -26,6 +27,7 @@ type GenerationsHandler struct {
 	CardTypes *store.CardTypesStore
 	Settings  *store.SettingsStore
 	Usage     *store.UsageStore
+	Masks     *store.ImageMasksStore
 	DataDir   string
 }
 
@@ -120,7 +122,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize}, nil)
+	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize}, cropTo(ct))
 	writeJSON(w, http.StatusCreated, g)
 }
 
@@ -178,6 +180,15 @@ func (h *GenerationsHandler) resolveModel(override string) (string, error) {
 // run performs the OpenAI call in the background and persists the outcome.
 // req carries model, input image (FileID or ImageURL), optional mask,
 // prompt and quality; size/fidelity/background come from Settings.
+// cropTo is the post-processing of a card type whose images have a shape beyond the model's limit: the picture is cropped
+// to the type's aspect ratio. Nil for an ordinary type.
+func cropTo(ct store.CardType) func([]byte) ([]byte, error) {
+	if ct.AspectRatio <= 0 {
+		return nil
+	}
+	return func(png []byte) ([]byte, error) { return imaging.CropToRatio(png, ct.AspectRatio) }
+}
+
 // postProcess, if set, transforms the PNG before it's saved (area edits).
 // All artifacts are written before status flips to done (PRD §7.3).
 func (h *GenerationsHandler) run(id int64, req openai.ImageEditRequest, postProcess func([]byte) ([]byte, error)) {
@@ -267,6 +278,19 @@ func (h *GenerationsHandler) ServeImage(w http.ResponseWriter, r *http.Request) 
 	if err != nil || g.Status != "done" || g.ImagePath == "" {
 		writeError(w, http.StatusNotFound, "no image for this generation")
 		return
+	}
+	// With ?mask the image is served with its hiding mask applied (the part a card is assembled from).
+	if r.URL.Query().Has("mask") && h.Masks != nil {
+		if mask, _, err := h.Masks.Get(id); err == nil {
+			raw, err := os.ReadFile(filepath.Join(h.DataDir, g.ImagePath))
+			if err == nil {
+				if out, err := imaging.HideMasked(raw, mask); err == nil {
+					w.Header().Set("Content-Type", "image/png")
+					_, _ = w.Write(out)
+					return
+				}
+			}
+		}
 	}
 	w.Header().Set("Content-Type", "image/png")
 	http.ServeFile(w, r, filepath.Join(h.DataDir, g.ImagePath))

@@ -78,6 +78,8 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Put("/nebulas/{id}", cards.SaveNebula)
 			r.Get("/faction-banners", cards.FactionBanners)
 			r.Put("/faction-banners/{id}", cards.SaveFactionBanner)
+			r.Get("/faction-event-elements", cards.FactionEventElements)
+			r.Put("/faction-event-elements/{id}", cards.SaveFactionEventElement)
 			r.Get("/nebula-placements", cards.NebulaPlacements)
 			r.Put("/nebula-placements/{id}/{category}", cards.SaveNebulaPlacement)
 			r.Get("/reference-cards", cards.ReferenceCards)
@@ -98,6 +100,7 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/cards/{id}/assembly", cards.GetAssembly)
 			r.Put("/cards/{id}/assembly", cards.SaveAssembly)
 			r.Post("/cards/{id}/artwork", cards.UploadArtwork)
+			r.Post("/cards/{id}/artwork/extend", (&ArtworkExtendHandler{Cards: cards, Settings: settingsStore}).Extend)
 			r.Get("/cards/{id}/artwork", cards.Artwork)
 
 			jobsH := &JobsHandler{Registry: jobs.New(60 * time.Second), Settings: settingsStore}
@@ -123,14 +126,21 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/card-types/{id}/overlay", cardTypes.ServeOverlay)
 			r.Post("/card-types/{id}/upload-to-openai", cardTypes.UploadToOpenAI)
 
+			masksStore := store.NewImageMasksStore(db)
 			gens := &GenerationsHandler{
 				Gens:      store.NewGenerationsStore(db),
 				Factions:  factionsStore,
 				CardTypes: cardTypesStore,
 				Settings:  settingsStore,
 				Usage:     usageStore,
+				Masks:     masksStore,
 				DataDir:   dataDir,
 			}
+			masks := &MasksHandler{Masks: masksStore, Gens: gens.Gens}
+			r.Get("/image-masks", masks.List)
+			r.Get("/generations/{id}/mask", masks.Get)
+			r.Put("/generations/{id}/mask", masks.Put)
+			r.Delete("/generations/{id}/mask", masks.Delete)
 			r.Post("/generate", gens.Generate)
 			r.Post("/image-edits", gens.Edit)
 			r.Get("/generate/preview", gens.Preview)

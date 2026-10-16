@@ -7,15 +7,17 @@ import { DiffPanel } from '../../components/DiffPanel'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, inputClass } from '../../components/Field'
 import { ImageSizeField } from '../../components/ImageSizeField'
+import { RatioSizeField } from '../../components/RatioSizeField'
 import { isDraftDirty } from '../../lib/draftForm'
 import { sizeError } from '../../lib/imageSize'
-import { buildCardTypeForm, isBuiltinCardType, createCardType, templateUrl, startCardTypeAssist, updateCardType, type CardType } from './api'
+import { buildCardTypeForm, isBuiltinCardType, isElementCardType, createCardType, templateUrl, startCardTypeAssist, updateCardType, type CardType } from './api'
 import { OpenAIFilePanel } from './OpenAIFilePanel'
 import { TemplateDropzone } from './TemplateDropzone'
 import { useCardTypeDraft, useCardTypesUi } from './store'
 
 // Why the finished card size cannot be saved (null when it is fine).
-const cutSizeError = (d: { card_width_mm?: string; card_height_mm?: string }) => {
+const cutSizeError = (d: { name?: string; card_width_mm?: string; card_height_mm?: string }) => {
+  if (isElementCardType(d.name ?? '')) return null
   const ok = (v?: string) => { const n = Number(v ?? ''); return v !== '' && Number.isFinite(n) && n >= 10 && n <= 1000 }
   return ok(d.card_width_mm ?? '63.5') && ok(d.card_height_mm ?? '88') ? null : 'Card size: width and height must be between 10 and 1000 mm'
 }
@@ -37,7 +39,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
       const sizeProblem = sizeError(d.image_size ?? '')
       if (sizeProblem) return { error: `AI image size: ${sizeProblem}` }
       const form = buildCardTypeForm(
-        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm },
+        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm, aspect_ratio: d.aspect_ratio ?? '' },
         stagedFile,
       )
       try {
@@ -125,7 +127,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
         </Field>
         {textField('description', 'Description', 'What this image is, overall aesthetic…')}
         {textField('constraints', 'Constraints', 'Zones, chromakey color, do-not-touch areas…')}
-        <div>
+        {!isElementCardType(draft.name) && <div>
           <div className="mb-1 text-xs text-ink/70">Card size (cut), mm</div>
           <div className="grid grid-cols-2 gap-3.5">
             <Field label="Width (mm)">
@@ -136,11 +138,13 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
             </Field>
           </div>
           <p className="m-0 mt-1 text-[11px] text-ink/45">The finished card after cutting. Print uses it for the layout and the cutting lines.</p>
-        </div>
+        </div>}
         <div>
           <div className="mb-1 text-xs text-ink/70">AI image size</div>
-          <ImageSizeField value={draft.image_size ?? ''} onChange={(size) => draftState.setField('image_size', size)}
-            previewSrc={ui.stagedMeta?.url ?? (persistedCt ? templateUrl(persistedCt) : null)} />
+          {isElementCardType(draft.name)
+            ? <RatioSizeField value={draft.image_size ?? ''} aspect={draft.aspect_ratio ?? ''} onChange={(size, aspect) => { draftState.setField('image_size', size); draftState.setField('aspect_ratio', aspect) }} previewSrc={ui.stagedMeta?.url ?? (persistedCt ? templateUrl(persistedCt) : null)} />
+            : <ImageSizeField value={draft.image_size ?? ''} onChange={(size) => draftState.setField('image_size', size)}
+              previewSrc={ui.stagedMeta?.url ?? (persistedCt ? templateUrl(persistedCt) : null)} />}
           <p className="m-0 mt-1 text-[11px] text-ink/45">Empty follows the template image.</p>
         </div>
 
@@ -151,6 +155,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
               { field: 'description', before: persisted.description, after: draft.description },
               { field: 'constraints', before: persisted.constraints, after: draft.constraints },
               { field: 'image size', before: persisted.image_size, after: draft.image_size },
+              { field: 'aspect ratio', before: persisted.aspect_ratio, after: draft.aspect_ratio },
               { field: 'card width (mm)', before: persisted.card_width_mm, after: draft.card_width_mm },
               { field: 'card height (mm)', before: persisted.card_height_mm, after: draft.card_height_mm },
             ]} />

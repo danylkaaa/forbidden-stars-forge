@@ -20,6 +20,8 @@ import horizontalIcon from '../../images/events/horizontal.png?url'
 import verticalIcon from '../../images/events/vertical.png?url'
 import eventChainsSrc from '../../images/events/events-chains.png?url'
 import eventBannersSrc from '../../images/events/event-banners.png?url'
+import { keyedElement } from './backDecor'
+import { EVENT_ELEMENT_HOME, type EventElementInput } from './eventElementPlace'
 import { lowerText, type UpgradeType } from '../cards/model'
 import { LAYERS, LAYER_LABELS, artWindow, defaultLayout, framedLayers, layerLabel, textRuns, type CombatCard, type Layout, type Placement, type Run, type FramedCard } from './model'
 
@@ -93,21 +95,23 @@ export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => n
     return [num, ...(spaces.length ? spaces : space ? [space] : [])]
   }
   const place = (atoms: Atom[]) => { for (const atom of atoms) { lines.at(-1)!.push(atom); width += atom.width } }
+  // A space that does not fit at the end of a line hangs there: it starts no line of its own, and the next word
+  // (unless it is a typed line break) goes to the next line.
+  let pendingBreak = false
   for (const run of runs) {
     const parts = run.icon ? [run.text] : run.text.split(/(\n|[^\S\n]+|[^\s]+)/g).filter(Boolean)
     for (const text of parts) {
-      if (text === '\n') { newline(); paragraphStarts.add(lines.at(-1)!); dropped = null; continue }
+      if (text === '\n') { newline(); paragraphStarts.add(lines.at(-1)!); dropped = null; pendingBreak = false; continue }
       const word = { ...run, text }
       const wordWidth = measure(word)
-      if (/^\s+$/.test(text) && width === 0) continue
-      if (width > 0 && width + wordWidth > maxWidth) {
-        const carry = run.icon ? takeNumber(lines.at(-1)!, null) : []
+      const space = /^\s+$/.test(text)
+      if (space && width === 0) continue
+      if (space && width + wordWidth > maxWidth) { pendingBreak = true; dropped = { ...word, width: wordWidth }; continue }
+      if (pendingBreak || (width > 0 && width + wordWidth > maxWidth)) {
+        const carry = run.icon ? takeNumber(lines.at(-1)!, dropped) : []
         newline()
+        pendingBreak = false
         if (carry.length) place(carry)
-        else if (/^\s+$/.test(text)) { dropped = { ...word, width: wordWidth }; continue }
-      } else if (run.icon && width === 0 && lines.length > 1 && dropped) {
-        // The number stayed at the end of the previous line and the space between was dropped.
-        place(takeNumber(lines.at(-2)!, dropped))
       }
       dropped = null
       if (wordWidth > maxWidth && !run.icon) {
@@ -235,43 +239,39 @@ function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Plac
   // The column sizes itself from icon size and spacing; only the card edge limits it.
   return count > 0 && (x < 0 || y < 0 || x + size > w || y + (count - 1) * size * p.lineHeight + size > h)
 }
-// The artwork scaled to cover its window, moved by the transform, clipped to the window and colour-corrected.
+// The artwork scaled to cover its window and moved by the transform. It is the card's bottom layer and is not cut to
+// the window: it runs on under the template, showing wherever the template is transparent.
 function paintArtwork(ctx: CanvasRenderingContext2D, art: HTMLImageElement, win: { x: number; y: number; width: number; height: number }, w: number, h: number, artwork: ArtworkTransform) {
   const wx = win.x * w / 100, wy = win.y * h / 100, ww = win.width * w / 100, wh = win.height * h / 100
   const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
   const dw = art.naturalWidth * scale, dh = art.naturalHeight * scale
   const dx = wx + (ww - dw) / 2 + artwork.x * w / 100, dy = wy + (wh - dh) / 2 + artwork.y * h / 100
-  ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip()
   const adjust = artwork.adjust
-  if (isNeutralAdjust(adjust)) ctx.drawImage(art, dx, dy, dw, dh)
-  else {
-    // Correct only the visible window, not the whole (possibly huge) scaled image.
-    const part = document.createElement('canvas'); part.width = Math.max(1, Math.round(ww)); part.height = Math.max(1, Math.round(wh))
-    const pctx = part.getContext('2d', { willReadFrequently: true })
-    if (pctx) {
-      pctx.drawImage(art, dx - wx, dy - wy, dw, dh)
-      const pixels = pctx.getImageData(0, 0, part.width, part.height)
-      adjustPixels(pixels.data, part.width, part.height, adjust!)
-      pctx.putImageData(pixels, 0, 0)
-      ctx.drawImage(part, wx, wy, ww, wh)
-    } else ctx.drawImage(art, dx, dy, dw, dh)
-  }
-  ctx.restore()
+  if (isNeutralAdjust(adjust)) { ctx.drawImage(art, dx, dy, dw, dh); return }
+  // Correct only what is on the card, not the whole (possibly huge) scaled image.
+  const part = document.createElement('canvas'); part.width = w; part.height = h
+  const pctx = part.getContext('2d', { willReadFrequently: true })
+  if (!pctx) { ctx.drawImage(art, dx, dy, dw, dh); return }
+  pctx.drawImage(art, dx, dy, dw, dh)
+  const pixels = pctx.getImageData(0, 0, w, h)
+  adjustPixels(pixels.data, w, h, adjust!)
+  pctx.putImageData(pixels, 0, 0)
+  ctx.drawImage(part, 0, 0)
 }
 // Layers, bottom first: the card's artwork (positioned by `artwork` inside
 // ART_WINDOW), the faction template (generated image), overlays, panels, text.
 // The artwork only shows where the template is transparent.
-export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; outputSize?: { width: number; height: number } }
+export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; eventElement?: EventElementInput; outputSize?: { width: number; height: number } }
 export type RenderOutput = { canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }
 // Upgrade and event cards. Layers, bottom first: the card's artwork (events
 // only, inside its window), then for events the chains, the faction template
 // (generated or uploaded), for events the banners, then the icons and logo, and
 // the text on top. The frame supplies the panels.
-async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
+async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), eventElement, outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
   const iconUrl = card.category === 'upgrade' ? ORDER_ICONS[card.upgrade_type] : ACTION_ICONS[card.action]
   const upgrade = card.category === 'upgrade'
   const event = card.category === 'schema'
-  const [template, icon, logo, levelBadge, gear, art, chains, banners] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, event ? loadImage(eventChainsSrc) : null, event ? loadImage(eventBannersSrc) : null, loadFonts()])
+  const [template, icon, logo, levelBadge, gear, art, chains, banners, element] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, event ? loadImage(eventChainsSrc) : null, event ? loadImage(eventBannersSrc) : null, event && eventElement ? keyedElement(eventElement.url) : null, loadFonts()])
   const w = outputSize?.width ?? template.naturalWidth
   const h = outputSize?.height ?? template.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
@@ -285,6 +285,11 @@ async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   if (chains) coverDraw(chains)
   coverDraw(template)
   if (banners) coverDraw(banners)
+  // The faction's ornament on the strip under the tactic/scheme banner, over the banners and under the icons.
+  if (element && eventElement) {
+    const ew = w * eventElement.scale, eh = element.height * (ew / element.width)
+    ctx.drawImage(element, w * (EVENT_ELEMENT_HOME.x + eventElement.x) - ew / 2, h * (EVENT_ELEMENT_HOME.y + eventElement.y) - eh / 2, ew, eh)
+  }
   const colors = defaultLayout(card.category), warnings: string[] = []
   const texts: Partial<Record<typeof LAYERS[number], string>> = card.category === 'upgrade'
     ? { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.text, limitation: card.limitation ?? '' }
@@ -331,14 +336,6 @@ async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   if (art) paintArtwork(ctx, art, artWindow('combat'), w, h, artwork)
   const cover = Math.max(w / template.naturalWidth, h / template.naturalHeight)
   ctx.drawImage(template, (w - template.naturalWidth * cover) / 2, (h - template.naturalHeight * cover) / 2, template.naturalWidth * cover, template.naturalHeight * cover)
-  ctx.drawImage(ribbon, 0, 0, w, h)
-  // The level badge and the resource gear, on the round badge and the plate of the ribbon (starting cards have the logo instead).
-  for (const [image, p] of [[levelBadge, layout.level_icon], [gear, layout.cost_icon]] as const) {
-    if (!image) continue
-    const bw = p.width * w / 100, bh = p.height * h / 100, f = Math.min(bw / image.naturalWidth, bh / image.naturalHeight)
-    ctx.save(); setCardShadow(ctx, h)
-    ctx.drawImage(image, p.x * w / 100 + (bw - image.naturalWidth * f) / 2, p.y * h / 100 + (bh - image.naturalHeight * f) / 2, image.naturalWidth * f, image.naturalHeight * f); ctx.restore()
-  }
   // Fonts are fixed: headline for the title and numbers, rules font for text.
   const familyFor = (_p: Placement, layer: string) => layer === 'name' || layer === 'level' || layer === 'resource_cost' ? 'CardHeadline' : 'CardRules'
   const upperBlock = measureBlock(ctx, card.upper_text, layout.upper_text, familyFor(layout.upper_text, 'upper_text'), w, h)
@@ -354,6 +351,15 @@ async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   // needs more parchment than the source image supplies. The canvas crops it.
   if (panels.backgroundY !== null) ctx.drawImage(background, 0, panels.backgroundY, w, Math.max(background.naturalHeight * w / background.naturalWidth, h - panels.backgroundY))
   if (foreground && panels.foregroundY !== null) ctx.drawImage(foreground, 0, panels.foregroundY, w, Math.max(foreground.naturalHeight * w / foreground.naturalWidth, h - panels.foregroundY))
+  // The ribbon and its icons are drawn over the text panels, whatever the panels' size or place.
+  ctx.drawImage(ribbon, 0, 0, w, h)
+  // The level badge and the resource gear, on the round badge and the plate of the ribbon (starting cards have the logo instead).
+  for (const [image, p] of [[levelBadge, layout.level_icon], [gear, layout.cost_icon]] as const) {
+    if (!image) continue
+    const bw = p.width * w / 100, bh = p.height * h / 100, f = Math.min(bw / image.naturalWidth, bh / image.naturalHeight)
+    ctx.save(); setCardShadow(ctx, h)
+    ctx.drawImage(image, p.x * w / 100 + (bw - image.naturalWidth * f) / 2, p.y * h / 100 + (bh - image.naturalHeight * f) / 2, image.naturalWidth * f, image.naturalHeight * f); ctx.restore()
+  }
   const textPositions = {
     upper_text: { ...layout.upper_text, y: panels.upperY / h * 100, height: Math.max(layout.upper_text.height, upperBlock.height / h * 100) },
     lower_text: { ...layout.lower_text, y: panels.lowerY / h * 100, height: Math.max(layout.lower_text.height, lowerBlock.height / h * 100) },

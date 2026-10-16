@@ -1,13 +1,14 @@
 import { useFactionColor } from './api'
 import { useFactionLogos } from './logos'
 import { BannerEditor } from './BannerEditor'
+import { EventElementEditor } from './EventElementEditor'
 import { ColorField, LogoCell } from './FactionIdentity'
 import { useFactions } from '../factions/api'
 
 const heading = 'm-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300'
 
 // Faction-wide settings: its logo (used on every card back), its colour, and
-// its banner (with its nebula). Front templates are chosen with the gear button, backs on each
+// its banner (with its nebula) and the element on its event cards. Front templates are chosen with the gear button, backs on each
 // card type's back page.
 export function FactionConfigPanel({ factionId }: { factionId: number }) {
   const faction = useFactions().data?.find(f => f.id === factionId)
@@ -27,6 +28,10 @@ export function FactionConfigPanel({ factionId }: { factionId: number }) {
     <section aria-label="Banner" className="space-y-3">
       <h2 className={heading}>Banner</h2>
       <BannerEditor key={factionId} factionId={factionId} />
+    </section>
+    <section aria-label="Event card element" className="space-y-3">
+      <h2 className={heading}>Event card element</h2>
+      <EventElementEditor key={factionId} factionId={factionId} />
     </section>
   </div>
 }

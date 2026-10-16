@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -316,11 +316,37 @@ test.each(['combat', 'card back'])('%s opens a 3D preview on the generated side'
   }
 })
 
-test('non-combat types do not offer combat overlay or 3D preview', async () => {
+test('event fronts offer the card preview but no combat 3D preview', async () => {
   gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
   server.use(http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name: 'events' }])))
   renderAt()
   await userEvent.click(await screen.findByRole('button', { name: 'Open Sisters × events #41' }))
+  expect(screen.getByRole('button', { name: 'Card preview' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /3D preview/ })).not.toBeInTheDocument()
+})
+
+test('an element image is shown where it is used and is saved with the place chosen for it', async () => {
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  let body: Record<string, unknown> | null = null
+  usePreviewLayers.setState({ overlay: true })
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name: 'event element' }])),
+    http.put('/api/faction-event-elements/:id', async ({ request }) => { body = (await request.json()) as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...body }) }),
+  )
+  renderAt()
+  const size = await screen.findByRole('slider', { name: /Size/ })
+  fireEvent.change(size, { target: { value: '70' } })
+  const buttons = screen.getAllByRole('button', { name: 'Use for faction' })
+  await userEvent.click(buttons[buttons.length - 1])
+  await waitFor(() => expect(body).not.toBeNull())
+  expect(body).toMatchObject({ element_key: 'test-41', element_scale: 0.7 })
+})
+
+test('other types do not offer combat overlay or 3D preview', async () => {
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  server.use(http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name: 'upgrade' }])))
+  renderAt()
+  await userEvent.click(await screen.findByRole('button', { name: 'Open Sisters × upgrade #41' }))
   expect(screen.queryByRole('tab', { name: 'Card preview' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Card preview' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /3D preview/ })).not.toBeInTheDocument()

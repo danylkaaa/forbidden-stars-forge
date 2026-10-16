@@ -1,23 +1,20 @@
 import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useEffect, useId, useRef, useState } from 'react'
-import { Link } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
-import { Dialog } from '../../components/Dialog'
 import { Group } from '../../components/Group'
-import { useCardTypes } from '../card-types/api'
 import { DEFAULT_BANNER, removeNebulaPicture, saveFactionBanner, saveNebula, useNebula, uploadNebulaPicture, useFactionBanner, useFactionColor, useNebulaPicture, type BannerSettings } from './api'
 import { useNebulaPlacementDraft } from './useNebulaPlacementDraft'
 import { useNebulaDraft } from './useNebulaDraft'
 import { renderBanner } from './backDecor'
+import { ElementPicker } from './ElementPicker'
 import { useLibraryImages } from './library'
 import { useFactionLogos } from './logos'
-import { UploadImageButton } from './UploadImageButton'
 
 const SIZE = { width: 612, height: 828 }
 
 // A short slider: its name, the slider, and its current value (with what it is a share of, when it is one).
-function Slider({ label, hint, value, min, max, step = 1, shown, onChange }: { label: string; hint?: string; value: number; min: number; max: number; step?: number; shown: string; onChange: (value: number) => void }) {
+export function Slider({ label, hint, value, min, max, step = 1, shown, onChange }: { label: string; hint?: string; value: number; min: number; max: number; step?: number; shown: string; onChange: (value: number) => void }) {
   const id = useId()
   return <div className="grid grid-cols-[5rem_minmax(0,14rem)_auto] items-center gap-x-3 text-sm">
     <label htmlFor={id} className="text-ink/80">{label}</label>
@@ -59,10 +56,8 @@ export function BannerEditor({ factionId }: { factionId: number }) {
     mutationFn: (file: File | null) => file ? uploadNebulaPicture('combat', file) : removeNebulaPicture('combat'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['nebula-pictures'] }),
   })
-  const images = useLibraryImages(), types = useCardTypes()
-  const elementType = types.data?.find(t => t.name === 'back element')
+  const images = useLibraryImages()
   const element = banner.element_key ? images.data.find(i => i.key === banner.element_key) : undefined
-  const options = images.data.filter(i => i.factionId === factionId && i.cardTypeId === elementType?.id)
   const [picking, setPicking] = useState(false)
   // The banner as it will look, redrawn as it is edited.
   const [preview, setPreview] = useState('')
@@ -156,18 +151,6 @@ export function BannerEditor({ factionId }: { factionId: number }) {
       {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
       <p className="m-0 text-xs text-ink/60">The banner is the frame with this faction's nebula, the logo inside it and the element over its edges (shown at the top and, turned over, at the bottom). It is used on the combat and upgrade card backs, at the banner size of each card template, with the logo and element scaling along.</p>
     </div>
-    {picking && <Dialog title="Choose banner element" width="min(1000px,100%)" onBackdropClick={() => setPicking(false)} titleExtra={<Button onClick={() => setPicking(false)}>Close</Button>}>
-      <UploadImageButton factionId={factionId} cardTypeId={elementType?.id} onUploaded={key => { change({ element_key: key }); setPicking(false) }} />
-      {!images.isPending && !options.length && <p className="m-0 text-sm text-ink/60">No elements for this faction yet. {elementType && <Link to={`/faction-lab?faction=${factionId}&card_type=${elementType.id}`} className="text-accent underline">Generate one in AI Lab</Link>} (the “back element” card type) or upload your own.</p>}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {options.map(image => <button key={image.key} type="button" aria-pressed={banner.element_key === image.key} aria-label={`Use ${image.name} as element`}
-          onClick={() => { change({ element_key: image.key }); setPicking(false) }}
-          className={`min-w-0 cursor-pointer overflow-hidden rounded-md border-2 bg-bg p-0 text-left ${banner.element_key === image.key ? 'border-accent ring-2 ring-accent/40' : 'border-divider hover:border-accent/60'}`}>
-          <img loading="lazy" src={image.url} alt="" className="block aspect-[816/300] w-full bg-[#00ff41]/20 object-contain" />
-          <span className="block truncate px-2 pt-1 text-xs" title={image.name}>{image.name}</span>
-          <span className="block px-2 pb-1.5 text-[10px] text-ink/50">{image.source}</span>
-        </button>)}
-      </div>
-    </Dialog>}
+    {picking && <ElementPicker title="Choose banner element" factionId={factionId} elementTypeName="back element" selectedKey={banner.element_key} aspect="816 / 300" onSelect={key => { change({ element_key: key }); setPicking(false) }} onClose={() => setPicking(false)} />}
   </div>
 }

@@ -50,3 +50,41 @@ export function suggestSize(size: string): { w: number; h: number } | null {
   }
   return null
 }
+
+// The edge an element's size is worked out from: its longer side.
+export const RATIO_LONG_EDGE = 1536
+
+// The size for an aspect ratio (width : height): the longer side is RATIO_LONG_EDGE, the other follows, both
+// divisible by 16. Null when the ratio is not a positive number or is outside 1:3–3:1.
+export function sizeForRatio(w: number, h: number): { w: number; h: number } | null {
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null
+  const ratio = w / h
+  if (ratio > MAX_RATIO || ratio < 1 / MAX_RATIO) return null
+  const size = ratio >= 1 ? { w: RATIO_LONG_EDGE, h: roundToStep(RATIO_LONG_EDGE / ratio) } : { w: roundToStep(RATIO_LONG_EDGE * ratio), h: RATIO_LONG_EDGE }
+  return sizeError(`${size.w}x${size.h}`) === null ? size : null
+}
+
+// The widest shape an element may have; beyond the model's 3:1 the picture is made 3:1 and cropped.
+export const MAX_ELEMENT_RATIO = 20
+
+// The size to ask the model for, and the shape to crop the result to ('' when it is the size's own shape), for an
+// aspect ratio width : height between 1:20 and 20:1. Null for anything else.
+export function sizeAndAspect(w: number, h: number): { size: { w: number; h: number }; aspect: string } | null {
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null
+  const ratio = w / h
+  if (ratio > MAX_ELEMENT_RATIO || ratio < 1 / MAX_ELEMENT_RATIO) return null
+  if (ratio <= MAX_RATIO && ratio >= 1 / MAX_RATIO) { const size = sizeForRatio(w, h); return size ? { size, aspect: '' } : null }
+  const size = sizeForRatio(ratio > 1 ? MAX_RATIO : 1, ratio > 1 ? 1 : MAX_RATIO)
+  return size ? { size, aspect: String(Math.round(ratio * 10000) / 10000) } : null
+}
+
+// A size as a short "W : H" ratio: reduced when that stays small ("3:1"), else to one decimal against 1.
+export function ratioOf(size: string): { w: string; h: string } {
+  const s = parseSize(size)
+  if (!s || s.w <= 0 || s.h <= 0) return { w: '', h: '' }
+  const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a
+  const g = gcd(s.w, s.h), rw = s.w / g, rh = s.h / g
+  if (rw <= 32 && rh <= 32) return { w: String(rw), h: String(rh) }
+  const r = s.w / s.h
+  return r >= 1 ? { w: String(Math.round(r * 100) / 100), h: '1' } : { w: '1', h: String(Math.round(100 / r) / 100) }
+}

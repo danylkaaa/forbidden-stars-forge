@@ -6,6 +6,7 @@ import { useFactions } from '../factions/api'
 import { useFactionLogos } from './logos'
 import { nebulaTemplateUrl } from './backDecor'
 import { UPGRADE_BACK_KEY, UPGRADE_FRONT_KEY, upgradeBackUrl, upgradeFrontUrl } from './upgradeBack'
+import { maskedImageUrl, useImageMasks } from '../../lib/imageMasks'
 import { useAssemblyTemplates, useBackLogoScale, useCardTypeLayouts, useFactionBanner, useDrawnNebula, useFactionColor, useNebulaPicture, type Side } from './api'
 import { LIBRARY_TABS, assemblyLayout } from './model'
 import type { ImageRef } from '../../lib/favorites'
@@ -27,7 +28,7 @@ export function matchesCategory(type: CardType | undefined, category: Category, 
   const name = type?.name.toLowerCase() ?? ''
   // The card back serves combat and event cards; the upgrade back is bundled, and its element is not a card.
   if (side === 'back') return name === 'card back' && category !== 'upgrade'
-  return name !== 'upgrade element' && !name.endsWith(' back') && LIBRARY_TABS.find(t => t.category === category)!.keywords.some(k => name.includes(k))
+  return !name.endsWith(' element') && !name.endsWith(' back') && LIBRARY_TABS.find(t => t.category === category)!.keywords.some(k => name.includes(k))
 }
 // The card type backs (and for upgrades, the top/bottom element) are generated with.
 export const backTypeName = (category: Category) => category === 'upgrade' ? 'upgrade element' : 'card back'
@@ -84,14 +85,17 @@ export function useTemplate(factionId: number | null, category: Category, side: 
   // Upgrade cards use bundled pictures, the same for every faction.
   const key = category === 'upgrade' ? (side === 'back' ? UPGRADE_BACK_KEY : UPGRADE_FRONT_KEY) : templates.data?.find(t => t.faction_id === factionId && t.category === imageCategory && (t.side ?? 'front') === side)?.image_key
   const source = key === UPGRADE_BACK_KEY ? BUNDLED_UPGRADE_BACK : key === UPGRADE_FRONT_KEY ? UPGRADE_FRONT_IMAGE : key ? images.data.find(i => i.key === key) : undefined
+  // Cards are made from the image with its hiding mask applied (what it hides shows the artwork through).
+  const masks = useImageMasks()
+  const masked = useMemo(() => source?.generationId ? { ...source, url: maskedImageUrl(source.url, source.generationId, masks.data) } : source, [source, masks.data])
   const nebula = useNebulaTemplate(factionId, side === 'front' && !source && !templates.isPending && !images.isPending)
   // Combat and upgrade backs show the faction's banner: its logo size (a share of the banner) and its ornament.
   // The event back keeps its own logo size, a share of the card.
   const bannered = category !== 'schema'
   const elementUrl = side === 'back' && bannered && banner.element_key ? images.data.find(i => i.key === banner.element_key)?.url : undefined
   const logoScale = bannered ? banner.logo_scale : eventLogoScale ?? saved?.logo_scale ?? 0.5
-  const image = useMemo(() => source && side === 'back' ? { ...source, logoUrl: logo, logoScale, elementUrl } : source ?? nebula.image, [source, side, logo, logoScale, elementUrl, nebula.image])
-  return { key: key ?? (nebula.image ? 'nebula' : undefined), image, isPending: templates.isPending || images.isPending || nebula.pending, queries: [templates, ...images.queries] }
+  const image = useMemo(() => masked && side === 'back' ? { ...masked, logoUrl: logo, logoScale, elementUrl } : masked ?? nebula.image, [masked, side, logo, logoScale, elementUrl, nebula.image])
+  return { key: key ?? (nebula.image ? 'nebula' : undefined), image, isPending: templates.isPending || images.isPending || nebula.pending || masks.isPending, queries: [templates, ...images.queries] }
 }
 
 // For layout previews: the chosen template, else the faction's newest image

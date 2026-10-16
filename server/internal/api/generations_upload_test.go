@@ -92,3 +92,55 @@ func TestCardBackAcceptsCombatAndEventFrontsOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestHidingMaskIsKeptAndAppliedToTheServedImage(t *testing.T) {
+	dir := t.TempDir()
+	db, err := store.Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	h := NewRouter(db, nil, dir)
+	f := createFaction(t, h, "Tau")
+	ct, _ := store.NewCardTypesStore(db).Create("events", "", "", "")
+	body, ctype := uploadBody(t, map[string]string{"faction_id": strconv.FormatInt(int64(f["id"].(float64)), 10), "card_type_id": strconv.FormatInt(ct.ID, 10)}, artworkPNG(t))
+	req := httptest.NewRequest(http.MethodPost, "/api/generations/upload", body)
+	req.Header.Set("Content-Type", ctype)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var g struct{ ID int64 }
+	_ = json.Unmarshal(rec.Body.Bytes(), &g)
+	id := strconv.FormatInt(g.ID, 10)
+	do := func(method, path string, data []byte) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, bytes.NewReader(data))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if do(http.MethodGet, "/api/generations/"+id+"/mask", nil).Code != 404 {
+		t.Fatal("a mask appeared from nowhere")
+	}
+	if do(http.MethodPut, "/api/generations/"+id+"/mask", []byte("not a png")).Code != 400 {
+		t.Fatal("a non-PNG mask was accepted")
+	}
+	if do(http.MethodPut, "/api/generations/9999/mask", artworkPNG(t)).Code != 404 {
+		t.Fatal("a mask for an unknown image was accepted")
+	}
+	full := artworkPNG(t) // an opaque picture hides everything
+	if rec := do(http.MethodPut, "/api/generations/"+id+"/mask", full); rec.Code != 200 {
+		t.Fatalf("saving the mask = %d %s", rec.Code, rec.Body)
+	}
+	if list := do(http.MethodGet, "/api/image-masks", nil); !bytes.Contains(list.Body.Bytes(), []byte(`"generation_id":`+id)) {
+		t.Fatalf("list: %s", list.Body)
+	}
+	plain, masked := do(http.MethodGet, "/api/generations/"+id+"/image", nil), do(http.MethodGet, "/api/generations/"+id+"/image?mask=1", nil)
+	if masked.Code != 200 || bytes.Equal(plain.Body.Bytes(), masked.Body.Bytes()) {
+		t.Fatalf("the masked image equals the plain one (%d)", masked.Code)
+	}
+	if do(http.MethodDelete, "/api/generations/"+id+"/mask", nil).Code != 204 || do(http.MethodGet, "/api/generations/"+id+"/mask", nil).Code != 404 {
+		t.Fatal("the mask was not removed")
+	}
+	if again := do(http.MethodGet, "/api/generations/"+id+"/image?mask=1", nil); !bytes.Equal(plain.Body.Bytes(), again.Body.Bytes()) {
+		t.Fatal("without a mask the image is served as it is")
+	}
+}

@@ -10,3 +10,8 @@ test('builds a PDF with images and dashed rectangles', async () => {
   expect(text).toContain('0 0.651 0.318 RG 1.5 w [6 4.5] 0 d')
   expect(text.trimEnd().endsWith('%%EOF')).toBe(true)
 })
+
+test('the PDF asks viewers to print it at 100%, not scaled to fit', async () => {
+  const text = new TextDecoder('latin1').decode(new Uint8Array(await buildPdf(595.28, 841.89, [[]]).arrayBuffer()))
+  expect(text).toContain('/PrintScaling /None')
+})

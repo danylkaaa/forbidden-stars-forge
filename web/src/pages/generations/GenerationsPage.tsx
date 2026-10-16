@@ -150,7 +150,7 @@ export default function GenerationsPage() {
           return (
             <div key={e.key} className="group/image overflow-hidden rounded-md bg-surface shadow-[0_0_0_1px_var(--color-neutral-800)]">
               <div className="relative">
-              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} cardPreviewFactionId={e.factionId} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
+              <ZoomableImage src={e.imageUrl} alt={alt} {...previewLayers(ct)} cardPreviewFactionId={e.factionId} cardPreviewCategory={ct?.name === 'events' ? 'schema' : undefined} downloadName={e.name} favorite={{ target: e.ref, value: e.favorite }}
                 editTarget={e.ref} compareSrc={e.compareSrc} className="block w-full">
                 <img src={e.imageUrl} alt={alt} loading="lazy" className="block aspect-[3/4] w-full object-cover" />
               </ZoomableImage>

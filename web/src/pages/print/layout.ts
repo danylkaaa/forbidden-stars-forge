@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Card } from '../cards/model'
 import { useCardTypes, type CardType } from '../card-types/api'
 
 export type LineStyle = 'dashed' | 'dotted' | 'solid'
@@ -12,19 +13,20 @@ export type PrintSettings = {
   flip: 'long' | 'short'; includeBacks: boolean
   backsBeside: boolean // print each back next to its front on the same side instead of on the reverse of the sheet
   cutLines: boolean; cutLinesOnBacks: boolean; guidesToEdge: boolean
+  cutTolerance: number // % of the card's size left between its cut edge and the cutting lines, for an unsteady hand
   trimBleed: boolean // fit more cards per sheet by trimming each card's bleed to the space between cards
   lineWidth: number; lineColor: string; lineStyle: LineStyle // width in CSS px
 }
 export const DEFAULT_SETTINGS: PrintSettings = {
   paper: 'a4', orientation: 'portrait', cardWidth: 63.5, cardHeight: 88, gap: 0, margin: 8, evenSpacing: true,
   flip: 'long', includeBacks: true, backsBeside: false,
-  cutLines: true, cutLinesOnBacks: false, guidesToEdge: true, trimBleed: true, lineWidth: 2, lineColor: '#00a651', lineStyle: 'dashed',
+  cutLines: true, cutLinesOnBacks: false, guidesToEdge: true, cutTolerance: 1, trimBleed: true, lineWidth: 1, lineColor: '#00a651', lineStyle: 'dashed',
 }
 export const usePrintSettings = create<{ settings: PrintSettings; update: (patch: Partial<PrintSettings>) => void; reset: () => void }>()(persist(set => ({
   settings: DEFAULT_SETTINGS,
   update: patch => set(s => ({ settings: { ...s.settings, ...patch } })),
   reset: () => set({ settings: DEFAULT_SETTINGS }),
-}), { name: 'card-forge-print-v1', merge: (saved, current) => ({ ...current, ...(saved as object), settings: { ...DEFAULT_SETTINGS, ...(saved as { settings?: PrintSettings } | undefined)?.settings } }) }))
+}), { name: 'card-forge-print-v1', version: 2, migrate: (saved) => { const st = saved as { settings?: PrintSettings }; return { ...st, settings: { ...st.settings, ...(st.settings?.lineWidth === 2 ? { lineWidth: 1 } : {}) } } }, merge: (saved, current) => ({ ...current, ...(saved as object), settings: { ...DEFAULT_SETTINGS, ...(saved as { settings?: PrintSettings } | undefined)?.settings } }) }))
 
 export const MM_PT = 72 / 25.4
 export const PX_PT = 0.75
@@ -73,22 +75,30 @@ export const slotRect = (g: Grid, s: PrintSettings, slot: number) => {
   }
 }
 export type Segment = { x1: number; y1: number; x2: number; y2: number }
-// Cutting guides for the cards on a sheet. Extended guides run across the whole
-// sheet along every cut edge of an occupied column and row.
+// How far the centre of a cutting line sits outside the card's cut edge, across and down: half the line's own width,
+// so the line lies wholly outside the card, plus the cut tolerance (a share of the card's width and height) as room
+// for a slip of the hand. The bleed around the card makes up for the gap.
+export const guideOffset = (s: PrintSettings) => {
+  const half = s.lineWidth * PX_PT / MM_PT / 2, tolerance = Math.max(0, s.cutTolerance) / 100
+  return { x: half + tolerance * s.cardWidth, y: half + tolerance * s.cardHeight }
+}
+// Cutting guides for the cards on a sheet, drawn just outside each card so cutting along them leaves the card its
+// full size. Extended guides run across the whole sheet along every cut edge of an occupied column and row.
 export function cutGuides(g: Grid, s: PrintSettings, page: (number | null)[]): Segment[] {
-  const out: Segment[] = []
+  const out: Segment[] = [], off = guideOffset(s)
   if (!s.guidesToEdge) {
     page.forEach((id, slot) => {
       if (id === null) return
       const { x, y, w, h } = slotRect(g, s, slot).cut
-      out.push({ x1: x, y1: y, x2: x + w, y2: y }, { x1: x, y1: y + h, x2: x + w, y2: y + h }, { x1: x, y1: y, x2: x, y2: y + h }, { x1: x + w, y1: y, x2: x + w, y2: y + h })
+      const l = x - off.x, r = x + w + off.x, t = y - off.y, b = y + h + off.y
+      out.push({ x1: l, y1: t, x2: r, y2: t }, { x1: l, y1: b, x2: r, y2: b }, { x1: l, y1: t, x2: l, y2: b }, { x1: r, y1: t, x2: r, y2: b })
     })
     return out
   }
   const cols = new Set<number>(), rows = new Set<number>()
   page.forEach((id, slot) => { if (id !== null) { cols.add(slot % g.cols); rows.add(Math.floor(slot / g.cols)) } })
-  for (const col of cols) { const { x, w } = slotRect(g, s, col).cut; for (const lx of [x, x + w]) out.push({ x1: lx, y1: 0, x2: lx, y2: g.page.height }) }
-  for (const row of rows) { const { y, h } = slotRect(g, s, row * g.cols).cut; for (const ly of [y, y + h]) out.push({ x1: 0, y1: ly, x2: g.page.width, y2: ly }) }
+  for (const col of cols) { const { x, w } = slotRect(g, s, col).cut; for (const lx of [x - off.x, x + w + off.x]) out.push({ x1: lx, y1: 0, x2: lx, y2: g.page.height }) }
+  for (const row of rows) { const { y, h } = slotRect(g, s, row * g.cols).cut; for (const ly of [y - off.y, y + h + off.y]) out.push({ x1: 0, y1: ly, x2: g.page.width, y2: ly }) }
   return out
 }
 export const PRINT_DPI = 300
@@ -175,3 +185,10 @@ export function useCutMm() {
   const { width, height } = cutSizeOf(data, 'combat')
   return useMemo(() => ({ width, height }), [width, height])
 }
+
+// The order cards are printed in: combat cards, then events, then upgrades; within a kind by level (a starting
+// combat card first; events have none), then by name.
+const KIND_RANK: Record<Card['category'], number> = { combat: 0, schema: 1, upgrade: 2 }
+const levelOf = (c: Card) => c.category === 'combat' ? (c.starting ? -1 : c.level) : c.category === 'upgrade' ? c.level : 0
+export const cardOrder = (a: Card, b: Card) =>
+  KIND_RANK[a.category] - KIND_RANK[b.category] || levelOf(a) - levelOf(b) || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })

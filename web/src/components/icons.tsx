@@ -73,6 +73,26 @@ export function EditIcon({ className }: IconProps) {
   )
 }
 
+// A magnifying glass.
+export function MagnifierIcon({ className }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <circle cx="7.5" cy="7.5" r="4.8" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M11.2 11.2L15.5 15.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// A square with a hidden corner: a layer mask.
+export function MaskIcon({ className }: IconProps) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <rect x="2.5" y="2.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 2.5h6.5V9L9 2.5z M2.5 9H9v6.5H2.5V9z" fill="currentColor" opacity="0.55" />
+    </svg>
+  )
+}
+
 export function GalleryIcon({ className }: IconProps) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className}>

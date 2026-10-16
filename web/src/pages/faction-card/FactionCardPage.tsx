@@ -8,7 +8,6 @@ import { Field, inputClass, selectClass } from '../../components/Field'
 import { useCards } from '../cards/api'
 import { SearchableSelect } from '../../components/SearchableSelect'
 import { CategoryTabs } from '../assemble/CategoryTabs'
-import { FactionSelect } from '../assemble/FactionSelect'
 import { useLibraryImages } from '../assemble/library'
 import { useAssembly } from '../assemble/state'
 import { CardCanvas } from '../assemble/CardCanvas'
@@ -134,7 +133,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
     <div className="flex flex-wrap items-center gap-3">
       <Link to={only ? `/assemble/faction-card?faction=${factionId}` : '/assemble'} className="text-sm text-accent no-underline hover:underline">{only ? '← Faction card' : '← Library'}</Link>
       <h1 className="m-0 font-display text-2xl text-accent-300">{only ? `Faction card ${only}` : 'Faction card'}</h1>
-      <FactionSelect factions={factions.data ?? []} value={factionId} onChange={id => state.select({ factionId: id })} />
+      {factions.data?.find(f => f.id === factionId) && <span className="font-mono text-xs uppercase tracking-[0.18em] text-ink/60">{factions.data.find(f => f.id === factionId)!.dlc} / <span className="text-ink">{factions.data.find(f => f.id === factionId)!.name}</span></span>}
       <div className="ml-auto flex flex-wrap gap-2">
         {only !== 'back' && <Button disabled={!faces.front} onClick={() => void download('front')}>Download front PNG</Button>}
         {only !== 'front' && <Button disabled={!faces.back} onClick={() => void download('back')}>Download back PNG</Button>}

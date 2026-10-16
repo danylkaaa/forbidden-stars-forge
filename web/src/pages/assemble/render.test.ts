@@ -48,11 +48,14 @@ test('rules text is left aligned and centred in the visible parchment of each pa
   expect(upperBaseline - 20 - (backgroundY + bgBorder)).toBeCloseTo(foregroundY + barTop - (upperBaseline + 5))
   expect(lowerBaseline - 20 - (foregroundY + barBottom)).toBeCloseTo(bottomY - (lowerBaseline + 5))
 })
-test('card artwork is the bottom layer, under the template and the ribbon', async () => {
+test('card artwork is the bottom layer, under the template, and the ribbon is drawn over the text panels', async () => {
   await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', artworkUrl: 'illustration' })
-  const sources = ctx.drawImage.mock.calls.slice(0, 3).map(call => (call[0] as { url?: string }).url ?? '')
+  const sources = ctx.drawImage.mock.calls.map(call => (call[0] as { url?: string }).url ?? '')
   expect(sources.slice(0, 2)).toEqual(['illustration', 'art'])
-  expect(sources[2]).toContain('ribbon-basic')
+  const ribbon = sources.findIndex(url => url.includes('ribbon-basic'))
+  expect(ribbon).toBeGreaterThan(1)
+  // Every parchment panel is drawn before the ribbon, so the ribbon and its icons stay on top of them.
+  for (const [i, url] of sources.entries()) if (/combat\/(background|foreground)/.test(url)) expect(i).toBeLessThan(ribbon)
 })
 test('level 0 cards draw the faction logo last, in place of the level number', async () => {
   await renderCard({ card, layout: defaultLayout(), imageUrl: 'art', logoUrl: 'logo' })

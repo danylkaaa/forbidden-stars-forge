@@ -17,8 +17,11 @@ type CardType struct {
 	// CardWidthMM and CardHeightMM are the finished (cut) card size in millimetres.
 	CardWidthMM  float64 `json:"card_width_mm"`
 	CardHeightMM float64 `json:"card_height_mm"`
-	CreatedAt    string  `json:"created_at"`
-	UpdatedAt    string  `json:"updated_at"`
+	// AspectRatio (width / height) is the shape of the finished image when it is beyond the model's 3:1 limit: the
+	// picture is made at ImageSize and cropped to it. 0 means the shape of ImageSize.
+	AspectRatio float64 `json:"aspect_ratio"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -29,11 +32,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm, aspect_ratio"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM, &ct.AspectRatio)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -41,7 +44,7 @@ func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 }
 
 func (s *CardTypesStore) List() ([]CardType, error) {
-	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY CASE name WHEN 'combat' THEN 0 WHEN 'events' THEN 1 WHEN 'upgrade' THEN 2 WHEN 'card back' THEN 3 WHEN 'back element' THEN 4 WHEN 'faction card' THEN 5 WHEN 'faction card back' THEN 6 ELSE 7 END, name ASC")
+	rows, err := s.db.Query("SELECT " + cardTypeCols + " FROM card_types ORDER BY CASE name WHEN 'combat' THEN 0 WHEN 'events' THEN 1 WHEN 'upgrade' THEN 2 WHEN 'card back' THEN 3 WHEN 'back element' THEN 4 WHEN 'event element' THEN 5 WHEN 'faction card' THEN 6 WHEN 'faction card back' THEN 7 ELSE 8 END, name ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +127,18 @@ func (s *CardTypesStore) SetImageSize(id int64, size string) (CardType, error) {
 	return s.Get(id)
 }
 
+// SetAspectRatio sets (or with 0 clears) the shape the type's images are cropped to.
+func (s *CardTypesStore) SetAspectRatio(id int64, ratio float64) (CardType, error) {
+	res, err := s.db.Exec(`UPDATE card_types SET aspect_ratio = ?, updated_at = datetime('now') WHERE id = ?`, ratio, id)
+	if err != nil {
+		return CardType{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return CardType{}, ErrNotFound
+	}
+	return s.Get(id)
+}
+
 // SetCardSize sets the type's finished card size in millimetres.
 func (s *CardTypesStore) SetCardSize(id int64, widthMM, heightMM float64) (CardType, error) {
 	res, err := s.db.Exec(`UPDATE card_types SET card_width_mm = ?, card_height_mm = ?, updated_at = datetime('now') WHERE id = ?`, widthMM, heightMM, id)
@@ -174,7 +189,7 @@ func (s *CardTypesStore) Delete(id int64) error {
 
 // BuiltinCardTypes always exist: one per card category (combat, events,
 // upgrades). They are created on startup and cannot be deleted or renamed.
-var BuiltinCardTypes = []string{"combat", "events", "upgrade", "card back", "back element", "faction card", "faction card back"}
+var BuiltinCardTypes = []string{"combat", "events", "upgrade", "card back", "back element", "event element", "faction card", "faction card back"}
 
 // The card back is one texture for combat and event cards. Its type starts
 // with a prompt prefilled for it; the server also gives it a plain chroma
@@ -190,11 +205,19 @@ const elementDescription = "Create a small decorative ornament for the top edge 
 
 const elementConstraints = "The whole canvas is plain green except the ornament; keep the exact canvas dimensions and aspect ratio (a wide, short canvas). Do not fill the green: it is removed later. No text, letters, numbers or icons."
 
+// The ornament on an event card, between the tactic/scheme banner and the text panel.
+const eventElementDescription = "Create a small decorative ornament for a Warhammer 40K board-game event card, for this faction: a compact, ornate piece (like a crest, seal, aquila, skull or gear) centred on the canvas, in the faction's colours and materials, that sits on the chains and studs between the title banner and the parchment text panel. Draw only the ornament on the plain green canvas, with a clear green margin around it."
+
+const eventElementConstraints = "The whole canvas is plain green except the ornament; keep the exact canvas dimensions and aspect ratio (a wide, short canvas). Do not fill the green: it is removed later. No text, letters, numbers or icons."
+
+// ElementImageSize is the AI image size of an element type: 3:1, the widest shape the model accepts.
+const ElementImageSize = "1536x512"
+
 // ElementCanvas is the pixel size of the element's template.
 var ElementCanvas = [2]int{816, 240}
 
 // IsElementCardType reports whether a card type is a custom-size element, not a card.
-func IsElementCardType(name string) bool { return name == "back element" }
+func IsElementCardType(name string) bool { return name == "back element" || name == "event element" }
 
 func backDescription(deck string) string {
 	return "Create the back of a Warhammer 40K board-game " + deck + " card for this faction. A symmetrical, ornate design that fills the whole card: a central faction emblem framed by an ornamental border, in the faction's colours and materials. It must read clearly at small size and be identical on every " + deck + " card of the deck. Do not reuse elements of the card front (no title bar, resource column or text panels)."
@@ -238,16 +261,21 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 		description, constraints := "", ""
 		if deck, ok := backDecks[name]; ok {
 			description, constraints = backDescription(deck), backConstraints
+		} else if name == "event element" {
+			description, constraints = eventElementDescription, eventElementConstraints
 		} else if IsElementCardType(name) {
 			description, constraints = elementDescription, elementConstraints
 		} else if d, ok := factionCardDescriptions[name]; ok {
 			description, constraints = d, factionCardConstraints
 		}
-		w, h := 63.5, 88.0
+		w, h, size := 63.5, 88.0, ""
 		if IsFactionCardType(name) {
 			w, h = 258, 170
 		}
-		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints,card_width_mm,card_height_mm) VALUES(?,?,?,?,?)`, name, description, constraints, w, h); err != nil {
+		if IsElementCardType(name) {
+			size = ElementImageSize
+		}
+		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints,card_width_mm,card_height_mm,image_size) VALUES(?,?,?,?,?,?)`, name, description, constraints, w, h, size); err != nil {
 			return err
 		}
 		if _, ok := factionCardDescriptions[name]; ok {

@@ -363,3 +363,23 @@ func TestCardTypeCutSizeIsSavedAndValidated(t *testing.T) {
 		t.Fatalf("tiny size accepted: %d", rec.Code)
 	}
 }
+
+func TestCardTypeAspectRatioIsSavedAndValidated(t *testing.T) {
+	h, _ := newTestRouterWithStore(t)
+	rec, ct := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "strip", "aspect_ratio": "5"}, "", nil)
+	if rec.Code != http.StatusCreated || ct["aspect_ratio"] != 5.0 {
+		t.Fatalf("create: %d %v", rec.Code, ct)
+	}
+	id := int64(ct["id"].(float64))
+	_, ct = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "strip"}, "", nil)
+	if ct["aspect_ratio"] != 5.0 {
+		t.Fatalf("ratio lost: %v", ct)
+	}
+	if rec, _ = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "strip", "aspect_ratio": "50"}, "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("an extreme ratio was accepted: %d", rec.Code)
+	}
+	_, ct = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "strip", "aspect_ratio": ""}, "", nil)
+	if ct["aspect_ratio"] != 0.0 {
+		t.Fatalf("ratio not cleared: %v", ct)
+	}
+}

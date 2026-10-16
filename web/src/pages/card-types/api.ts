@@ -14,13 +14,16 @@ export type CardType = {
   image_size?: string // AI image size, "<width>x<height>" px; empty follows the template
   card_width_mm?: number // finished (cut) card size, used for print layout and cutting lines
   card_height_mm?: number
+  aspect_ratio?: number // for an element beyond 3:1: the shape its images are cropped to (width / height); 0 follows image_size
   created_at: string
   updated_at: string
 }
 
 // One per card category; the server creates them on startup and refuses to
 // delete or rename them.
-export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'card back', 'back element', 'faction card', 'faction card back'] as const
+export const BUILTIN_CARD_TYPES = ['combat', 'events', 'upgrade', 'card back', 'back element', 'event element', 'faction card', 'faction card back'] as const
+// Elements (ornaments placed on cards) are not cards: no finished card size.
+export const isElementCardType = (name: string) => name === 'back element' || name === 'event element'
 export const isBuiltinCardType = (name: string) => (BUILTIN_CARD_TYPES as readonly string[]).includes(name)
 
 export function useCardTypes() {
@@ -28,7 +31,7 @@ export function useCardTypes() {
 }
 
 export function buildCardTypeForm(
-  fields: { name: string; description: string; constraints: string; image_size?: string; card_width_mm?: string; card_height_mm?: string },
+  fields: { name: string; description: string; constraints: string; image_size?: string; card_width_mm?: string; card_height_mm?: string; aspect_ratio?: string },
   template: File | null,
 ): FormData {
   const form = new FormData()
@@ -36,6 +39,7 @@ export function buildCardTypeForm(
   form.set('description', fields.description)
   form.set('constraints', fields.constraints)
   if (fields.image_size !== undefined) form.set('image_size', fields.image_size)
+  if (fields.aspect_ratio !== undefined) form.set('aspect_ratio', fields.aspect_ratio)
   if (fields.card_width_mm !== undefined) form.set('card_width_mm', fields.card_width_mm)
   if (fields.card_height_mm !== undefined) form.set('card_height_mm', fields.card_height_mm)
   if (template) form.set('template', template)

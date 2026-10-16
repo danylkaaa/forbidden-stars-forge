@@ -125,6 +125,11 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 			return imaging.ProtectUnmasked(original, edited, maskPNG, 4)
 		}
 	}
+	// A type cropped to an aspect ratio gets its result cropped again; protecting the unpainted area needs the
+	// original and the result to be the same size, which the crop makes impossible.
+	if crop := cropTo(ct); crop != nil {
+		post = crop
+	}
 	edit := openai.ImageEditRequest{
 		Model: model, Prompt: p, Quality: quality, Size: ct.ImageSize,
 		ImageURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(original),

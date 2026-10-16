@@ -21,6 +21,7 @@ import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, useSh
 import { useFileDrag } from '../../lib/useFileDrag'
 import { DropImageIcon } from '../../components/icons'
 import { ArtworkAdjustPanel } from './ArtworkAdjustPanel'
+import { ArtworkExtend } from './ArtworkExtend'
 import { artworkRect, defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
 import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS, libraryLink } from './model'
 import { pngBlob } from './render'
@@ -52,8 +53,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const [artworkFile, setArtworkFile] = useState<File | null>(null)
   useEffect(() => {
     if (!creating) return
-    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id)
-    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id) }
+    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id)
+    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id) }
   }, [creating, id])
   useEffect(() => {
     if (!creating) return
@@ -81,7 +82,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const template = useTemplate(factionId, category)
   const templateLayout = useTemplateLayout(category)
   const back = useTemplate(factionId, category, 'back')
-  const { input, assembly, logoScale, titleScale, textPadding, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
+  const { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, textPadding, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
@@ -91,9 +92,12 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const [sharedLogoScale, setSharedLogoScale] = useSharedLogoScale(factionId, category)
   const logoScaleDirty = state.logoScales[id] !== undefined
   const titleScaleDirty = state.titleScales[id] !== undefined
+  const descriptionScaleDirty = state.descriptionScales?.[id] !== undefined || state.lowerScales?.[id] !== undefined
   const paddingDirty = state.textPaddings?.[id] !== undefined
   const transformDirty = !!state.transforms[id]
   const hasArtwork = !!assembly.data?.image_url
+  // The shape of the artwork area, width / height, on the card as drawn.
+  const artRatio = ART_WINDOW.width * (result?.canvas.width ?? 816) / (ART_WINDOW.height * (result?.canvas.height ?? 1104))
   // The artwork moves only while selected: click it on the preview (or use
   // the Artwork panel button). Enter (or a click elsewhere) keeps the move,
   // Esc puts the artwork back where it was when selected.
@@ -125,13 +129,13 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         let artworkError = ''
         try {
           const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
-          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale, textPadding) })
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale, textPadding, descriptionScale, lowerScale) })
           queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
         } catch (e) {
           artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
           // Keep the chosen position available for saving from the editor.
           useAssembly.getState().transform(String(created.id), transform)
-          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale); useAssembly.getState().textPadding(String(created.id), textPadding)
+          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale); useAssembly.getState().descriptionScale(String(created.id), descriptionScale); useAssembly.getState().lowerScale(String(created.id), lowerScale); useAssembly.getState().textPadding(String(created.id), textPadding)
         }
         queryClient.setQueryData(['cards', 'one', String(created.id)], created)
         useAssembly.getState().select({ factionId: created.faction_id, category: created.category })
@@ -143,12 +147,12 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         queryClient.setQueryData(['cards', 'one', id], updated)
         useAssembly.getState().clearEdits(id)
       }
-      if ((transformDirty || logoScaleDirty || titleScaleDirty || paddingDirty) && assembly.data) {
+      if ((transformDirty || logoScaleDirty || titleScaleDirty || descriptionScaleDirty || paddingDirty) && assembly.data) {
         const value = { ...assembly.data, transform, logo_scale: logoScale }
-        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale, textPadding) }))
+        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale, textPadding, descriptionScale, lowerScale) }))
         useAssembly.getState().clearTransform(id)
         useAssembly.getState().clearLogoScale(id)
-        useAssembly.getState().clearTitleScale(id)
+        useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id)
         useAssembly.getState().clearTextPadding(id)
       }
     },
@@ -256,7 +260,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const withSymbols = (field: ReactNode) => <div className="group/symbols relative">{field}
     <div className="absolute bottom-full right-0 z-[1] pb-1 opacity-0 transition-opacity focus-within:opacity-100 group-focus-within/symbols:opacity-100 group-hover/symbols:opacity-100"><SymbolButtons insert={insertSymbol} disabled={busy} /></div></div>
   function discard() {
-    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearTextPadding(id)
+    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearDescriptionScale(id); state.clearLowerScale(id); state.clearTextPadding(id)
     if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
   }
   async function download() {
@@ -273,7 +277,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   if (!creating && cardQuery.isError) return <div role="alert" className="text-danger">{cardQuery.error.message} <Link to="/assemble" className="text-accent underline">Back to library</Link></div>
   if (!source || !draft || !saved) return <p role="status" className="text-sm text-ink/60">Loading card…</p>
 
-  const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty || paddingDirty
+  const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty || descriptionScaleDirty || paddingDirty
   const busy = save.isPending || artwork.isPending
   const queryError = [assembly, ...template.queries].find(q => q.isError)?.error ?? templateLayout.error
   return <div className="space-y-5">
@@ -376,7 +380,6 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             <Field label="Action">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.action} onChange={e => edit('action', e.target.value)}>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SearchableSelect>}</Field>
           </div>}
           {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
-          {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
           {!schema && <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
             {category === 'combat' && <label className="mr-1 flex cursor-pointer items-center gap-2 self-center text-xs text-ink/70" title="Starting cards have no level requirement or price and show the faction logo instead of a level number.">
               <input type="checkbox" checked={draft.starting === 'true'} onChange={e => setStarting(e.target.checked)} className="accent-[var(--color-accent)]" />Starting card</label>}
@@ -387,6 +390,14 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
           {(upgrade ? ['text', 'limitation'] as const : framed ? ['text'] as const : ['upper_text', 'units', 'unit_text'] as const).map(key => key === 'units'
             ? <Field key={key} label="Unit names (separate with /, shown in italics before the unit text)">{fid => <input id={fid} className={inputClass} placeholder="Skitarii/Light Cruiser" value={draft.units ?? ''} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} onChange={e => edit('units', e.target.value)} />}</Field>
             : <Field key={key} label={key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation (optional)' : key === 'unit_text' ? 'Unit text' : LAYER_LABELS[key]}>{fid => withSymbols(<textarea id={fid} rows={key === 'limitation' ? 2 : framed ? 3 : 2} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={`${inputClass} resize-y`} value={draft[key] ?? ''} onChange={e => edit(key, e.target.value)} />)}</Field>)}
+          {!framed && <div className="grid items-end gap-x-4 gap-y-2 sm:grid-cols-2">
+            <Field label={<span className="flex items-center justify-between gap-2">Upper text size <span className="font-mono text-ink/80">{Math.round(descriptionScale * 100)}%{descriptionScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.descriptionScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={descriptionScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
+              onChange={e => { save.reset(); state.descriptionScale(id, Number(e.target.value)) }} />}</Field>
+            <Field label={<span className="flex items-center justify-between gap-2">Unit text size <span className="font-mono text-ink/80">{Math.round(lowerScale * 100)}%{lowerScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.lowerScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={lowerScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
+              onChange={e => { save.reset(); state.lowerScale(id, Number(e.target.value)) }} />}</Field>
+          </div>}
+          {framed && <Field label={<span className="flex items-center justify-between gap-2">Description size <span className="font-mono text-ink/80">{Math.round(descriptionScale * 100)}%{descriptionScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.descriptionScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={descriptionScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
+            onChange={e => { save.reset(); state.descriptionScale(id, Number(e.target.value)) }} />}</Field>}
           {!framed && <details className="rounded-md border border-divider px-3 py-1.5">
             <summary className="cursor-pointer text-sm text-accent">Text margins (this card){Object.keys(textPadding).length > 0 && <span className="ml-2 text-xs text-ink/60">custom</span>}</summary>
             <div className="space-y-2 pb-2 pt-2">
@@ -425,6 +436,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               {artwork.isPending && <span role="status" className="text-xs text-ink/60">Updating artwork…</span>}
             </div>
             <p className="m-0 text-xs text-ink/60">{artworkDrag === 'block' ? 'Drop the image here.' : hasArtwork ? 'Drop another image here to replace it. Click the artwork on the preview, then drag it to move and scroll to zoom.' : 'Drop an image here or use the button (PNG, JPEG, WebP, AVIF …; saved as PNG, up to 20 MiB). It is placed in the frame’s open art area.'}</p>
+            {hasArtwork && <ArtworkExtend cardId={id} disabled={creating || busy} ratio={artRatio}
+              onDone={saved => { queryClient.setQueryData(['card-assembly', id], saved); state.clearTransform(id) }} />}
             {hasArtwork && <ArtworkAdjustPanel adjust={transform.adjust} onChange={next => { record(400); setTransform({ ...transform, adjust: next }, false) }} />}
           </section>}
           <div className="border-t border-divider pt-2">

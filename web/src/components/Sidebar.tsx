@@ -3,6 +3,7 @@ import { NavLink } from 'react-router'
 import type { ComponentType } from 'react'
 import { FactionsIcon, CardTypesIcon, LibraryIcon, LayersIcon, LabIcon, GalleryIcon, SettingsIcon } from './icons'
 
+import { FactionTree } from './FactionTree'
 import { workspaceLink, type WorkspaceMode } from './workspaceMode'
 
 const items: { to: string; label: string; Icon: ComponentType<{ className?: string }> }[] = [
@@ -51,6 +52,7 @@ export function Sidebar({ mode }: { mode: WorkspaceMode }) {
           </NavLink>
         ))}
       </nav>
+      {mode === 'library' && <FactionTree />}
       <div className="mt-auto hidden flex-col md:flex gap-3 text-center">
         <div>
           <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.25em] text-phosphor/70">&gt; Litany of the day</div>

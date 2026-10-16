@@ -4,7 +4,6 @@ import { Button } from '../../components/Button'
 import { SafeAreaLines } from '../../components/SafeArea'
 import { useCutMm } from '../print/layout'
 import { buttonClass } from '../../components/buttonStyles'
-import { FactionSelect } from './FactionSelect'
 import { GearIcon } from '../../components/icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { deleteCards, useCards } from '../cards/api'
@@ -167,7 +166,7 @@ export default function AssemblePage() {
     <div className="flex flex-wrap items-center gap-3">
       <Button aria-label="Card template settings" title="Card template settings" onClick={() => setSettingsOpen(true)} className="px-2!"><GearIcon /></Button>
       <h1 className="m-0 font-display text-2xl text-accent-300">Library</h1>
-      <FactionSelect factions={factions.data ?? []} value={factionId} onChange={factionId => state.select({ factionId })} />
+      {faction && <span className="font-mono text-xs uppercase tracking-[0.18em] text-ink/60">{faction.dlc} / <span className="text-ink">{faction.name}</span></span>}
       {factionId && !configTab && <div className="ml-auto flex gap-2">
         <Button onClick={() => setImportOpen(true)}>Import JSON</Button>
         <Link to={newCardLink} className={buttonClass('primary')}>New {tabLabel.replace(/s$/, '').toLowerCase()} card</Link>

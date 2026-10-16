@@ -92,6 +92,7 @@ type cardTypeFields struct {
 	Constraints string
 	ImageSize   *string     // nil when the form does not carry it
 	CardSizeMM  *[2]float64 // width, height; nil when the form does not carry it
+	AspectRatio *float64    // nil when the form does not carry it; 0 clears it
 }
 
 var imageSizeRe = regexp.MustCompile(`^\d{2,5}x\d{2,5}$`)
@@ -142,6 +143,17 @@ func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, 
 			}
 		}
 		f.ImageSize = &size
+	}
+	if _, ok := r.MultipartForm.Value["aspect_ratio"]; ok {
+		text := strings.TrimSpace(r.FormValue("aspect_ratio"))
+		ratio := 0.0
+		if text != "" {
+			var err error
+			if ratio, err = strconv.ParseFloat(text, 64); err != nil || (ratio != 0 && (ratio < 1.0/20 || ratio > 20)) {
+				return f, "aspect_ratio must be between 1:20 and 20:1"
+			}
+		}
+		f.AspectRatio = &ratio
 	}
 	_, hasW := r.MultipartForm.Value["card_width_mm"]
 	_, hasH := r.MultipartForm.Value["card_height_mm"]
@@ -199,6 +211,12 @@ func (h *CardTypesHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if fields.AspectRatio != nil {
+		if ct, err = h.Store.SetAspectRatio(ct.ID, *fields.AspectRatio); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
 	if fields.CardSizeMM != nil {
 		if ct, err = h.Store.SetCardSize(ct.ID, fields.CardSizeMM[0], fields.CardSizeMM[1]); err != nil {
 			h.cardTypeErr(w, err)
@@ -248,6 +266,12 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if fields.ImageSize != nil {
 		if ct, err = h.Store.SetImageSize(ct.ID, *fields.ImageSize); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
+	if fields.AspectRatio != nil {
+		if ct, err = h.Store.SetAspectRatio(ct.ID, *fields.AspectRatio); err != nil {
 			h.cardTypeErr(w, err)
 			return
 		}

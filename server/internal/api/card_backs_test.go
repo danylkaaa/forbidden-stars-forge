@@ -26,7 +26,7 @@ func TestBackTemplatesAreCreatedOnceAtTheFrontSize(t *testing.T) {
 	}
 	list, _ := types.List()
 	files, _ := os.ReadDir(filepath.Join(dir, "templates"))
-	if len(files) != 4 {
+	if len(files) != 5 {
 		t.Fatalf("templates: %d", len(files))
 	}
 	for _, ct := range list {

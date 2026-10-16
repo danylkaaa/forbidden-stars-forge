@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router'
 import { Sidebar } from './Sidebar'
 import { ModeNavbar } from './ModeNavbar'
 import { workspaceMode } from './workspaceMode'
+import { GenerationWatcher, Notices } from './Notices'
 
 export function AppLayout() {
   const location = useLocation()
@@ -15,6 +16,8 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <GenerationWatcher />
+      <Notices />
     </div>
   )
 }

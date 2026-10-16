@@ -8,12 +8,12 @@ import { DEFAULT_NEBULA, NO_PLACEMENT, type NebulaPlacement, type NebulaSettings
 // A card's own tweaks: its title size as a multiple of the card type's size.
 // A card's own margins above and below its upper and lower text, in % of the card's width (the template's apply where unset).
 export type TextPadding = { upper_top?: number; upper_bottom?: number; lower_top?: number; lower_bottom?: number }
-export type AssemblyLayout = Partial<Layout> & { title_scale?: number; text_padding?: TextPadding }
-// The layout to save with a card: its title size and text margins are kept only when they differ from the template's.
-export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number, padding?: TextPadding): AssemblyLayout => {
-  const { title_scale: _, text_padding: __, ...rest } = layout
+export type AssemblyLayout = Partial<Layout> & { title_scale?: number; description_scale?: number; lower_scale?: number; text_padding?: TextPadding }
+// The layout to save with a card: its title and description sizes and text margins are kept only when they differ from the template's.
+export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number, padding?: TextPadding, descriptionScale = 1, lowerScale = 1): AssemblyLayout => {
+  const { title_scale: _, text_padding: __, description_scale: ___, lower_scale: ____, ...rest } = layout
   const set = Object.fromEntries(Object.entries(padding ?? {}).filter(([, v]) => typeof v === 'number')) as TextPadding
-  return { ...rest, ...(scale === 1 ? {} : { title_scale: scale }), ...(Object.keys(set).length ? { text_padding: set } : {}) }
+  return { ...rest, ...(scale === 1 ? {} : { title_scale: scale }), ...(descriptionScale === 1 ? {} : { description_scale: descriptionScale }), ...(lowerScale === 1 ? {} : { lower_scale: lowerScale }), ...(Object.keys(set).length ? { text_padding: set } : {}) }
 }
 export type Assembly = { image_key: string; image_url: string; overlay_id: string; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
 export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', logo_scale: 1, transform: defaultArtwork(), layout: {} })
@@ -25,6 +25,10 @@ export function uploadArtwork(id: string, image: File) {
   const form = new FormData(); form.set('image', image)
   return apiSendForm<Assembly>('POST', `/api/cards/${id}/artwork`, form)
 }
+
+// Asks the model (at final quality) to paint more around the card's artwork until it has the width / height ratio, and
+// replaces the artwork with the result. `cost_usd` is what it cost.
+export const extendArtwork = (id: string, ratio: number, prompt = '') => apiSend<Assembly & { cost_usd: number }>('POST', `/api/cards/${id}/artwork/extend`, { ratio, prompt })
 
 // Title and rules text positions per card category, shared by every card.
 // `back` holds settings shared by every faction's card back.
@@ -139,6 +143,19 @@ export function useFactionBanner(factionId: number | null | undefined): BannerSe
   const { faction_id: _faction, ...banner } = useFactionBanners().data?.find(b => b.faction_id === factionId) ?? { faction_id: 0, ...DEFAULT_BANNER }
   return banner
 }
+// The ornament on a faction's event cards: a library image with its place (offsets from the default spot, shares of
+// the card) and width (a share of the card). One per faction, drawn on every event card.
+export type EventElementSettings = { element_key: string; element_x: number; element_y: number; element_scale: number }
+export type FactionEventElement = EventElementSettings & { faction_id: number }
+export const DEFAULT_EVENT_ELEMENT: EventElementSettings = { element_key: '', element_x: 0, element_y: 0, element_scale: 0.5 }
+export function useFactionEventElements() {
+  return useQuery({ queryKey: ['faction-event-elements'], queryFn: () => apiGet<FactionEventElement[]>('/api/faction-event-elements') })
+}
+export function useFactionEventElement(factionId: number | null | undefined): EventElementSettings {
+  const { faction_id: _faction, ...element } = useFactionEventElements().data?.find(e => e.faction_id === factionId) ?? { faction_id: 0, ...DEFAULT_EVENT_ELEMENT }
+  return element
+}
+export const saveFactionEventElement = (factionId: number, e: EventElementSettings) => apiSend<FactionEventElement>('PUT', `/api/faction-event-elements/${factionId}`, e)
 export const saveFactionBanner = (factionId: number, b: BannerSettings) => apiSend<FactionBanner>('PUT', `/api/faction-banners/${factionId}`, b)
 
 // The size of a faction's logo on its cards, shared by every card of that faction and category (1 = the layout's logo box).

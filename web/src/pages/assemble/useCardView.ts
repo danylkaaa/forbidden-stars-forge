@@ -4,6 +4,7 @@ import { cardDraft, type Card } from '../cards/model'
 import { draftInput, validateCard } from '../cards/validation'
 import { cardLogoScale, useCardAssembly, useCardLogoScales, type Assembly } from './api'
 import { defaultArtwork } from './artwork'
+import { useEventElementInput } from './eventElement'
 import type { CombatCard, FramedCard } from './model'
 import { renderCard, type RenderInput } from './render'
 import { useAssembly } from './state'
@@ -80,24 +81,32 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const artworkUrl = card?.category === 'upgrade' ? null : assembly.data?.image_url || null
   const localTitleScale = useAssembly(s => s.titleScales[id])
   const titleScale = localTitleScale ?? assembly.data?.layout?.title_scale ?? 1
+  // A card can set the size of its description (the upper text; on combat cards also the unit text) on its own.
+  const localDescriptionScale = useAssembly(s => s.descriptionScales?.[id])
+  const descriptionScale = localDescriptionScale ?? assembly.data?.layout?.description_scale ?? 1
+  const localLowerScale = useAssembly(s => s.lowerScales?.[id])
+  const lowerScale = card?.category === 'combat' ? localLowerScale ?? assembly.data?.layout?.lower_scale ?? 1 : 1
   const localPadding = useAssembly(s => s.textPaddings?.[id])
   const textPadding = localPadding ?? assembly.data?.layout?.text_padding
   const layout = useMemo(() => {
     let base = template.layout
     if (titleScale !== 1) base = { ...base, name: { ...base.name, size: base.name.size * titleScale } }
+    if (descriptionScale !== 1) base = { ...base, upper_text: { ...base.upper_text, size: base.upper_text.size * descriptionScale } }
+    if (lowerScale !== 1) base = { ...base, lower_text: { ...base.lower_text, size: base.lower_text.size * lowerScale } }
     if (textPadding) base = {
       ...base,
       upper_text: { ...base.upper_text, ...(textPadding.upper_top !== undefined ? { paddingTop: textPadding.upper_top } : {}), ...(textPadding.upper_bottom !== undefined ? { paddingBottom: textPadding.upper_bottom } : {}) },
       lower_text: { ...base.lower_text, ...(textPadding.lower_top !== undefined ? { paddingTop: textPadding.lower_top } : {}), ...(textPadding.lower_bottom !== undefined ? { paddingBottom: textPadding.lower_bottom } : {}) },
     }
     return base
-  }, [template.layout, titleScale, textPadding])
+  }, [template.layout, titleScale, descriptionScale, lowerScale, textPadding])
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
+  const eventElement = useEventElementInput(card?.category === 'schema' ? card.faction_id : null)
   const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !logos.isPending
-    ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform }
-    : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform])
-  return { input, assembly, logoScale, titleScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
+    ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform, eventElement }
+    : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform, eventElement])
+  return { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
 }
 
 // True once the element has come near the viewport (and stays true). Without IntersectionObserver it is always true.

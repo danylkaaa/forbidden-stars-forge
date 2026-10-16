@@ -7,7 +7,9 @@ import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { UseForFactionButton } from './UseForFactionButton'
 import { SuggestInput } from '../../components/SuggestInput'
-import { EditImageButton, ZoomableImage } from '../../components/ImageLightbox'
+import { ElementPlacement } from './ElementPlacement'
+import { maskedImageUrl, useImageMasks } from '../../lib/imageMasks'
+import { EditImageButton, HideAreasButton, ZoomableImage } from '../../components/ImageLightbox'
 import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
 import { LayerControls, LayeredImage, OverlayToggle } from '../../components/PreviewLayers'
 import { GeneratingSpinner } from '../../components/GeneratingSpinner'
@@ -495,6 +497,9 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   const pending = gen.status === 'pending'
   const elapsed = useElapsedMs(gen.created_at, pending)
   const imageUrl = gen.status === 'done' ? `/api/generations/${gen.id}/image` : null
+  // Cards are made from the image with its hiding mask applied.
+  const masks = useImageMasks()
+  const cardImageUrl = imageUrl ? maskedImageUrl(imageUrl, gen.id, masks.data) : null
   // Quick check of the image as a finished card, with an existing card's
   // text and artwork (or the demo card).
   // The card type's overlay on the plain image: the finished card for a combat front, the banner for a back.
@@ -502,21 +507,27 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   const [previewCardId, setPreviewCardId] = useState(0)
   const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'card back' ? 'back' : undefined
   const backCategory = cardTypeName === 'card back' ? 'combat' : undefined
-  const asCard = combatSide === 'front' && overlayOn
+  // Event fronts are checked as the finished event card, like combat fronts.
+  const cardCategory = cardTypeName === 'events' ? 'schema' as const : combatSide === 'front' ? 'combat' as const : undefined
+  const asCard = !!cardCategory && overlayOn
+  // Elements are checked where they are used: on the event card, or on the card back banner.
+  const elementKind = cardTypeName === 'event element' ? 'event' as const : cardTypeName === 'back element' ? 'banner' as const : undefined
+  const placing = !!elementKind && overlayOn && !!imageUrl
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
-        {(combatSide === 'front' || backCategory) && <OverlayToggle />}
-        <EditImageButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} />
+        {(cardCategory || backCategory || elementKind) && <OverlayToggle />}
+        <EditImageButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
+        <HideAreasButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
         {cardType && <UseForFactionButton factionId={gen.faction_id} cardType={cardType} generationId={gen.id} />}
-        {asCard && <CardPicker factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} />}
-        {combatSide && <GenerationPreview3D imageUrl={imageUrl} factionId={gen.faction_id} side={combatSide} title={alt} />}
+        {asCard && <CardPicker factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} category={cardCategory} />}
+        {combatSide && cardImageUrl && <GenerationPreview3D imageUrl={cardImageUrl} factionId={gen.faction_id} side={combatSide} title={alt} />}
         {!asCard && <LayerControls maskSrc={maskSrc} />}
       </div>}
-      {imageUrl && asCard ? <QuickCardPreview picker={false} imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
+      {placing && elementKind ? <ElementPlacement key={gen.id} kind={elementKind} factionId={gen.faction_id} generationId={gen.id} /> : cardImageUrl && asCard ? <QuickCardPreview picker={false} imageUrl={cardImageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} category={cardCategory} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={combatSide === 'front' ? gen.faction_id : undefined} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
             {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
           </ZoomableImage>

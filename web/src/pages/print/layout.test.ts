@@ -1,4 +1,4 @@
-import { backSlot, besideSlots, pairOfSlot, pairsPerRow, cutGuides, slotRect, mirrorPage, DEFAULT_SETTINGS, gridFor, reconcile, reflow, swapSlots } from './layout'
+import { guideOffset, cardOrder, backSlot, besideSlots, pairOfSlot, pairsPerRow, cutGuides, slotRect, mirrorPage, DEFAULT_SETTINGS, gridFor, reconcile, reflow, swapSlots } from './layout'
 
 test('A4 portrait fits 3 × 3 cards of 63 × 88 mm', () => {
   const g = gridFor(DEFAULT_SETTINGS)
@@ -59,6 +59,21 @@ test('extended guides run edge to edge along cut edges of occupied columns and r
   expect(lines.filter(l => l.x1 === l.x2).every(l => l.y1 === 0 && l.y2 === 297)).toBe(true)
 })
 
+test('cutting lines lie outside the card by half their width plus the cut tolerance', () => {
+  const settings = { ...DEFAULT_SETTINGS, cutTolerance: 2 }, g = gridFor(settings), cut = slotRect(g, settings, 0).cut
+  const half = settings.lineWidth * 0.75 / (72 / 25.4) / 2
+  expect(DEFAULT_SETTINGS.lineWidth).toBe(1)
+  expect(guideOffset({ ...settings, cutTolerance: 0 })).toEqual({ x: half, y: half })
+  expect(guideOffset(settings).x).toBeCloseTo(half + 0.02 * settings.cardWidth)
+  expect(guideOffset(settings).y).toBeCloseTo(half + 0.02 * settings.cardHeight)
+  const lines = cutGuides(g, settings, [1, null, null, null, null, null, null, null, null])
+  const xs = lines.filter(l => l.x1 === l.x2).map(l => l.x1).sort((a, b) => a - b), ys = lines.filter(l => l.y1 === l.y2).map(l => l.y1).sort((a, b) => a - b)
+  expect(xs[0]).toBeCloseTo(cut.x - guideOffset(settings).x)
+  expect(xs[1]).toBeCloseTo(cut.x + cut.w + guideOffset(settings).x)
+  expect(ys[0]).toBeCloseTo(cut.y - guideOffset(settings).y)
+  expect(ys[1]).toBeCloseTo(cut.y + cut.h + guideOffset(settings).y)
+})
+
 test('reconcile places copies of a card: each listing is one place', () => {
   expect(reconcile([], [1, 1, 2], 4)).toEqual([[1, 1, 2, null]])
   const pages = [[1, 2, 1, null]]
@@ -73,4 +88,13 @@ test('one-sided printing puts each back right of its front', () => {
   expect(sheet).toEqual([{ id: 7, back: false }, { id: 7, back: true }, { id: 8, back: false }, { id: 8, back: true }, null, null, null, null])
   expect(besideSlots([1, 2, 3], 4, 2).slice(4, 6)).toEqual([{ id: 3, back: false }, { id: 3, back: true }])
   expect([0, 1, 2, 3, 4, 5].map(s => pairOfSlot(s, 5))).toEqual([0, 0, 1, 1, null, 2])
+})
+
+test('cards print by type, then level, then name', () => {
+  const base = { id: 0, faction_id: 1, created_at: '', updated_at: '' }
+  const combat = (name: string, level: number, starting = false) => ({ ...base, category: 'combat' as const, name, level, starting, resource_cost: 0, guns: 0, shields: 0, eagles: 0, upper_text: '', units: [], unit_text: '' })
+  const event = (name: string) => ({ ...base, category: 'schema' as const, name, subtype: 'tactic' as const, action: 'move_vertical' as const, text: '' })
+  const upgrade = (name: string, level: number) => ({ ...base, category: 'upgrade' as const, name, level, upgrade_type: 'dominate' as const, resource_cost: 0, limitation: '', text: '' })
+  const cards = [upgrade('Zeal', 1), event('Chronomancy'), combat('Beta', 2), upgrade('Alpha', 0), combat('Alpha', 2), combat('Start', 0, true), event('Battle Forges'), combat('Gamma', 1)]
+  expect(cards.sort(cardOrder).map(c => c.name)).toEqual(['Start', 'Gamma', 'Alpha', 'Beta', 'Battle Forges', 'Chronomancy', 'Alpha', 'Zeal'])
 })

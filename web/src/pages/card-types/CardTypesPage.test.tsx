@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -247,4 +247,37 @@ test('the form carries the finished card size and rejects a tiny one', async () 
   await screen.findByText('combat')
   expect(body).toMatch(/name="card_width_mm"\r\n\r\n70\r\n/)
   expect(body).toMatch(/name="card_height_mm"\r\n\r\n88\r\n/)
+})
+
+test('an element type is not a card: no finished card size to set', async () => {
+  server.use(http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], id: 5, name: 'event element', image_size: '1536x512' }])))
+  renderPage()
+  await userEvent.click(await screen.findByText('event element'))
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
+  expect(within(dialog).queryByText('Card size (cut), mm')).not.toBeInTheDocument()
+  expect(within(dialog).getByText('AI image size')).toBeInTheDocument()
+  expect(within(dialog).getByLabelText('Ratio, width')).toHaveValue(3)
+  expect(within(dialog).getByText('1536 × 512 px')).toBeInTheDocument()
+  expect(within(dialog).queryByLabelText('Height (px)')).not.toBeInTheDocument()
+  expect(within(dialog).getByRole('button', { name: 'Save Image Type' })).toBeEnabled()
+})
+
+test('an element ratio wider than 3:1 is saved as a 3:1 size plus the crop shape', async () => {
+  let body = ''
+  server.use(
+    http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], id: 5, name: 'event element', image_size: '1536x512' }])),
+    http.put('/api/card-types/5', async ({ request }) => { body = await request.text(); return HttpResponse.json({ ...cardTypes[0], id: 5, name: 'event element' }) }),
+  )
+  renderPage()
+  await userEvent.click(await screen.findByText('event element'))
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
+  const width = within(dialog).getByLabelText('Ratio, width')
+  await userEvent.clear(width)
+  await userEvent.type(width, '5')
+  expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
+  expect(within(dialog).getByText(/cropped to 1536 × 307 px/)).toBeInTheDocument()
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save Image Type' }))
+  await waitFor(() => expect(body).not.toBe(''))
+  expect(body).toMatch(/name="image_size"\r\n\r\n1536x512\r\n/)
+  expect(body).toMatch(/name="aspect_ratio"\r\n\r\n5\r\n/)
 })

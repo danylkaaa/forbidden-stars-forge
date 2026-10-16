@@ -134,3 +134,20 @@ test('lines after a typed break start a new paragraph, wrapped lines do not', as
   expect(one.offsets[1]).toBeGreaterThan(one.lineHeight)
   expect(none.offsets[1]).toBe(none.lineHeight)
 })
+test('a card keeps its own description size only when it differs from the template', async () => {
+  const { layoutWithTitleScale } = await import('./api')
+  expect(layoutWithTitleScale({}, 1, undefined, 1)).toEqual({})
+  expect(layoutWithTitleScale({}, 1, undefined, 0.8)).toEqual({ description_scale: 0.8 })
+  expect(layoutWithTitleScale({ description_scale: 0.8, title_scale: 1.2 }, 1.2, undefined, 1)).toEqual({ title_scale: 1.2 })
+  expect(layoutWithTitleScale({}, 1, undefined, 1, 1.3)).toEqual({ lower_scale: 1.3 })
+  expect(layoutWithTitleScale({ lower_scale: 1.3 }, 1, undefined, 1, 1)).toEqual({})
+})
+test('a space that does not fit at the end of a line adds no empty line before a typed line break', () => {
+  const measure = (r: { text: string; icon: boolean }) => r.icon ? 1 : r.text.length
+  const text = (width: number, source: string) => wrapText(textRuns(source), width, measure).map(line => line.map(a => a.text).join('').trimEnd())
+  // "alpha beta" fills the line exactly; the space after it would not fit, and must not make a line of its own.
+  expect(text(10, 'alpha beta \nnext')).toEqual(['alpha beta', 'next'])
+  expect(text(10, 'alpha beta  \n\nnext')).toEqual(['alpha beta', '', 'next'])
+  // Without a typed break the next word still starts the next line.
+  expect(text(10, 'alpha beta next')).toEqual(['alpha beta', 'next'])
+})

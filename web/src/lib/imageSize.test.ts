@@ -44,3 +44,26 @@ test('suggests a valid size with the same shape', async () => {
   expect(suggestSize('816x')).toBeNull()
   expect(suggestSize('816x1104')).toEqual({ w: 816, h: 1104 })
 })
+
+test('an aspect ratio gives a valid size with the longer side at 1536', async () => {
+  const { sizeForRatio, ratioOf } = await import('./imageSize')
+  expect(sizeForRatio(3, 1)).toEqual({ w: 1536, h: 512 })
+  expect(sizeForRatio(1, 1)).toEqual({ w: 1536, h: 1536 })
+  expect(sizeForRatio(1, 3)).toEqual({ w: 512, h: 1536 })
+  expect(sizeForRatio(2.5, 1)).toEqual({ w: 1536, h: 608 }) // 1536 / 2.5 = 614.4 → 608 (divisible by 16)
+  expect(sizeForRatio(4, 1)).toBeNull() // wider than 3:1
+  expect(sizeForRatio(0, 1)).toBeNull()
+  expect(ratioOf('1536x512')).toEqual({ w: '3', h: '1' })
+  expect(ratioOf('816x1104')).toEqual({ w: '17', h: '23' })
+  expect(ratioOf('')).toEqual({ w: '', h: '' })
+})
+
+test('a ratio beyond the model\'s 3:1 is generated at 3:1 and cropped to the ratio', async () => {
+  const { sizeAndAspect } = await import('./imageSize')
+  expect(sizeAndAspect(3, 1)).toEqual({ size: { w: 1536, h: 512 }, aspect: '' })
+  expect(sizeAndAspect(4, 1)).toEqual({ size: { w: 1536, h: 512 }, aspect: '4' })
+  expect(sizeAndAspect(5.5, 1)).toEqual({ size: { w: 1536, h: 512 }, aspect: '5.5' })
+  expect(sizeAndAspect(1, 4)).toEqual({ size: { w: 512, h: 1536 }, aspect: '0.25' })
+  expect(sizeAndAspect(21, 1)).toBeNull()
+  expect(sizeAndAspect(0, 1)).toBeNull()
+})

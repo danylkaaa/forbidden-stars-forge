@@ -12,6 +12,10 @@ export const server = setupServer(
     }),
   ),
   http.get('/api/card-logo-scales', () => HttpResponse.json([])),
+  http.get('/api/generations', () => HttpResponse.json([])),
+  http.get('/api/image-masks', () => HttpResponse.json([])),
+  http.get('/api/faction-banners', () => HttpResponse.json([])),
+  http.get('/api/faction-event-elements', () => HttpResponse.json([])),
   http.post('/api/settings/openai-models', () =>
     HttpResponse.json({ models: ['gpt-image-2', 'gpt-image-2.5-flare'] }),
   ),

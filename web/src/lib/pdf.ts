@@ -31,7 +31,8 @@ export function buildPdf(pageWidth: number, pageHeight: number, pages: PdfOp[][]
 
   push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')
   const pageIds = pages.map((_, i) => firstPage + i * 2)
-  object(1, '/Type /Catalog /Pages 2 0 R')
+  // Ask viewers to print at 100%, not scaled to fit the printable area (honoured by Adobe Reader and Chrome).
+  object(1, '/Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >>')
   object(2, `/Type /Pages /Count ${pages.length} /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}]`)
   for (const image of images) object(imageId.get(image)!, `/Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`, image.jpeg)
   pages.forEach((ops, i) => {

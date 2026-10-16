@@ -7,12 +7,15 @@ import type { Generation } from '../pages/test-generation/api'
 import { MaskEditor } from './MaskEditor'
 import { exportMask, type Stroke } from '../lib/mask'
 import { QuickCardPreview } from '../pages/assemble/QuickCardPreview'
+import { CardOverlayLayer } from '../pages/assemble/CardOverlayLayer'
+import { HideMaskEditor } from './HideMaskEditor'
+import { maskedImageUrl, useImageMasks } from '../lib/imageMasks'
 import { GenerationPreview3D } from '../pages/assemble/GenerationPreview3D'
 import { BackFlatPreview } from '../pages/assemble/BackLogoPreview'
-import { EditIcon } from './icons'
+import { EditIcon, MaskIcon } from './icons'
 import { ConfirmDialog } from './ConfirmDialog'
 
-type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
+type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; cardPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -47,17 +50,23 @@ export type EditProps = {
 }
 
 export function ImageLightbox({
-  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose, startEditing = false,
+  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose, startEditing = false, startHiding = false,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number
   downloadName?: string // file name without extension; defaults to a slug of alt
   favorite?: FavoriteProp
   onClose: () => void
   startEditing?: boolean // open straight in area-edit mode
+  startHiding?: boolean // open straight in hide-areas mode
 } & EditProps & CombatPreviewProps) {
   const [asCard, setAsCard] = useState(false)
   const [previewCardId, setPreviewCardId] = useState(0)
-  const [editing, setEditing] = useState(startEditing && !!editTarget)
+  const [editing, setEditing] = useState(startEditing && !startHiding && !!editTarget)
+  // Hiding areas of a generated image (a mask kept apart from it) is its own mode.
+  const [hiding, setHiding] = useState(startHiding && editTarget?.kind === 'generation')
+  const masks = useImageMasks()
+  const hasMask = editTarget?.kind === 'generation' && !!masks.data?.some((m) => m.generation_id === editTarget.id)
+  const tools = !editing && !hiding
   const [showOriginal, setShowOriginal] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const shownSrc = showOriginal && compareSrc ? compareSrc : src
@@ -114,21 +123,27 @@ export function ImageLightbox({
           {downloading ? 'Preparing…' : 'Download'}
         </button>
         {combatPreviewSide && previewFactionId !== undefined && !editing && <GenerationPreview3D imageUrl={src} factionId={previewFactionId} side={combatPreviewSide} title={alt} />}
-        {cardPreviewFactionId !== undefined && combatPreviewSide !== 'back' && !editing && (
+        {cardPreviewFactionId !== undefined && combatPreviewSide !== 'back' && tools && (
           <button type="button" aria-pressed={asCard} onClick={() => setAsCard((v) => !v)}
             className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium ${asCard ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink hover:bg-neutral-800'}`}>
             Card preview
           </button>
         )}
-        {!editing && !asCard && <LayerControls maskSrc={maskSrc} />}
-        {compareSrc && !editing && (
+        {tools && !asCard && <LayerControls maskSrc={maskSrc} />}
+        {compareSrc && tools && (
           <button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}
             title="Compare with the image this was edited from"
             className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium ${showOriginal ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink hover:bg-neutral-800'}`}>
             {showOriginal ? 'Showing original' : 'Original'}
           </button>
         )}
-        {editTarget && !editing && (
+        {editTarget?.kind === 'generation' && tools && (
+          <button type="button" onClick={() => { setHiding(true); setShowOriginal(false); setNotice(null) }} title="Hide parts of the image on cards, like a layer mask"
+            className="cursor-pointer rounded-full border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-neutral-800">
+            ◧ Hide areas{hasMask ? ' ✓' : ''}
+          </button>
+        )}
+        {editTarget && tools && (
           <button type="button" onClick={() => { setEditing(true); setShowOriginal(false); setNotice(null) }}
             className="cursor-pointer rounded-full border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-neutral-800">
             ✎ Edit area
@@ -150,13 +165,18 @@ export function ImageLightbox({
           {notice}
         </div>
       )}
-      {editing && editTarget ? (
-        <AreaEditor src={src} alt={alt} target={editTarget} onDirtyChange={setEditDirty}
+      {hiding && editTarget?.kind === 'generation' ? (
+        <HideMaskEditor src={src} alt={alt} generationId={editTarget.id} hasMask={hasMask} maskSrc={maskSrc}
+          cardOverlay={cardPreviewFactionId !== undefined && combatPreviewSide !== 'back' ? { factionId: cardPreviewFactionId, category: cardPreviewCategory ?? 'combat' } : undefined}
+          onClose={() => setHiding(false)} onSaved={() => { setHiding(false); setNotice('Mask saved: cards made from this image show it with the hidden areas cut out') }} />
+      ) : editing && editTarget ? (
+        <AreaEditor src={src} alt={alt} target={editTarget} onDirtyChange={setEditDirty} maskSrc={maskSrc}
+          cardOverlay={cardPreviewFactionId !== undefined && combatPreviewSide !== 'back' ? { factionId: cardPreviewFactionId, category: cardPreviewCategory ?? 'combat' } : undefined}
           onCancel={() => guard(leaveEditing)}
           onStarted={(g) => { leaveEditing(); setNotice(`Edit started: ${g.name} — it appears with your other generations`); onEdited?.(g) }} />
       ) : asCard && cardPreviewFactionId !== undefined ? (
         <div onClick={(e) => e.stopPropagation()} className="flex h-[88vh] w-[min(92vw,calc(88vh*0.739))] flex-col">
-          <QuickCardPreview imageUrl={src} factionId={cardPreviewFactionId} cardId={previewCardId} onCardChange={setPreviewCardId} />
+          <QuickCardPreview imageUrl={editTarget?.kind === 'generation' ? maskedImageUrl(src, editTarget.id, masks.data) : src} factionId={cardPreviewFactionId} cardId={previewCardId} onCardChange={setPreviewCardId} category={cardPreviewCategory} />
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
@@ -171,8 +191,9 @@ export function ImageLightbox({
 }
 
 // Paint the area to change, describe the change, send it as an area edit.
-function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
+function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange, maskSrc, cardOverlay }: {
   src: string; alt: string; target: ImageRef; onCancel: () => void; onStarted: (g: Generation) => void; onDirtyChange: (dirty: boolean) => void
+  maskSrc?: string | null; cardOverlay?: { factionId: number; category: import('../pages/cards/model').Category }
 }) {
   const startEdit = useStartImageEdit()
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
@@ -183,6 +204,10 @@ function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
   const [protect, setProtect] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Reference layers over the image while painting; they never change what is sent.
+  const [guide, setGuide] = useState(false), [guideOpacity, setGuideOpacity] = useState(0.5)
+  const [card, setCard] = useState(false), [cardOpacity, setCardOpacity] = useState(1)
+  const [showPaint, setShowPaint] = useState(true)
   const painted = strokes.some((s) => !s.erase)
   const dirty = strokes.length > 0 || instruction.trim() !== ''
   useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
@@ -209,9 +234,11 @@ function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
         <img src={src} alt={alt} draggable={false}
           onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           className="block max-h-[68vh] max-w-full select-none rounded-md" />
+        {guide && maskSrc && <img src={maskSrc} alt="" aria-hidden="true" data-testid="edit-guide" draggable={false} style={{ opacity: guideOpacity }} className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill" />}
+        {card && cardOverlay && <CardOverlayLayer imageUrl={src} factionId={cardOverlay.factionId} category={cardOverlay.category} opacity={cardOpacity} />}
         {size && (
-          <MaskEditor width={size.w} height={size.h} strokes={strokes} erase={erase} brushSize={brush}
-            onStroke={(s) => setStrokes((all) => [...all, s])} />
+          <div className={showPaint ? 'contents' : 'hidden'}><MaskEditor width={size.w} height={size.h} strokes={strokes} erase={erase} brushSize={brush}
+            onStroke={(s) => setStrokes((all) => [...all, s])} /></div>
         )}
       </div>
       <div className="flex w-[min(720px,90vw)] flex-col gap-2 rounded-md bg-surface p-3 shadow-[0_0_0_1px_var(--color-neutral-800)]">
@@ -228,6 +255,14 @@ function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
           <button type="button" disabled={strokes.length === 0} onClick={() => setStrokes([])}
             className={`${tool(false)} disabled:cursor-not-allowed disabled:opacity-45`}>Clear</button>
           <span className="ml-auto text-[11px] text-ink/45">Paint over the parts to change, or paint nothing to change the whole image</span>
+        </div>
+        <div role="group" aria-label="Reference layers" className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-ink/50">Show</span>
+          <button type="button" aria-pressed={showPaint} onClick={() => setShowPaint((v) => !v)} className={tool(showPaint)}>Paint</button>
+          {maskSrc && <button type="button" aria-pressed={guide} onClick={() => setGuide((v) => !v)} className={tool(guide)}>Template guide</button>}
+          {guide && maskSrc && <input type="range" min={0.1} max={1} step={0.05} value={guideOpacity} aria-label="Template guide opacity" onChange={(e) => setGuideOpacity(Number(e.target.value))} className="w-24 accent-[var(--color-accent)]" />}
+          {cardOverlay && <button type="button" aria-pressed={card} onClick={() => setCard((v) => !v)} className={tool(card)}>Card overlay</button>}
+          {card && cardOverlay && <input type="range" min={0.1} max={1} step={0.05} value={cardOpacity} aria-label="Card overlay opacity" onChange={(e) => setCardOpacity(Number(e.target.value))} className="w-24 accent-[var(--color-accent)]" />}
         </div>
         <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} aria-label="Edit instruction"
           placeholder="What should change? e.g. replace the skull with a cog emblem (in the painted area), or make everything darker (nothing painted)"
@@ -253,7 +288,7 @@ function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
 
 // Wraps a thumbnail in a button that opens the image in an ImageLightbox.
 export function ZoomableImage({
-  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
+  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number; downloadName?: string
   favorite?: FavoriteProp; className?: string; children: ReactNode
@@ -269,14 +304,28 @@ export function ZoomableImage({
       >
         {children}
       </button>
-      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} downloadName={downloadName} favorite={favorite}
+      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} cardPreviewCategory={cardPreviewCategory} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} downloadName={downloadName} favorite={favorite}
         editTarget={editTarget} compareSrc={compareSrc} onEdited={onEdited} onClose={() => setOpen(false)} />}
     </>
   )
 }
 
+// A round button that opens the image straight in hide-areas mode (a layer mask kept apart from the image).
+export function HideAreasButton({ src, alt, target, maskSrc, cardPreviewFactionId, cardPreviewCategory }: { src: string; alt: string; target: ImageRef; maskSrc?: string | null; cardPreviewFactionId?: number; cardPreviewCategory?: import('../pages/cards/model').Category }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" aria-label="Hide areas" title="Hide areas of the image on cards, like a layer mask" onClick={() => setOpen(true)}
+        className="grid size-8 cursor-pointer place-items-center rounded-full border border-divider bg-surface text-ink hover:bg-neutral-800">
+        <MaskIcon />
+      </button>
+      {open && <ImageLightbox src={src} alt={alt} editTarget={target} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} cardPreviewCategory={cardPreviewCategory} startHiding onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
 // A round pen button that opens the image straight in area-edit mode.
-export function EditImageButton({ src, alt, target, compareSrc, onEdited }: { src: string; alt: string; target: ImageRef; compareSrc?: string | null; onEdited?: (g: Generation) => void }) {
+export function EditImageButton({ src, alt, target, compareSrc, onEdited, maskSrc, cardPreviewFactionId, cardPreviewCategory }: { src: string; alt: string; target: ImageRef; compareSrc?: string | null; onEdited?: (g: Generation) => void; maskSrc?: string | null; cardPreviewFactionId?: number; cardPreviewCategory?: import('../pages/cards/model').Category }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -284,7 +333,7 @@ export function EditImageButton({ src, alt, target, compareSrc, onEdited }: { sr
         className="grid size-8 cursor-pointer place-items-center rounded-full border border-divider bg-surface text-ink hover:bg-neutral-800">
         <EditIcon />
       </button>
-      {open && <ImageLightbox src={src} alt={alt} editTarget={target} compareSrc={compareSrc} onEdited={onEdited} startEditing onClose={() => setOpen(false)} />}
+      {open && <ImageLightbox src={src} alt={alt} editTarget={target} compareSrc={compareSrc} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} cardPreviewCategory={cardPreviewCategory} onEdited={onEdited} startEditing onClose={() => setOpen(false)} />}
     </>
   )
 }

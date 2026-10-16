@@ -205,6 +205,14 @@ func usesV2(model string) bool {
 	return strings.HasPrefix(model, "gpt-image-2")
 }
 
+// withSize sets the image size; an empty one is left out, so the model follows the template ("auto"),
+// instead of sending an empty size that OpenAI rejects.
+func withSize(body map[string]any, size string) {
+	if size != "" {
+		body["size"] = size
+	}
+}
+
 // EditBody is the JSON body for POST /v1/images/edits, shared by the
 // direct call. Uses the `images` array of file
 // references; output is always PNG so a transparent background works.
@@ -219,12 +227,12 @@ func EditBody(req ImageEditRequest) map[string]any {
 		"model":         req.Model,
 		"images":        images,
 		"prompt":        req.Prompt,
-		"size":          req.Size,
 		"quality":       req.Quality,
 		"output_format": "png",
 		"moderation":    "low",
 		"n":             1,
 	}
+	withSize(body, req.Size)
 	if req.InputFidelity != "" && !usesV2(req.Model) {
 		body["input_fidelity"] = req.InputFidelity
 	}
@@ -257,12 +265,12 @@ func GenerateBody(req ImageEditRequest) map[string]any {
 	body := map[string]any{
 		"model":         req.Model,
 		"prompt":        req.Prompt,
-		"size":          req.Size,
 		"quality":       req.Quality,
 		"output_format": "png",
 		"moderation":    "low",
 		"n":             1,
 	}
+	withSize(body, req.Size)
 	if req.Background != "" {
 		body["background"] = req.Background
 	}

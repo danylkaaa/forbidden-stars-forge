@@ -288,7 +288,7 @@ const TEETH_AT = 0.107
 // removed (softly at the edges) so the ornament sits on the frame. Pictures
 // that already have transparency are used as they are.
 const keyedElements = new Map<string, Promise<HTMLCanvasElement>>()
-function keyedElement(url: string) {
+export function keyedElement(url: string) {
   let known = keyedElements.get(url)
   if (!known) {
     if (keyedElements.size >= 12) keyedElements.delete(keyedElements.keys().next().value!)
