@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -11,7 +11,6 @@ const base: Settings = {
   openai_api_key_masked: 'sk-…34bc',
   openai_api_key_from_env: false,
   openai_model: 'gpt-image-2',
-  image_size: '816x1104',
   draft_quality: 'low',
   final_quality: 'high',
   input_fidelity: 'high',
@@ -166,4 +165,18 @@ test('claude model and effort are saved', async () => {
   await userEvent.selectOptions(screen.getByLabelText('Effort'), 'high')
   await userEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
   await waitFor(() => expect(putBody).toMatchObject({ claude_model: 'opus', claude_effort: 'high' }))
+})
+
+test('reset all cards asks first, then deletes every card', async () => {
+  let deleted = 0
+  server.use(http.delete('/api/cards', () => { deleted++; return HttpResponse.json({ deleted: 4 }) }))
+  renderPage()
+  await userEvent.click(await screen.findByRole('button', { name: /Reset all cards/ }))
+  const dialog = screen.getByRole('dialog', { name: 'Reset all cards?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  expect(deleted).toBe(0)
+  await userEvent.click(screen.getByRole('button', { name: /Reset all cards/ }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Reset all cards?' })).getByRole('button', { name: 'Delete all cards' }))
+  expect(await screen.findByRole('status')).toHaveTextContent('Removed 4 cards.')
+  expect(deleted).toBe(1)
 })

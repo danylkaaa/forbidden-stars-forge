@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '../../components/Button'
@@ -11,9 +12,9 @@ import { labLink, useLibraryImages, type LibraryImage } from './library'
 type Upload = { url?: string; pending?: boolean; onPick: (file: File) => void }
 type PickerProps = { selectedKey: string; onSelect: (key: string) => void; factionId: number | null; title: string; preferredType?: string; upload?: Upload }
 
-// Choose a generated image (Faction Lab) in a popup: filtered to the
+// Choose a generated image (AI Lab) in a popup: filtered to the
 // faction by default (untick to see every faction), searchable by name, type or
-// faction. The selected image can be opened in Faction Lab from the field.
+// faction. The selected image can be opened in AI Lab from the field.
 export function ImagePickerDialog({ selectedKey, onSelect, factionId, title, preferredType, upload, onClose }: PickerProps & { onClose: () => void }) {
   const images = useLibraryImages(), factions = useFactions(), types = useCardTypes()
   const [mine, setMine] = useState(factionId !== null)
@@ -32,7 +33,7 @@ export function ImagePickerDialog({ selectedKey, onSelect, factionId, title, pre
       {factionId !== null && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mine} onChange={e => setMine(e.target.checked)} className="accent-[var(--color-accent)]" />Only {factionName(factionId)}</label>}
       <div className="ml-auto flex items-center gap-2">
         {upload && <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${upload.pending ? 'pointer-events-none opacity-45' : ''}`}>{upload.pending ? 'Uploading…' : 'Upload image'}
-          <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label="Upload an image" disabled={upload.pending} onChange={e => { const f = e.target.files?.[0]; if (f) { upload.onPick(f); onSelect('upload') } e.target.value = '' }} /></label>}
+          <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label="Upload an image" disabled={upload.pending} onChange={e => { const f = e.target.files?.[0]; if (f) { upload.onPick(f); onSelect('upload') } e.target.value = '' }} /></label>}
         <Button disabled={!selectedKey} onClick={() => onSelect('')}>Use no image</Button>
       </div>
     </div>
@@ -69,7 +70,7 @@ export function ImagePickerField({ label, ...props }: PickerProps & { label: str
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <button type="button" onClick={() => setOpen(true)} className="cursor-pointer border-0 bg-transparent p-0 text-accent hover:underline">{selected || uploaded ? 'Change' : 'Choose'}</button>
           {props.selectedKey && <button type="button" onClick={() => props.onSelect('')} className="cursor-pointer border-0 bg-transparent p-0 text-accent hover:underline">Clear</button>}
-          {selected && <Link to={labLink(selected)} className="text-accent no-underline hover:underline">Edit in Faction Lab</Link>}
+          {selected && <Link to={labLink(selected)} className="text-accent no-underline hover:underline">Edit in AI Lab</Link>}
         </div>
       </div>
     </div>

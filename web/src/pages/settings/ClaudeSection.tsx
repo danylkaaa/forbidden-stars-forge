@@ -1,4 +1,5 @@
 import { SearchableSelect } from '../../components/SearchableSelect'
+import { SuggestInput } from '../../components/SuggestInput'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { TestButton } from './TestButton'
 import { postTestClaude, type ClaudeEffort } from './api'
@@ -30,20 +31,8 @@ export function ClaudeSection() {
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Claude model">
           {(id) => (
-            <>
-              <input
-                id={id}
-                type="text"
-                list="claude-model-suggestions"
-                value={draft.claude_model}
-                placeholder="CLI default"
-                onChange={(e) => setField('claude_model', e.target.value)}
-                className={inputClass}
-              />
-              <datalist id="claude-model-suggestions">
-                {MODEL_SUGGESTIONS.map((m) => <option key={m} value={m} />)}
-              </datalist>
-            </>
+            <SuggestInput id={id} suggestions={MODEL_SUGGESTIONS} value={draft.claude_model} placeholder="CLI default"
+              onValueChange={(v) => setField('claude_model', v)} />
           )}
         </Field>
         <Field label="Effort">

@@ -32,6 +32,9 @@ export type Preview = {
   has_file: boolean
   est_draft_usd: number
   est_final_usd: number
+  // How long one image typically takes with these settings, from past runs (0 when there is no history).
+  est_draft_seconds?: number
+  est_final_seconds?: number
 }
 
 export function useGenerations() {
@@ -102,7 +105,7 @@ export function generationImageUrl(g: Generation): string | null {
 
 export { formatCost, formatDuration } from '../../lib/format'
 
-// Claude edits the full image prompt (the Faction Lab override),
+// Claude edits the full image prompt (the AI Lab override),
 // following the whole conversation.
 export function startPromptAssist(currentPrompt: string, messages: ChatMessage[]): Promise<{ job_id: string; status: string }> {
   return apiSend('POST', '/api/generate/prompt-assist', { current_prompt: currentPrompt, messages })

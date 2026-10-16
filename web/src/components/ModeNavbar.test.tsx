@@ -24,7 +24,7 @@ test('top navbar switches between generation and library sections', async () => 
   expect(sections().queryByRole('link', { name: 'Cards' })).not.toBeInTheDocument()
   expect(sections().queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
   await userEvent.click(modes().getByRole('link', { name: 'AI Image Generation' }))
-  expect(sections().getByRole('link', { name: 'Faction Lab' })).toHaveAttribute('aria-current', 'page')
+  expect(sections().getByRole('link', { name: 'AI Lab' })).toHaveAttribute('aria-current', 'page')
 })
 
 test('shared management pages preserve library mode through navigation and Back', async () => {
@@ -35,7 +35,7 @@ test('shared management pages preserve library mode through navigation and Back'
   await userEvent.click(sections().getByRole('link', { name: 'Card Templates' }))
   expect(router.state.location.pathname).toBe('/card-templates')
   await userEvent.click(modes().getByRole('link', { name: 'AI Image Generation' }))
-  expect(sections().getByRole('link', { name: 'Card Templates' })).toHaveAttribute('href', '/card-types')
+  expect(sections().getByRole('link', { name: 'Image Types' })).toHaveAttribute('href', '/card-types')
   await act(() => router.navigate(-1))
   expect(modes().getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page')
   expect(sections().getByRole('link', { name: 'Card Templates' })).toHaveAttribute('aria-current', 'page')

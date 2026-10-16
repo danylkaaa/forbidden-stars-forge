@@ -160,3 +160,18 @@ func TestFactionCardPromptsAreRefreshedOnlyWhenUnedited(t *testing.T) {
 		t.Fatal("an edited description was overwritten")
 	}
 }
+
+func TestCardTypeImageSize(t *testing.T) {
+	s := openCardTypes(t)
+	ct, _ := s.Create("combat", "", "", "")
+	if ct.ImageSize != "" {
+		t.Fatalf("new type has size %q", ct.ImageSize)
+	}
+	got, err := s.SetImageSize(ct.ID, "816x1104")
+	if err != nil || got.ImageSize != "816x1104" {
+		t.Fatalf("set: %+v %v", got, err)
+	}
+	if _, err := s.SetImageSize(999, "1x1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: %v", err)
+	}
+}

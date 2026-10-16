@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -88,6 +89,25 @@ type cardTypeFields struct {
 	Name        string
 	Description string
 	Constraints string
+	ImageSize   *string // nil when the form does not carry it
+}
+
+var imageSizeRe = regexp.MustCompile(`^\d{2,5}x\d{2,5}$`)
+
+// imageSizeProblem is why OpenAI would reject a flexible gpt-image-2 size ("" when it is fine).
+func imageSizeProblem(w, h int) string {
+	long, short := max(w, h), min(w, h)
+	switch {
+	case w <= 0 || h <= 0 || w%16 != 0 || h%16 != 0:
+		return "width and height must both be divisible by 16"
+	case w*h < 655_360:
+		return "below the minimum of 655,360 pixels"
+	case w*h > 3840*2160 || long > 3840:
+		return "above the maximum of 3840x2160"
+	case long > 3*short:
+		return "aspect ratio must be between 1:3 and 3:1"
+	}
+	return ""
 }
 
 func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, string) {
@@ -106,6 +126,20 @@ func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, 
 	}
 	if f.Name == "" {
 		return f, "name is required"
+	}
+	if _, ok := r.MultipartForm.Value["image_size"]; ok {
+		size := strings.TrimSpace(r.FormValue("image_size"))
+		if size != "" && !imageSizeRe.MatchString(size) {
+			return f, "image_size must be <width>x<height> in pixels"
+		}
+		if size != "" {
+			var w, h int
+			fmt.Sscanf(size, "%dx%d", &w, &h)
+			if msg := imageSizeProblem(w, h); msg != "" {
+				return f, "image_size: " + msg
+			}
+		}
+		f.ImageSize = &size
 	}
 	return f, ""
 }
@@ -147,6 +181,12 @@ func (h *CardTypesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.cardTypeErr(w, err)
 		return
 	}
+	if fields.ImageSize != nil {
+		if ct, err = h.Store.SetImageSize(ct.ID, *fields.ImageSize); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, ct)
 }
 
@@ -187,6 +227,12 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if newPath != nil && prev.TemplatePath != "" {
 		h.removeTemplateFile(prev.TemplatePath)
+	}
+	if fields.ImageSize != nil {
+		if ct, err = h.Store.SetImageSize(ct.ID, *fields.ImageSize); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, ct)
 }

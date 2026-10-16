@@ -23,7 +23,6 @@ test('sidebar renders all five section links', () => {
         openai_api_key_masked: '',
         openai_api_key_from_env: false,
         openai_model: '',
-        image_size: '',
         draft_quality: 'low',
         final_quality: 'high',
         input_fidelity: 'high',
@@ -36,7 +35,7 @@ test('sidebar renders all five section links', () => {
     ),
   )
   renderAt('/settings')
-  for (const label of ['Factions', 'Card Templates', 'Faction Lab', 'Assets', 'Settings']) {
+  for (const label of ['Factions', 'Image Types', 'AI Lab', 'Assets', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
   }
 })
@@ -45,7 +44,7 @@ test('active route link is marked current', () => {
   // /card-types now renders CardTypesPage (Task 5), which fetches card types via react-query.
   server.use(http.get('/api/card-types', () => HttpResponse.json([])))
   renderAt('/card-types')
-  expect(screen.getByRole('link', { name: 'Card Templates' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.getByRole('link', { name: 'Image Types' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByRole('link', { name: 'Factions' })).not.toHaveAttribute('aria-current')
 })
 
@@ -57,13 +56,13 @@ test('root redirects to factions', () => {
 })
 
 
-test('old Test Generation links redirect to Faction Lab', () => {
+test('old Test Generation links redirect to AI Lab', () => {
   server.use(
     http.get('/api/factions', () => HttpResponse.json([])),
     http.get('/api/card-types', () => HttpResponse.json([])),
     http.get('/api/generations', () => HttpResponse.json([])),
   )
   renderAt('/test-generation')
-  expect(screen.getByRole('link', { name: 'Faction Lab' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.getByRole('link', { name: 'AI Lab' })).toHaveAttribute('aria-current', 'page')
   expect(screen.queryByRole('link', { name: 'Test Generation' })).not.toBeInTheDocument()
 })

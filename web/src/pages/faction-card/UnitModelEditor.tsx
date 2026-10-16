@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -82,7 +83,7 @@ export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orien
           <input type="file" accept=".stl,model/stl" className="sr-only" aria-label={`${label} STL`} disabled={busy} onChange={pick(assetKeys.model(slot))} /></label>
         {stlUrl && <Button disabled={busy} onClick={() => remove.mutate(assetKeys.model(slot))}>Remove STL</Button>}
         <label className={`${fileButton} ${busy ? 'pointer-events-none opacity-45' : ''}`}>{iconUrl ? 'Replace PNG' : 'Use own PNG'}
-          <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label={`${label} icon PNG`} disabled={busy} onChange={pick(assetKeys.icon(slot))} /></label>
+          <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={`${label} icon PNG`} disabled={busy} onChange={pick(assetKeys.icon(slot))} /></label>
         {iconUrl && <Button disabled={busy} onClick={() => remove.mutate(assetKeys.icon(slot))}>Use the model</Button>}
       </div>
       {failure && <p role="alert" className="m-0 text-xs text-danger">{failure.message}</p>}

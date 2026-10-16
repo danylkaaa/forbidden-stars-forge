@@ -9,6 +9,7 @@ export function ConfirmDialog({
   error,
   onConfirm,
   onCancel,
+  layer,
 }: {
   title: string
   body: string
@@ -17,9 +18,10 @@ export function ConfirmDialog({
   error?: string | null
   onConfirm: () => void
   onCancel: () => void
+  layer?: string
 }) {
   return (
-    <Dialog title={title} width="min(400px,100%)" onBackdropClick={onCancel}>
+    <Dialog title={title} width="min(400px,100%)" onBackdropClick={onCancel} layer={layer}>
       <p className="m-0 text-sm opacity-85">{body}</p>
       {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
       <div className="mt-1.5 flex justify-end gap-2">

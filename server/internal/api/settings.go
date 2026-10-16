@@ -23,7 +23,6 @@ type settingsResponse struct {
 	OpenAIAPIKeyMasked  string `json:"openai_api_key_masked"`
 	OpenAIAPIKeyFromEnv bool   `json:"openai_api_key_from_env"`
 	OpenAIModel         string `json:"openai_model"`
-	ImageSize           string `json:"image_size"`
 	DraftQuality        string `json:"draft_quality"`
 	FinalQuality        string `json:"final_quality"`
 	InputFidelity       string `json:"input_fidelity"`
@@ -37,7 +36,6 @@ type settingsResponse struct {
 type settingsUpdate struct {
 	OpenAIAPIKey  string `json:"openai_api_key"`
 	OpenAIModel   string `json:"openai_model"`
-	ImageSize     string `json:"image_size"`
 	DraftQuality  string `json:"draft_quality"`
 	FinalQuality  string `json:"final_quality"`
 	InputFidelity string `json:"input_fidelity"`
@@ -80,7 +78,6 @@ func (h *SettingsHandler) buildResponse() (settingsResponse, error) {
 		OpenAIAPIKeyMasked:  maskKey(key),
 		OpenAIAPIKeyFromEnv: fromEnv,
 		OpenAIModel:         all["openai_model"],
-		ImageSize:           all["image_size"],
 		DraftQuality:        all["draft_quality"],
 		FinalQuality:        all["final_quality"],
 		InputFidelity:       all["input_fidelity"],
@@ -135,7 +132,6 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 
 	kv := map[string]string{
 		"openai_model":   u.OpenAIModel,
-		"image_size":     u.ImageSize,
 		"draft_quality":  u.DraftQuality,
 		"final_quality":  u.FinalQuality,
 		"input_fidelity": u.InputFidelity,

@@ -20,7 +20,7 @@ import { backTypeName, labLink, useTemplate, useTemplateLayout, type LibraryImag
 import { useCardTypes } from '../card-types/api'
 import { Preview3DButton } from './Card3DViewer'
 import { useAssembly } from './state'
-import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
+import { useCardDraft, useCardRenderInput, useNearViewport, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
 import { CategoryTabs } from './CategoryTabs'
 import type { Category } from '../cards/model'
@@ -47,9 +47,11 @@ function CombatTile({ card, image, template, back, backLogoUrl, backLogoScale, b
   const { input } = useCardRenderInput(card, image, template)
   const cutMm = useCutMm()
   const { issues, dirty } = useCardDraft(card)
-  const { result, error } = useRenderedCard(input)
+  // Only tiles near the screen (or selected, to download them) are drawn: importing hundreds of cards must not draw them all at once.
+  const { near, ref } = useNearViewport()
+  const { result, error } = useRenderedCard(near || select.selected ? input : null)
   useEffect(() => { onRendered(card.id, result?.canvas ?? null) }, [card.id, result, onRendered])
-  return <div className="group/tile relative min-w-0" onContextMenu={select.onContextMenu}>
+  return <div ref={ref} className="group/tile relative min-w-0" onContextMenu={select.onContextMenu}>
   <SelectBox name={card.name} {...select} />
   {result && <Preview3DButton category={card.category} factionId={card.faction_id} title={card.name} canvas={result.canvas} back={back} backLogoUrl={backLogoUrl} backLogoScale={backLogoScale} backElementUrl={backElementUrl} className="absolute right-2 top-2 z-10" />}
   <Link to={`/assemble/cards/${card.id}`} aria-label={`Edit ${card.name}`} className={tile}>
@@ -187,7 +189,7 @@ export default function AssemblePage() {
     {notice && <p role="status" className="m-0 text-sm text-ink/70">{notice}</p>}
     {factionId && !template.isPending && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink/60">
       {template.image
-        ? <><span>Template: <span className="text-ink">{template.image.name}</span></span><Link to={labLink(template.image)} className="text-accent underline">Edit in Faction Lab</Link></>
+        ? <><span>Template: <span className="text-ink">{template.image.name}</span></span><Link to={labLink(template.image)} className="text-accent underline">Edit in AI Lab</Link></>
         : <><span>{template.key ? 'The chosen template image no longer exists.' : `No ${tabLabel.toLowerCase()} template chosen for ${faction?.name ?? 'this faction'}.`}</span><Button onClick={() => setSettingsOpen(true)}>Choose template</Button></>}
     </div>}
     {!factions.isPending && !factions.data?.length && <p className="text-sm text-ink/60"><Link to="/factions?mode=library" className="text-accent underline">Create a faction</Link> first.</p>}

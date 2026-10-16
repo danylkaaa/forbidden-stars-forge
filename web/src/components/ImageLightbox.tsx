@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { LayerControls, LayeredImage } from './PreviewLayers'
 import { FavoriteButton } from './FavoriteButton'
 import type { ImageRef } from '../lib/favorites'
@@ -9,6 +9,8 @@ import { exportMask, type Stroke } from '../lib/mask'
 import { QuickCardPreview } from '../pages/assemble/QuickCardPreview'
 import { GenerationPreview3D } from '../pages/assemble/GenerationPreview3D'
 import { BackFlatPreview } from '../pages/assemble/BackLogoPreview'
+import { EditIcon } from './icons'
+import { ConfirmDialog } from './ConfirmDialog'
 
 type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
@@ -45,19 +47,22 @@ export type EditProps = {
 }
 
 export function ImageLightbox({
-  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose,
+  src, alt, maskSrc, cardPreviewFactionId, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose, startEditing = false,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number
   downloadName?: string // file name without extension; defaults to a slug of alt
   favorite?: FavoriteProp
   onClose: () => void
+  startEditing?: boolean // open straight in area-edit mode
 } & EditProps & CombatPreviewProps) {
   const [asCard, setAsCard] = useState(false)
   const [previewCardId, setPreviewCardId] = useState(0)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(startEditing && !!editTarget)
   const [showOriginal, setShowOriginal] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const shownSrc = showOriginal && compareSrc ? compareSrc : src
+  const [editDirty, setEditDirty] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
@@ -73,22 +78,28 @@ export function ImageLightbox({
     }
   }
 
+  // Leaving a half-made edit (painted area or instruction) asks first.
+  const guard = (leave: () => void) => { if (editing && editDirty) setConfirmDiscard(() => leave); else leave() }
+  const leaveEditing = () => { setEditing(false); setEditDirty(false) }
+  const guardRef = useRef(guard)
+  guardRef.current = guard
+
   // Escape leaves edit mode first, then closes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (editing) setEditing(false)
-      else onClose()
+      if (confirmDiscard) return
+      guardRef.current(editing ? leaveEditing : onClose)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, editing])
+  }, [onClose, editing, confirmDiscard])
 
   return (
     <div
       role="dialog"
       aria-label={alt}
-      onClick={onClose}
+      onClick={() => guard(onClose)}
       className="fixed inset-0 z-20 grid place-items-center bg-neutral-900/85 p-5"
     >
       <div className="absolute top-4 right-4 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -127,7 +138,7 @@ export function ImageLightbox({
         <button
           type="button"
           aria-label="Close"
-          onClick={onClose}
+          onClick={() => guard(onClose)}
           className="grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-surface text-xl text-ink hover:bg-neutral-800"
         >
           ×
@@ -140,27 +151,28 @@ export function ImageLightbox({
         </div>
       )}
       {editing && editTarget ? (
-        <AreaEditor src={src} alt={alt} target={editTarget}
-          onCancel={() => setEditing(false)}
-          onStarted={(g) => { setEditing(false); setNotice(`Edit started: ${g.name} — it appears with your other generations`); onEdited?.(g) }} />
+        <AreaEditor src={src} alt={alt} target={editTarget} onDirtyChange={setEditDirty}
+          onCancel={() => guard(leaveEditing)}
+          onStarted={(g) => { leaveEditing(); setNotice(`Edit started: ${g.name} — it appears with your other generations`); onEdited?.(g) }} />
       ) : asCard && cardPreviewFactionId !== undefined ? (
         <div onClick={(e) => e.stopPropagation()} className="flex h-[88vh] w-[min(92vw,calc(88vh*0.739))] flex-col">
           <QuickCardPreview imageUrl={src} factionId={cardPreviewFactionId} cardId={previewCardId} onCardChange={setPreviewCardId} />
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc}
-            imgClassName="max-h-[80vh] max-w-full rounded-md object-contain" /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
+          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
             imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />}
         </div>
       )}
+      {confirmDiscard && <ConfirmDialog layer="z-30" title="Discard this edit?" body="The painted area and instruction have not been sent."
+        confirmLabel="Discard" onConfirm={() => { const leave = confirmDiscard; setConfirmDiscard(null); leaveEditing(); leave() }} onCancel={() => setConfirmDiscard(null)} />}
     </div>
   )
 }
 
 // Paint the area to change, describe the change, send it as an area edit.
-function AreaEditor({ src, alt, target, onCancel, onStarted }: {
-  src: string; alt: string; target: ImageRef; onCancel: () => void; onStarted: (g: Generation) => void
+function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange }: {
+  src: string; alt: string; target: ImageRef; onCancel: () => void; onStarted: (g: Generation) => void; onDirtyChange: (dirty: boolean) => void
 }) {
   const startEdit = useStartImageEdit()
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
@@ -172,6 +184,8 @@ function AreaEditor({ src, alt, target, onCancel, onStarted }: {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const painted = strokes.some((s) => !s.erase)
+  const dirty = strokes.length > 0 || instruction.trim() !== ''
+  useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
 
   async function send() {
     if (!size) return
@@ -257,6 +271,20 @@ export function ZoomableImage({
       </button>
       {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} downloadName={downloadName} favorite={favorite}
         editTarget={editTarget} compareSrc={compareSrc} onEdited={onEdited} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+// A round pen button that opens the image straight in area-edit mode.
+export function EditImageButton({ src, alt, target, compareSrc, onEdited }: { src: string; alt: string; target: ImageRef; compareSrc?: string | null; onEdited?: (g: Generation) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" aria-label="Edit area" title="Edit area" onClick={() => setOpen(true)}
+        className="grid size-8 cursor-pointer place-items-center rounded-full border border-divider bg-surface text-ink hover:bg-neutral-800">
+        <EditIcon />
+      </button>
+      {open && <ImageLightbox src={src} alt={alt} editTarget={target} compareSrc={compareSrc} onEdited={onEdited} startEditing onClose={() => setOpen(false)} />}
     </>
   )
 }

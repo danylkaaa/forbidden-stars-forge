@@ -11,9 +11,11 @@ type CardType struct {
 	OpenAIFileID string `json:"openai_file_id"`
 	OverlayPath  string `json:"overlay_path"` // preview-only, never sent to OpenAI
 	// NoTemplate: the type is generated from its prompt alone, with no template image.
-	NoTemplate bool   `json:"no_template"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	NoTemplate bool `json:"no_template"`
+	// ImageSize is the AI image size in pixels, "<width>x<height>"; empty lets the model follow the template.
+	ImageSize string `json:"image_size"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -24,11 +26,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -99,6 +101,18 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 		if isUniqueViolation(err) {
 			return CardType{}, ErrDuplicateName
 		}
+		return CardType{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return CardType{}, ErrNotFound
+	}
+	return s.Get(id)
+}
+
+// SetImageSize sets (or with "" clears) the type's AI image size.
+func (s *CardTypesStore) SetImageSize(id int64, size string) (CardType, error) {
+	res, err := s.db.Exec(`UPDATE card_types SET image_size = ?, updated_at = datetime('now') WHERE id = ?`, size, id)
+	if err != nil {
 		return CardType{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

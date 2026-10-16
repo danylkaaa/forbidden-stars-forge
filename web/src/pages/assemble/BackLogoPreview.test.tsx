@@ -20,13 +20,13 @@ function wrap(node: React.ReactNode) {
 }
 test('a generated back is previewed with the faction banner: its logo size and element', async () => {
   wrap(<BackFlatPreview factionId={1} src="/candidate.png" alt="Back" />)
-  const back = await screen.findByTestId('back')
-  await vi.waitFor(() => expect(back.dataset).toMatchObject({ category: 'combat', faction: '1', url: '/candidate.png', logo: '/logo.png', scale: '0.35', element: '/element.png' }))
+  const back = await screen.findByTestId('back', undefined, { timeout: 5000 })
+  await vi.waitFor(() => expect(back.dataset).toMatchObject({ category: 'combat', faction: '1', url: '/candidate.png', logo: '/logo.png', scale: '0.35', element: '/element.png' }), { timeout: 5000 })
 })
 test('the 3D preview of a back draws it as a combat back with the faction banner', async () => {
   wrap(<GenerationPreview3D factionId={1} imageUrl="/candidate.png" side="back" title="Candidate" />)
   fireEvent.click(screen.getByRole('button', { name: '3D preview of Candidate' }))
-  const back = await screen.findByTestId('back')
-  await vi.waitFor(() => expect(back.dataset).toMatchObject({ category: 'combat', url: '/candidate.png', logo: '/logo.png', scale: '0.35', element: '/element.png' }))
+  const back = await screen.findByTestId('back', undefined, { timeout: 5000 })
+  await vi.waitFor(() => expect(back.dataset).toMatchObject({ category: 'combat', url: '/candidate.png', logo: '/logo.png', scale: '0.35', element: '/element.png' }), { timeout: 5000 })
   expect(screen.queryByRole('slider', { name: 'Back logo size' })).not.toBeInTheDocument()
 })

@@ -1,4 +1,4 @@
-import { CATEGORIES, FIELDS, type Category, type CardInput, type CardDraft } from './model'
+import { CATEGORIES, FIELDS, splitLowerText, splitUnits, type Category, type CardInput, type CardDraft } from './model'
 export type ValidationIssue = { index?: number; field: string; message: string }
 export function validateCard(value: unknown, factionIds: readonly number[]): ValidationIssue[] {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return [{ field: 'card', message: 'Must be an object' }]
@@ -29,6 +29,8 @@ export function validateCard(value: unknown, factionIds: readonly number[]): Val
     if (f.kind === 'number' || f.key === 'level') {
       const max = f.key === 'level' ? 3 : Number.MAX_SAFE_INTEGER
       if (typeof x !== 'number' || !Number.isSafeInteger(x) || x < 0 || x > max) add(f.key, `Must be an integer from 0 to ${max}`)
+    } else if (f.kind === 'list') {
+      if (!Array.isArray(x) || x.some(u => typeof u !== 'string' || !u.trim() || u.includes('/'))) add(f.key, 'Must be a list of non-empty unit names without "/" (an empty list is allowed)')
     } else if (f.kind === 'text') {
       if (typeof x !== 'string') add(f.key, 'Must be a string (empty text is allowed)')
     } else if (typeof x !== 'string' || !f.options?.includes(x)) add(f.key, `Must be one of: ${f.options?.join(', ')}`)
@@ -41,7 +43,7 @@ export function draftInput(draft: CardDraft): unknown {
   for (const f of FIELDS[category] ?? []) {
     // An optional field left empty is not sent at all.
     if (f.optional && !(draft[f.key] ?? '').trim()) continue
-    input[f.key] = f.kind === 'number' || f.key === 'level' ? numeric(draft[f.key]) : draft[f.key]
+    input[f.key] = f.kind === 'number' || f.key === 'level' ? numeric(draft[f.key]) : f.kind === 'list' ? splitUnits(draft[f.key] ?? '') : draft[f.key]
   }
   if (category === 'combat') input.starting = draft.starting === 'true'
   return input
@@ -58,10 +60,17 @@ export function parseImport(source: string, factionIds: readonly number[]): { ca
   // Only pass the selected category's fields to validation and the API.
   const cards = v.cards.map((card: unknown) => {
     if (!card || typeof card !== 'object' || Array.isArray(card)) return card
-    const c = card as Record<string, unknown>
+    let c = card as Record<string, unknown>
+    // Files from before the split carry one lower_text: its "names:" prefix becomes the units.
+    if (c.category === 'combat' && typeof c.lower_text === 'string' && !('unit_text' in c) && !('units' in c)) {
+      const { lower_text, ...rest } = c
+      c = { ...rest, ...splitLowerText(lower_text) }
+    }
     const fields = CATEGORIES.includes(c.category as Category) ? FIELDS[c.category as Category] : []
     const allowed = ['faction_id', 'name', 'category', ...(c.category === 'combat' ? ['starting'] : []), ...fields.map(f => f.key)]
-    return Object.fromEntries(Object.entries(c).filter(([key]) => allowed.includes(key)))
+    // An optional field may be null (as exports often write it): that means it is left out.
+    const optional = fields.filter(f => f.optional).map(f => f.key)
+    return Object.fromEntries(Object.entries(c).filter(([key, value]) => allowed.includes(key) && !(optional.includes(key) && value === null)))
   })
   cards.forEach((c: unknown, index: number) => errors.push(...validateCard(c, factionIds).map(e => ({ ...e, index }))))
   return { cards: errors.length ? [] : cards as CardInput[], errors }

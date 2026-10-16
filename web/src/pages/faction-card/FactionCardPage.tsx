@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -60,7 +61,7 @@ function AssetPicker({ label, url, onPick, onRemove, disabled, builtIn }: { labe
     <div className="grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded border border-divider bg-black/30 text-[10px] text-ink/45">
       {url ?? builtIn ? <img src={url ?? builtIn} alt="" className={`h-full w-full ${builtIn && !url ? 'object-contain' : 'object-cover'}`} /> : 'none'}</div>
     <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3 py-1.5 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${disabled ? 'pointer-events-none opacity-45' : ''}`}>{url ? 'Replace' : builtIn ? 'Override' : 'Upload'}
-      <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label={label} disabled={disabled} onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = '' }} /></label>
+      <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={label} disabled={disabled} onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = '' }} /></label>
     {url && <Button disabled={disabled} onClick={onRemove}>Remove</Button>}
   </div>
 }
@@ -191,7 +192,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
           {(['front', 'back'] as const).filter(s => !only || s === only).map(s => <ImagePickerField key={s} label={`${s === 'front' ? 'Front' : 'Back'} image`} title={`Choose the ${s} image`} factionId={factionId} preferredType={s === 'front' ? 'faction card' : 'faction card back'}
             selectedKey={s === 'front' ? draft.front : draft.back} onSelect={key => { save.reset(); setDraft(d => d && { ...d, [s]: key }) }}
             upload={{ url: assets[`${s}-image`], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: `${s}-image`, file }) }} />)}
-          {!options.length && <p className="m-0 text-xs text-ink/60">No generated images for this faction yet. Generate the front with the “faction card” type and the back with “faction card back” in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">Faction Lab</Link>, or upload your own.</p>}
+          {!options.length && <p className="m-0 text-xs text-ink/60">No generated images for this faction yet. Generate the front with the “faction card” type and the back with “faction card back” in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">AI Lab</Link>, or upload your own.</p>}
         </Section>
 
         {only !== 'back' && <Section title="Front text" label="Faction text" open>

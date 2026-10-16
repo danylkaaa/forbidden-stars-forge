@@ -11,6 +11,7 @@ export type CardType = {
   openai_file_id: string
   overlay_path: string // preview-only overlay; never sent to OpenAI
   no_template?: boolean // generated from its prompt alone, with no template image
+  image_size?: string // AI image size, "<width>x<height>" px; empty follows the template
   created_at: string
   updated_at: string
 }
@@ -25,13 +26,14 @@ export function useCardTypes() {
 }
 
 export function buildCardTypeForm(
-  fields: { name: string; description: string; constraints: string },
+  fields: { name: string; description: string; constraints: string; image_size?: string },
   template: File | null,
 ): FormData {
   const form = new FormData()
   form.set('name', fields.name)
   form.set('description', fields.description)
   form.set('constraints', fields.constraints)
+  if (fields.image_size !== undefined) form.set('image_size', fields.image_size)
   if (template) form.set('template', template)
   return form
 }

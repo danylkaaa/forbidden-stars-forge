@@ -36,3 +36,24 @@ func (s *UsageStore) RecentRuns(model string, limit int) ([]pricing.PastRun, err
 	}
 	return out, rows.Err()
 }
+
+// RecentDurations returns how long (ms) the most recent finished runs took, newest first, for runs of this model
+// and quality ("" matches any) on this card type (0 matches any).
+func (s *UsageStore) RecentDurations(model, quality string, cardTypeID int64, limit int) ([]int64, error) {
+	rows, err := s.db.Query(`SELECT duration_ms FROM generations
+		WHERE status = 'done' AND duration_ms > 0 AND (? = '' OR model = ?) AND (? = '' OR quality = ?) AND (? = 0 OR card_type_id = ?)
+		ORDER BY created_at DESC, id DESC LIMIT ?`, model, model, quality, quality, cardTypeID, cardTypeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var ms int64
+		if err := rows.Scan(&ms); err != nil {
+			return nil, err
+		}
+		out = append(out, ms)
+	}
+	return out, rows.Err()
+}

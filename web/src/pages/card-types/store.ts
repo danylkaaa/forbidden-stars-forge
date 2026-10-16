@@ -6,6 +6,7 @@ export type CardTypeDraft = {
   name: string
   description: string
   constraints: string
+  image_size: string
 }
 
 export const useCardTypeDraft = createDraftFormStore<CardTypeDraft>('cardforge:card-type-draft')
@@ -43,12 +44,12 @@ export const useCardTypesUi = create<CardTypesUiState>()((set, get) => {
     assistField: null,
     openCreate: () => {
       revokeStaged()
-      useCardTypeDraft.getState().open('new', { name: '', description: '', constraints: '' })
+      useCardTypeDraft.getState().open('new', { name: '', description: '', constraints: '', image_size: '' })
       set({ dialogMode: 'create', editingId: null, stagedFile: null, stagedMeta: null, showDiff: false, assistField: null })
     },
     openEdit: (ct) => {
       revokeStaged()
-      useCardTypeDraft.getState().open(String(ct.id), { name: ct.name, description: ct.description, constraints: ct.constraints })
+      useCardTypeDraft.getState().open(String(ct.id), { name: ct.name, description: ct.description, constraints: ct.constraints, image_size: ct.image_size ?? '' })
       set({ dialogMode: 'edit', editingId: ct.id, stagedFile: null, stagedMeta: null, showDiff: false, assistField: null })
     },
     closeDialog: () => {

@@ -1,4 +1,7 @@
 import { usePreviewLayers } from '../lib/previewLayers'
+import { useCutMm } from '../pages/print/layout'
+import { SafeAreaLines } from './SafeArea'
+import { CARD_IMAGE_PX } from './safeAreaStore'
 
 // UI for the template-as-mask preview layer; state lives in
 // lib/previewLayers so every preview shares it. Card frames are checked
@@ -8,6 +11,16 @@ const pill = (on: boolean) =>
   `cursor-pointer rounded-full border px-3 py-1 text-xs font-medium ${
     on ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink'
   }`
+
+// One switch for everything the card type lays over the generated image, so the plain image can be checked.
+export function OverlayToggle() {
+  const { overlay, set } = usePreviewLayers()
+  return (
+    <button type="button" aria-pressed={overlay} onClick={(e) => { e.stopPropagation(); set({ overlay: !overlay }) }} className={pill(overlay)}>
+      Overlay {overlay ? 'on' : 'off'}
+    </button>
+  )
+}
 
 // Toggle buttons (+ mask opacity slider) for whichever layers exist.
 export function LayerControls({ maskSrc }: { maskSrc?: string | null }) {
@@ -49,6 +62,7 @@ export function LayeredImage({
   logoScale?: number
 }) {
   const { mask, maskOpacity } = usePreviewLayers()
+  const cutMm = useCutMm()
   const layer = fit === 'contain'
     ? 'pointer-events-none absolute inset-0 h-full w-full object-contain'
     : 'pointer-events-none absolute inset-0 h-full w-full rounded-md'
@@ -59,6 +73,9 @@ export function LayeredImage({
       {maskSrc && mask && (
         <img src={maskSrc} alt="" data-testid="mask" className={layer} style={{ opacity: maskOpacity }} />
       )}
+      {fit === 'contain'
+        ? <div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="relative h-full max-w-full" style={{ aspectRatio: `${CARD_IMAGE_PX.width} / ${CARD_IMAGE_PX.height}` }}><SafeAreaLines px={CARD_IMAGE_PX} cutMm={cutMm} /></div></div>
+        : <SafeAreaLines px={CARD_IMAGE_PX} cutMm={cutMm} />}
       {logoUrl && <img src={logoUrl} alt="Card back logo" className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
         style={{ width: `${logoScale * 100}%`, height: `${logoScale * 100}%` }} />}
     </div>

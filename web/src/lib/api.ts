@@ -1,3 +1,5 @@
+import { formWithPngImages } from './imageUpload'
+
 export class ApiError extends Error {
   status: number
 
@@ -37,7 +39,9 @@ export function apiSend<T>(method: string, path: string, body: unknown): Promise
   }).then((res) => parse<T>(res))
 }
 
-export function apiSendForm<T>(method: string, path: string, form: FormData): Promise<T> {
+export async function apiSendForm<T>(method: string, path: string, form: FormData): Promise<T> {
+  // Images in the form (WebP, AVIF, JPEG …) are converted to PNG first.
+  const body = await formWithPngImages(form)
   // No Content-Type header — the browser sets the multipart boundary.
-  return fetch(path, { method, body: form }).then((res) => parse<T>(res))
+  return fetch(path, { method, body }).then((res) => parse<T>(res))
 }

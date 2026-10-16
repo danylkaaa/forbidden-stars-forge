@@ -22,7 +22,7 @@ export default function CardTypesPage() {
       ui.set({ deleteConfirmId: null })
       queryClient.invalidateQueries({ queryKey: ['card-types'] })
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : 'failed to delete card type')
+      setDeleteError(e instanceof Error ? e.message : 'failed to delete image type')
     }
   }
 
@@ -30,14 +30,14 @@ export default function CardTypesPage() {
     <div>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Card Templates</h1>
-          <p className="m-0 text-sm text-ink/60">{data?.length ?? 0} card types · each holds one chromakey template</p>
+          <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Image Types</h1>
+          <p className="m-0 text-sm text-ink/60">{data?.length ?? 0} image types · each holds one chromakey template</p>
         </div>
-        <Button variant="primary" onClick={ui.openCreate}>New Card Type</Button>
+        <Button variant="primary" onClick={ui.openCreate}>New Image Type</Button>
       </div>
 
       {isLoading && <p className="text-ink/60">Loading…</p>}
-      {error && <p role="alert" className="text-danger">Failed to load card types: {error instanceof Error ? error.message : 'unknown'}</p>}
+      {error && <p role="alert" className="text-danger">Failed to load image types: {error instanceof Error ? error.message : 'unknown'}</p>}
       {data && (
         <CardTypesTable cardTypes={data}
           onEdit={(ct) => ui.openEdit(ct)}
@@ -47,9 +47,9 @@ export default function CardTypesPage() {
       <CardTypeDialog cardTypes={data ?? []} />
 
       {confirmTarget && (
-        <ConfirmDialog title="Delete card type?"
+        <ConfirmDialog title="Delete image type?"
           body={`Removing ${confirmTarget.name} can't be undone.`}
-          confirmLabel="Delete card type"
+          confirmLabel="Delete image type"
           error={deleteError}
           onConfirm={confirmDelete}
           onCancel={() => { ui.set({ deleteConfirmId: null }); setDeleteError(null) }} />

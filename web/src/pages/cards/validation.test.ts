@@ -67,3 +67,10 @@ test('an upgrade limitation is optional: left out when empty, text when given, n
   expect(draftInput(draft)).toHaveProperty('limitation', 'Limit one per area.')
   expect(validateCard({ faction_id: 1, name: 'x', category: 'schema', subtype: 'schema', action: 'move_vertical', text: '', limitation: 'no' }, [1]).length).toBeGreaterThan(0)
 })
+
+test('an import accepts a null limitation as none, and keeps limitation text', () => {
+  const card = (limitation: unknown) => JSON.stringify({ cards: [{ faction_id: 1, name: 'x', category: 'upgrade', upgrade_type: 'deploy', level: 1, resource_cost: 2, text: 't', limitation }] })
+  expect(parseImport(card(null), [1])).toMatchObject({ errors: [] })
+  expect(parseImport(card(null), [1]).cards[0]).not.toHaveProperty('limitation')
+  expect(parseImport(card('Limit one.'), [1]).cards[0]).toHaveProperty('limitation', 'Limit one.')
+})

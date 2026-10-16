@@ -5,14 +5,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, inputClass, selectClass } from '../../components/Field'
-import { ZoomableImage } from '../../components/ImageLightbox'
+import { UseForFactionButton } from './UseForFactionButton'
+import { SuggestInput } from '../../components/SuggestInput'
+import { EditImageButton, ZoomableImage } from '../../components/ImageLightbox'
 import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
-import { LayerControls, LayeredImage } from '../../components/PreviewLayers'
+import { LayerControls, LayeredImage, OverlayToggle } from '../../components/PreviewLayers'
 import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
 import { EditOf } from '../../components/EditOf'
 import { parentImageUrl } from '../../lib/imageEdits'
-import { QuickCardPreview } from '../assemble/QuickCardPreview'
+import { CardPicker, QuickCardPreview } from '../assemble/QuickCardPreview'
 import { GenerationPreview3D } from '../assemble/GenerationPreview3D'
 import { BackFlatPreview } from '../assemble/BackLogoPreview'
 import { Tag } from '../../components/Tag'
@@ -20,10 +22,20 @@ import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, 
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
 import { useElapsedMs } from '../../lib/useElapsedMs'
 import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
+import { usePreviewLayers } from '../../lib/previewLayers'
 import { useAssembledPrompt } from './api'
+import { joinPrompt, splitPrompt } from './promptSections'
 import { FrontImagePicker, type FrontImageOption } from './FrontImagePicker'
 import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
 
+// The prompt parts that come from an editable field: the tab it is on and the field.
+const PART_FIELDS: Record<string, { tab: 'faction' | 'card-type'; field: string }> = {
+  Description: { tab: 'card-type', field: 'ct-description' },
+  Constraints: { tab: 'card-type', field: 'ct-constraints' },
+  'Primary color': { tab: 'faction', field: 'primary_color' },
+  Texture: { tab: 'faction', field: 'texture' },
+  'Faction style': { tab: 'faction', field: 'description' },
+}
 const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
 
 const savedFields = (f: Faction): LabFields => ({ primary_color: f.primary_color, texture: f.texture, description: f.description })
@@ -98,11 +110,42 @@ export default function FactionLabPage() {
   const debounced = useDebounced(inputs, 300)
   const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage)
   const { data: preview } = usePreview(lab.factionId, lab.cardTypeId, lab.model)
+  // Parts of the prompt switched off; they are neither shown nor sent.
+  const [off, setOff] = useState<ReadonlySet<string>>(new Set())
+  // Clicking a part of the prompt opens the tab with the field it is built from and focuses that field.
+  const [focusField, setFocusField] = useState<string | null>(null)
+  useEffect(() => {
+    if (!focusField) return
+    const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-field="${focusField}"]`)
+    if (!el) return
+    el.focus()
+    el.setSelectionRange?.(el.value.length, el.value.length)
+    el.scrollIntoView?.({ block: 'nearest' })
+    setFocusField(null)
+  }, [focusField, tab])
+  const parts = useMemo(() => splitPrompt(assembled.data?.prompt ?? ''), [assembled.data?.prompt])
+  const sentPrompt = joinPrompt(parts, off)
+  // Parts built from fields whose text differs from what is saved: "custom", the rest is as the backend wrote it.
+  const edited: Record<string, boolean> = {
+    'Primary color': !!saved && !!fields && saved.primary_color !== fields.primary_color,
+    Texture: !!saved && !!fields && saved.texture !== fields.texture,
+    'Faction style': !!saved && !!fields && saved.description !== fields.description,
+    Description: !!ctSaved && !!ctFields && ctSaved.description !== ctFields.description,
+    Constraints: !!ctSaved && !!ctFields && ctSaved.constraints !== ctFields.constraints,
+  }
   const promptReady = assembled.data !== undefined && !assembled.isFetching &&
     debounced.fields !== null && fields !== null && sameFields(debounced.fields, fields) &&
     (debounced.ct === null) === (ctFields === null) && (!ctFields || sameCt(debounced.ct!, ctFields))
   const estimate = preview ? (lab.mode === 'draft' ? preview.est_draft_usd : preview.est_final_usd) : null
+  const expectedSeconds = (mode: string) => (mode === 'draft' ? preview?.est_draft_seconds : preview?.est_final_seconds) || 0
+  const expectedMs = expectedSeconds(lab.mode) * 1000
 
+  const openPart = (key: string) => {
+    const target = PART_FIELDS[key]
+    if (!target) return
+    setTab(target.tab)
+    setFocusField(target.field)
+  }
   const setField = (key: keyof LabFields, value: string) => {
     if (faction && fields) lab.setDraft(faction.id, { ...fields, [key]: value })
   }
@@ -117,7 +160,7 @@ export default function FactionLabPage() {
     try {
       const g = await start({
         faction_id: faction.id, card_type_id: cardType.id, mode: lab.mode,
-        prompt_override: assembled.data.prompt, ...(lab.model ? { model: lab.model } : {}),
+        prompt_override: sentPrompt, ...(lab.model ? { model: lab.model } : {}),
         ...(frontImage ? { front_image: frontImage.ref } : {}),
       })
       lab.snapshot(g.id, fields, ctFields)
@@ -180,13 +223,15 @@ export default function FactionLabPage() {
 
   const results = (gens ?? []).filter((g) => g.faction_id === lab.factionId && g.card_type_id === lab.cardTypeId)
   const current = results.find((g) => g.id === selectedId) ?? results[0] ?? null
+  // Failed runs show their error in the result when they are the newest or selected, but are not kept in the history.
+  const history = results.filter((g) => g.status !== 'failed')
 
   const panel = 'flex min-h-0 flex-col gap-3 rounded-md bg-surface p-4 shadow-[0_0_0_1px_var(--color-neutral-800)]'
 
   return (
     <div className="flex h-full min-h-[600px] flex-col gap-4">
       <div className="flex items-baseline justify-between gap-4">
-        <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">Faction Lab</h1>
+        <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">AI Lab</h1>
         <p className="m-0 text-[13px] text-ink/55">Nothing is saved until you click Save to faction</p>
       </div>
 
@@ -203,7 +248,7 @@ export default function FactionLabPage() {
                 </SearchableSelect>
               )}
             </Field>
-            <Field label="Card Type">
+            <Field label="Image Type">
               {(id) => (
                 <SearchableSelect id={id} className={selectClass} value={lab.cardTypeId ?? ''}
                   onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
@@ -233,7 +278,7 @@ export default function FactionLabPage() {
           )}
 
           <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">
-            {([['faction', 'Faction', dirty], ['card-type', 'Card type', ctDirty]] as const).map(([key, label, isDirty]) => (
+            {([['faction', 'Faction', dirty], ['card-type', 'Image type', ctDirty]] as const).map(([key, label, isDirty]) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
                 className={`-mb-px cursor-pointer border-0 border-b-2 bg-transparent px-3 py-1.5 text-[13px] font-medium ${tab === key ? 'border-accent text-accent' : 'border-transparent text-ink/60 hover:text-ink'}`}>
                 {label}{isDirty && <span className="ml-1 text-warn" aria-label="unsaved">•</span>}
@@ -243,7 +288,7 @@ export default function FactionLabPage() {
 
           {tab === 'card-type' ? (
             !cardType || !ctFields ? (
-              <p className="m-0 text-sm text-ink/50">Pick a card type to edit its prompt text.</p>
+              <p className="m-0 text-sm text-ink/50">Pick an image type to edit its prompt text.</p>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2">
@@ -252,18 +297,18 @@ export default function FactionLabPage() {
                     <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved experiment</span>
                   )}
                 </div>
-                <p className="-mt-1 m-0 text-[11px] text-ink/45">Shared by every faction — saving changes all of this card type&apos;s prompts.</p>
+                <p className="-mt-1 m-0 text-[11px] text-ink/45">Shared by every faction — saving changes all of this image type&apos;s prompts.</p>
                 {(['description', 'constraints'] as const).map((key) => (
                   <div key={key} className={`flex flex-col ${key === 'constraints' ? 'min-h-48 flex-1' : 'min-h-28'}`}>
                     <div className="mb-1 flex items-center justify-between">
-                      <label htmlFor={`lab-ct-${key}`} className="text-xs text-ink/70">{key === 'description' ? 'Card type description' : 'Constraints'}</label>
+                      <label htmlFor={`lab-ct-${key}`} className="text-xs text-ink/70">{key === 'description' ? 'Image type description' : 'Constraints'}</label>
                       <button type="button" disabled={ctAssist !== null} onClick={() => setCtAssist(key)}
                         aria-label={`Edit ${key} with Claude`}
                         className="cursor-pointer border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-accent disabled:cursor-not-allowed disabled:opacity-45">
                         Edit with Claude
                       </button>
                     </div>
-                    <textarea id={`lab-ct-${key}`} value={ctFields[key]}
+                    <textarea id={`lab-ct-${key}`} data-field={`ct-${key}`} value={ctFields[key]}
                       onChange={(e) => setCtField(key, e.target.value)}
                       className={`${inputClass} min-h-20 flex-1 resize-none font-sans text-[13px] leading-relaxed`} />
                     {ctAssist === key && (
@@ -286,7 +331,7 @@ export default function FactionLabPage() {
                 <div className="flex items-center justify-end gap-2">
                   {ctDirty && <Button type="button" onClick={() => lab.clearCtDraft(cardType.id)}>Reset to saved</Button>}
                   <Button variant="primary" type="button" disabled={!ctDirty || busy !== null} onClick={onSaveCt}>
-                    {busy === 'save-ct' ? 'Saving…' : 'Save to card type'}
+                    {busy === 'save-ct' ? 'Saving…' : 'Save to image type'}
                   </Button>
                 </div>
               </>
@@ -303,19 +348,14 @@ export default function FactionLabPage() {
               </div>
               <Field label="Primary color">
                 {(id) => (
-                  <input id={id} type="text" value={fields.primary_color} placeholder="e.g. deep crimson with gold trim"
+                  <input id={id} data-field="primary_color" type="text" value={fields.primary_color} placeholder="e.g. deep crimson with gold trim"
                     onChange={(e) => setField('primary_color', e.target.value)} className={`${inputClass} font-sans`} />
                 )}
               </Field>
               <Field label="Texture">
                 {(id) => (
-                  <>
-                    <input id={id} type="text" list="lab-texture-suggestions" value={fields.texture} placeholder="e.g. metal, skin, wood"
-                      onChange={(e) => setField('texture', e.target.value)} className={`${inputClass} font-sans`} />
-                    <datalist id="lab-texture-suggestions">
-                      {TEXTURE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
-                    </datalist>
-                  </>
+                  <SuggestInput id={id} data-field="texture" suggestions={TEXTURE_SUGGESTIONS} value={fields.texture} placeholder="e.g. metal, skin, wood"
+                    onValueChange={(v) => setField('texture', v)} className={`${inputClass} font-sans`} />
                 )}
               </Field>
               <div className="flex min-h-40 flex-1 flex-col">
@@ -326,7 +366,7 @@ export default function FactionLabPage() {
                     Edit with Claude
                   </button>
                 </div>
-                <textarea id="lab-description" value={fields.description}
+                <textarea id="lab-description" data-field="description" value={fields.description}
                   onChange={(e) => setField('description', e.target.value)}
                   className={`${inputClass} min-h-32 flex-1 resize-none font-sans text-[13px] leading-relaxed`} />
               </div>
@@ -357,21 +397,47 @@ export default function FactionLabPage() {
             <h2 className="m-0 text-[15px] font-medium">Assembled prompt</h2>
             {!promptReady && lab.cardTypeId !== null && fields && <span className="text-[11px] text-ink/45">updating…</span>}
           </div>
-          <pre aria-label="Assembled prompt"
-            className={`m-0 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md border border-divider bg-bg px-2.5 py-2 font-mono text-[12px] leading-normal text-ink/75 ${promptReady ? '' : 'opacity-60'}`}>
-            {!fields ? 'Pick a faction' : lab.cardTypeId === null ? 'Select a card type' : assembled.data?.prompt ?? 'Loading…'}
-          </pre>
+          {parts.length > 0 && (
+            <fieldset aria-label="Prompt parts to send" className="m-0 flex flex-wrap gap-x-3 gap-y-1 border-0 p-0">
+              {parts.map((part) => (
+                <label key={part.key} className="flex cursor-pointer items-center gap-1.5 text-[12px] text-ink/80">
+                  <input type="checkbox" checked={!off.has(part.key)} className="accent-[var(--color-accent)]"
+                    onChange={(e) => setOff((cur) => { const next = new Set(cur); if (e.target.checked) next.delete(part.key); else next.add(part.key); return next })} />
+                  {part.label}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <div aria-label="Assembled prompt"
+            className={`flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md border border-divider bg-bg p-1.5 font-mono text-[12px] leading-normal text-ink/75 ${promptReady ? '' : 'opacity-60'}`}>
+            {!fields || lab.cardTypeId === null || !assembled.data
+              ? <p className="m-0 px-1 py-0.5">{!fields ? 'Pick a faction' : lab.cardTypeId === null ? 'Select an image type' : 'Loading…'}</p>
+              : parts.filter((part) => !off.has(part.key)).map((part) => (
+                <div key={part.key} className={`flex gap-2 rounded border ${edited[part.key] ? 'border-accent/60' : 'border-divider'} ${PART_FIELDS[part.key] ? 'cursor-pointer hover:border-accent' : ''}`}
+                  {...(PART_FIELDS[part.key] ? {
+                    role: 'button', tabIndex: 0, 'aria-label': `Edit ${part.label}`, title: `Edit ${part.label.toLowerCase()}`,
+                    onClick: () => { if (!window.getSelection()?.toString()) openPart(part.key) },
+                    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPart(part.key) } },
+                  } : {})}>
+                  <span aria-hidden="true" title={edited[part.key] ? 'Text you changed in the fields' : 'Sent as the backend assembled it'}
+                    className={`flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-l px-1 py-1 text-[10px] font-medium uppercase tracking-wider [text-orientation:mixed] [writing-mode:vertical-rl] rotate-180 ${edited[part.key] ? 'bg-accent/25 text-accent' : 'bg-neutral-800 text-ink/50'}`}>
+                    {part.label}{edited[part.key] ? ' · custom, edited' : ''}
+                  </span>
+                  <pre className="m-0 min-w-0 flex-1 whitespace-pre-wrap py-1.5 pr-2 font-[inherit]">{part.text}</pre>
+                </div>
+              ))}
+          </div>
           {cardType && !cardType.openai_file_id && !cardType.no_template && (
-            <p className="m-0 text-[13px] text-warn">This card type has no OpenAI file uploaded yet.</p>
+            <p className="m-0 text-[13px] text-warn">This image type has no OpenAI file uploaded yet.</p>
           )}
           {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
           <div className="flex items-center gap-3">
             <Button variant="primary" type="button" onClick={onGenerate}
-              disabled={!promptReady || !(cardType?.openai_file_id || cardType?.no_template) || busy !== null}>
+              disabled={!promptReady || !sentPrompt.trim() || !(cardType?.openai_file_id || cardType?.no_template) || busy !== null}>
               {busy === 'generate' ? 'Starting…' : 'Generate'}
             </Button>
             <span className="text-xs text-ink/45">
-              {estimate !== null && `est. ${formatCost(estimate)} · `}uses the fields as they are now
+              {estimate !== null && `est. ${formatCost(estimate)} · `}{expectedMs > 0 && `usually ~${formatDuration(expectedMs)} · `}uses the fields as they are now
             </span>
           </div>
         </section>
@@ -380,13 +446,15 @@ export default function FactionLabPage() {
         <section className={panel}>
           <h2 className="m-0 text-[15px] font-medium">Result</h2>
           {!faction || !cardType ? (
-            <p className="m-0 text-sm text-ink/50">Pick a faction and card type.</p>
+            <p className="m-0 text-sm text-ink/50">Pick a faction and image type.</p>
           ) : !current ? (
             <p className="m-0 text-sm text-ink/50">No generations for this pair yet — click Generate.</p>
           ) : (
             <ResultView
               key={`${current.id}-${cardType.id}`}
               gen={current}
+              cardType={cardType}
+              expectedMs={expectedSeconds(current.mode) * 1000}
               cardTypeName={cardType.name}
               alt={`${faction.name} × ${cardType.name} #${current.id}`}
               {...previewLayers(cardType)}
@@ -395,20 +463,18 @@ export default function FactionLabPage() {
               onEdited={(g) => setSelectedId(g.id)}
             />
           )}
-          {results.length > 1 && cardType && (
+          {(history.length > 1 || (history.length > 0 && current?.status === 'failed')) && cardType && (
             <div>
-              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-ink/45">All runs ({results.length})</div>
+              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-ink/45">All runs ({history.length})</div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {results.map((g) => (
+                {history.map((g) => (
                   <button key={g.id} type="button" onClick={() => setSelectedId(g.id)}
                     aria-label={`Show run #${g.id}`} aria-pressed={g.id === current?.id}
                     className={`h-20 w-15 flex-none cursor-pointer overflow-hidden rounded border-2 bg-neutral-800 p-0 ${g.id === current?.id ? 'border-accent' : 'border-transparent'}`}>
                     {g.status === 'done' ? (
                       <img src={`/api/generations/${g.id}/image`} alt="" loading="lazy" className="block h-full w-full object-cover" />
-                    ) : g.status === 'pending' ? (
-                      <span className="grid h-full w-full place-items-center bg-accent-900/60"><GeneratingSpinner seed={g.id} size="sm" /></span>
                     ) : (
-                      <span className="block h-full w-full bg-danger/20" />
+                      <span className="grid h-full w-full place-items-center bg-accent-900/60"><GeneratingSpinner seed={g.id} size="sm" /></span>
                     )}
                   </button>
                 ))}
@@ -422,8 +488,8 @@ export default function FactionLabPage() {
 }
 
 // The selected run, as large as the column allows.
-function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdited }: {
-  gen: Generation; cardTypeName: string; alt: string; maskSrc: string | null; label: string | null
+function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, label, onUseFields, onEdited }: {
+  gen: Generation; cardType: CardType; expectedMs: number; cardTypeName: string; alt: string; maskSrc: string | null; label: string | null
   onUseFields?: () => void; onEdited: (g: Generation) => void
 }) {
   const pending = gen.status === 'pending'
@@ -431,26 +497,28 @@ function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdi
   const imageUrl = gen.status === 'done' ? `/api/generations/${gen.id}/image` : null
   // Quick check of the image as a finished card, with an existing card's
   // text and artwork (or the demo card).
-  const [asCard, setAsCard] = useState(false)
+  // The card type's overlay on the plain image: the finished card for a combat front, the banner for a back.
+  const overlayOn = usePreviewLayers((l) => l.overlay)
   const [previewCardId, setPreviewCardId] = useState(0)
   const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'card back' ? 'back' : undefined
   const backCategory = cardTypeName === 'card back' ? 'combat' : undefined
+  const asCard = combatSide === 'front' && overlayOn
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
-        {combatSide === 'front' && <div role="tablist" aria-label="Result view" className="inline-flex overflow-hidden rounded-md border border-divider text-xs">
-          {([['Image', false], ['Card preview', true]] as const).map(([name, value]) => <button key={name} type="button" role="tab" aria-selected={asCard === value} onClick={() => setAsCard(value)}
-            className={`cursor-pointer border-0 px-2.5 py-1 ${asCard === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
-        </div>}
+        {(combatSide === 'front' || backCategory) && <OverlayToggle />}
+        <EditImageButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} />
+        {cardType && <UseForFactionButton factionId={gen.faction_id} cardType={cardType} generationId={gen.id} />}
+        {asCard && <CardPicker factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} />}
         {combatSide && <GenerationPreview3D imageUrl={imageUrl} factionId={gen.faction_id} side={combatSide} title={alt} />}
         {!asCard && <LayerControls maskSrc={maskSrc} />}
       </div>}
-      {imageUrl && asCard ? <QuickCardPreview imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
+      {imageUrl && asCard ? <QuickCardPreview picker={false} imageUrl={imageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
           <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={combatSide === 'front' ? gen.faction_id : undefined} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} imgClassName="h-full w-full object-contain" /> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
+            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>
@@ -458,7 +526,7 @@ function ResultView({ gen, cardTypeName, alt, maskSrc, label, onUseFields, onEdi
               <>
                 <GeneratingSpinner seed={gen.id} />
                 <span className="mt-2">generating…</span>
-                <span className="text-xs text-ink/50">{formatDuration(elapsed)} elapsed</span>
+                <span className="text-xs text-ink/50">{formatDuration(elapsed)} elapsed{expectedMs > 0 && (elapsed > expectedMs * 1.5 ? ` · taking longer than the usual ~${formatDuration(expectedMs)}` : ` · usually ~${formatDuration(expectedMs)}`)}</span>
               </>
             ) : gen.error || 'failed'}
           </div>

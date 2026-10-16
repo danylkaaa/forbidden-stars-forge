@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 )
@@ -20,11 +21,13 @@ type CardInput struct {
 	Guns         *int64  `json:"guns,omitempty"`
 	Eagles       *int64  `json:"eagles,omitempty"`
 	UpperText    *string `json:"upper_text,omitempty"`
-	LowerText    *string `json:"lower_text,omitempty"`
-	Subtype      *string `json:"subtype,omitempty"`
-	Text         *string `json:"text,omitempty"`
-	Action       *string `json:"action,omitempty"`
-	UpgradeType  *string `json:"upgrade_type,omitempty"`
+	// Units are the unit names a combat card's lower text is about (shown joined with "/" before the unit text).
+	Units       *[]string `json:"units,omitempty"`
+	UnitText    *string   `json:"unit_text,omitempty"`
+	Subtype     *string   `json:"subtype,omitempty"`
+	Text        *string   `json:"text,omitempty"`
+	Action      *string   `json:"action,omitempty"`
+	UpgradeType *string   `json:"upgrade_type,omitempty"`
 	// Limitation is an upgrade card's optional bottom line; nil or empty means none.
 	Limitation *string `json:"limitation,omitempty"`
 	// Starting marks a combat card as a starting card (level 0, no price, shows the
@@ -80,7 +83,7 @@ func ValidateCard(in CardInput) []CardFieldError {
 		}
 		add(f, "must be one of: "+strings.Join(values, ", "))
 	}
-	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "lower_text": in.LowerText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil, "limitation": in.Limitation != nil, "starting": in.Starting != nil}
+	present := map[string]bool{"level": in.Level != nil, "resource_cost": in.ResourceCost != nil, "shields": in.Shields != nil, "guns": in.Guns != nil, "eagles": in.Eagles != nil, "upper_text": in.UpperText != nil, "units": in.Units != nil, "unit_text": in.UnitText != nil, "subtype": in.Subtype != nil, "text": in.Text != nil, "action": in.Action != nil, "upgrade_type": in.UpgradeType != nil, "limitation": in.Limitation != nil, "starting": in.Starting != nil}
 	allowed := CardCategoryFields(in.Category)
 	for f, yes := range present {
 		if yes && !allowed[f] {
@@ -103,7 +106,17 @@ func ValidateCard(in CardInput) []CardFieldError {
 		number("guns", in.Guns, MaxCardInteger)
 		number("eagles", in.Eagles, MaxCardInteger)
 		text("upper_text", in.UpperText)
-		text("lower_text", in.LowerText)
+		if in.Units == nil {
+			add("units", "is required (an empty list is allowed)")
+		} else {
+			for _, u := range *in.Units {
+				if strings.TrimSpace(u) == "" || strings.Contains(u, "/") {
+					add("units", "each unit name must be non-empty and contain no \"/\"")
+					break
+				}
+			}
+		}
+		text("unit_text", in.UnitText)
 	case "schema":
 		enum("subtype", in.Subtype, "schema", "tactic")
 		text("text", in.Text)
@@ -121,7 +134,7 @@ func CardCategoryFields(category string) map[string]bool {
 	var extra []string
 	switch category {
 	case "combat":
-		extra = []string{"level", "resource_cost", "shields", "guns", "eagles", "upper_text", "lower_text", "starting"}
+		extra = []string{"level", "resource_cost", "shields", "guns", "eagles", "upper_text", "units", "unit_text", "starting"}
 	case "schema":
 		extra = []string{"subtype", "text", "action"}
 	case "upgrade":
@@ -137,19 +150,38 @@ type CardsStore struct{ db *sql.DB }
 
 func NewCardsStore(db *sql.DB) *CardsStore { return &CardsStore{db} }
 
-const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at, starting, limitation"
+const cardCols = "id, faction_id, name, category, level, resource_cost, shields, guns, eagles, upper_text, lower_text, subtype, text, action, upgrade_type, created_at, updated_at, starting, limitation, units"
 
 func scanCard(row interface{ Scan(...any) error }) (Card, error) {
 	var c Card
 	var starting bool
-	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.LowerText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt, &starting, &c.Limitation)
+	var units string
+	err := row.Scan(&c.ID, &c.FactionID, &c.Name, &c.Category, &c.Level, &c.ResourceCost, &c.Shields, &c.Guns, &c.Eagles, &c.UpperText, &c.UnitText, &c.Subtype, &c.Text, &c.Action, &c.UpgradeType, &c.CreatedAt, &c.UpdatedAt, &starting, &c.Limitation, &units)
 	if c.Category == "combat" {
 		c.Starting = &starting
+		var names []string
+		if json.Unmarshal([]byte(units), &names) != nil || names == nil {
+			names = []string{}
+		}
+		c.Units = &names
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
 	return c, err
+}
+
+// unitsFor stores a combat card's unit names as a JSON array ("[]" for any other card).
+func unitsFor(c CardInput) string {
+	if c.Category != "combat" || c.Units == nil {
+		return "[]"
+	}
+	names := make([]string, 0, len(*c.Units))
+	for _, u := range *c.Units {
+		names = append(names, strings.TrimSpace(u))
+	}
+	b, _ := json.Marshal(names)
+	return string(b)
 }
 
 // limitationFor stores an upgrade's limitation, or NULL when it is empty or the card is not an upgrade.
@@ -160,7 +192,7 @@ func limitationFor(c CardInput) any {
 	return *c.Limitation
 }
 func cardArgs(c CardInput) []any {
-	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.LowerText, c.Subtype, c.Text, c.Action, c.UpgradeType, c.Category == "combat" && c.Starting != nil && *c.Starting, limitationFor(c)}
+	return []any{c.FactionID, strings.TrimSpace(c.Name), c.Category, c.Level, c.ResourceCost, c.Shields, c.Guns, c.Eagles, c.UpperText, c.UnitText, c.Subtype, c.Text, c.Action, c.UpgradeType, c.Category == "combat" && c.Starting != nil && *c.Starting, limitationFor(c), unitsFor(c)}
 }
 func (s *CardsStore) Get(id int64) (Card, error) {
 	return scanCard(s.db.QueryRow("SELECT "+cardCols+" FROM cards WHERE id=?", id))
@@ -198,7 +230,7 @@ func insertCard(tx *sql.Tx, in CardInput) (Card, error) {
 	if err := checkCard(tx, in); err != nil {
 		return Card{}, err
 	}
-	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type,starting,limitation) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
+	res, err := tx.Exec("INSERT INTO cards (faction_id,name,category,level,resource_cost,shields,guns,eagles,upper_text,lower_text,subtype,text,action,upgrade_type,starting,limitation,units) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cardArgs(in)...)
 	if err != nil {
 		return Card{}, err
 	}
@@ -247,7 +279,7 @@ func (s *CardsStore) Update(id int64, in CardInput) (Card, error) {
 		return Card{}, err
 	}
 	args := append(cardArgs(in), id)
-	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,starting=?,limitation=?,updated_at=datetime('now') WHERE id=?", args...)
+	_, err = tx.Exec("UPDATE cards SET faction_id=?,name=?,category=?,level=?,resource_cost=?,shields=?,guns=?,eagles=?,upper_text=?,lower_text=?,subtype=?,text=?,action=?,upgrade_type=?,starting=?,limitation=?,units=?,updated_at=datetime('now') WHERE id=?", args...)
 	if err != nil {
 		return Card{}, err
 	}
@@ -287,4 +319,37 @@ func (s *CardsStore) DeleteMany(ids []int64) ([]string, error) {
 		}
 	}
 	return files, tx.Commit()
+}
+
+// DeleteAll removes every card with its assembly, returning how many were removed and their artwork files.
+func (s *CardsStore) DeleteAll() (int, []string, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, nil, err
+	}
+	defer tx.Rollback()
+	files := []string{}
+	rows, err := tx.Query(`SELECT artwork_path FROM card_assemblies WHERE artwork_path <> ''`)
+	if err != nil {
+		return 0, nil, err
+	}
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			rows.Close()
+			return 0, nil, err
+		}
+		files = append(files, path)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, nil, err
+	}
+	rows.Close()
+	res, err := tx.Exec(`DELETE FROM cards`)
+	if err != nil {
+		return 0, nil, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), files, tx.Commit()
 }

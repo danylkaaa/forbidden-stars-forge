@@ -17,7 +17,6 @@ export function SaveBar({ settings }: { settings: Settings }) {
         const saved = await putSettings({
           openai_api_key: draft.openai_api_key_input,
           openai_model: draft.openai_model,
-          image_size: draft.image_size,
           draft_quality: draft.draft_quality,
           final_quality: draft.final_quality,
           input_fidelity: draft.input_fidelity,

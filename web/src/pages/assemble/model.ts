@@ -31,12 +31,11 @@ export const SYMBOL_CATALOG = [
   { token: '[B]', glyph: '}', label: 'Boltgun — boxed', unframed: false },
   { token: '(S)', glyph: '@', label: 'Shield — non-boxed', unframed: false },
   { token: '[S]', glyph: '{', label: 'Shield — boxed', unframed: false },
-  // Morale is never boxed. The font has no standalone morale glyph, so the
-  // outlined box is cropped away.
-  { token: '(M)', glyph: '<', label: 'Morale', unframed: true },
+  // Morale is always boxed, so (M) and [M] are the same icon.
+  { token: '(M)', glyph: '<', label: 'Morale — always boxed', unframed: false },
   { token: '(D)', glyph: 'D', label: 'Dice', unframed: false },
 ] as const
-// [M] from older text renders as plain morale too.
+// [M] is the same boxed morale icon as (M).
 const SHORT_SYMBOLS: Record<string, typeof SYMBOL_CATALOG[number]> = { ...Object.fromEntries(SYMBOL_CATALOG.map(s => [s.token, s])), '[M]': SYMBOL_CATALOG[4] }
 export const RESOURCE_TOKENS = {
   guns: { circle: 'GUN', circle_outline: 'GUN_CIRCLE_OUTLINE', box: 'GUN_BOX', box_outline: 'GUN_BOX_OUTLINE' },
@@ -184,5 +183,5 @@ export const DEMO_SCHEMA: SchemaCard = {
 }
 export const DEMO_COMBAT: CombatCard = {
   id: 0, faction_id: 0, category: 'combat', name: 'Righteous Fury', level: 2, resource_cost: 1, guns: 2, shields: 1, eagles: 1,
-  upper_text: '**Battle:** Gain 1 (B) for each enemy unit in this area.', lower_text: 'Rout 1 enemy unit. Gain (M).', created_at: '', updated_at: '',
+  upper_text: '**Battle:** Gain 1 (B) for each enemy unit in this area.', units: ['Skitarii', 'Light Cruiser'], unit_text: 'Rout 1 enemy unit. Gain (M).', created_at: '', updated_at: '',
 }

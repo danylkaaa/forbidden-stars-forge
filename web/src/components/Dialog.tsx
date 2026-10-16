@@ -5,6 +5,7 @@ export function Dialog({
   titleExtra,
   width = 'min(620px,100%)',
   onBackdropClick,
+  layer = 'z-10',
   children,
 }: {
   title: string
@@ -13,6 +14,7 @@ export function Dialog({
   // Called on a click outside the dialog box. Callers decide whether that
   // closes it (e.g. only when there are no unsaved changes).
   onBackdropClick?: () => void
+  layer?: string // stacking class, for a dialog opened above a full-screen viewer
   children: ReactNode
 }) {
   // Only a press that both starts and ends on the backdrop counts, so a text
@@ -26,7 +28,7 @@ export function Dialog({
         if (pressedBackdrop.current && e.target === e.currentTarget) onBackdropClick?.()
         pressedBackdrop.current = false
       }}
-      className="fixed inset-0 z-10 grid place-items-center overflow-y-auto bg-black/65 p-5 backdrop-blur-[2px]"
+      className={`fixed inset-0 ${layer} grid place-items-center overflow-y-auto bg-black/65 p-5 backdrop-blur-[2px]`}
     >
       <div
         role="dialog"

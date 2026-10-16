@@ -6,8 +6,10 @@ import { Dialog } from '../../components/Dialog'
 import { DiffPanel } from '../../components/DiffPanel'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
 import { Field, inputClass } from '../../components/Field'
+import { ImageSizeField } from '../../components/ImageSizeField'
 import { isDraftDirty } from '../../lib/draftForm'
-import { buildCardTypeForm, isBuiltinCardType, createCardType, startCardTypeAssist, updateCardType, type CardType } from './api'
+import { sizeError } from '../../lib/imageSize'
+import { buildCardTypeForm, isBuiltinCardType, createCardType, templateUrl, startCardTypeAssist, updateCardType, type CardType } from './api'
 import { OpenAIFilePanel } from './OpenAIFilePanel'
 import { TemplateDropzone } from './TemplateDropzone'
 import { useCardTypeDraft, useCardTypesUi } from './store'
@@ -25,8 +27,10 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
       const d = useCardTypeDraft.getState().draft
       const { dialogMode, editingId, stagedFile } = useCardTypesUi.getState()
       if (!d || !d.name.trim()) return { error: 'Name is required' }
+      const sizeProblem = sizeError(d.image_size ?? '')
+      if (sizeProblem) return { error: `AI image size: ${sizeProblem}` }
       const form = buildCardTypeForm(
-        { name: d.name.trim(), description: d.description, constraints: d.constraints },
+        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '' },
         stagedFile,
       )
       try {
@@ -97,9 +101,9 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
   return (
     <>
       <Dialog
-        title={ui.dialogMode === 'edit' ? 'Edit Card Type' : 'New Card Type'}
-        // Outside click closes only when there's nothing to lose.
-        onBackdropClick={() => { if (!dirty && ui.assistField === null) ui.closeDialog() }}
+        title={ui.dialogMode === 'edit' ? 'Edit Image Type' : 'New Image Type'}
+        // Outside click closes, after a confirmation when there are unsaved changes.
+        onBackdropClick={requestClose}
         width="min(560px,100%)"
         titleExtra={dirty ? (
           <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved changes</span>
@@ -112,8 +116,14 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
               onChange={(e) => draftState.setField('name', e.target.value)} className={inputClass} />
           )}
         </Field>
-        {textField('description', 'Description', 'What this card type is, overall aesthetic…')}
+        {textField('description', 'Description', 'What this image is, overall aesthetic…')}
         {textField('constraints', 'Constraints', 'Zones, chromakey color, do-not-touch areas…')}
+        <div>
+          <div className="mb-1 text-xs text-ink/70">AI image size</div>
+          <ImageSizeField value={draft.image_size ?? ''} onChange={(size) => draftState.setField('image_size', size)}
+            previewSrc={ui.stagedMeta?.url ?? (persistedCt ? templateUrl(persistedCt) : null)} />
+          <p className="m-0 mt-1 text-[11px] text-ink/45">Empty follows the template image.</p>
+        </div>
 
         {ui.showDiff && dirty && persisted && (
           <DiffPanel simpleRows={[]}
@@ -121,6 +131,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
               { field: 'name', before: persisted.name, after: draft.name },
               { field: 'description', before: persisted.description, after: draft.description },
               { field: 'constraints', before: persisted.constraints, after: draft.constraints },
+              { field: 'image size', before: persisted.image_size, after: draft.image_size },
             ]} />
         )}
 
@@ -141,8 +152,8 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
           <form action={saveAction} className="flex gap-2">
             {dirty && <Button type="button" onClick={discardAll}>Discard</Button>}
             <Button type="button" onClick={requestClose}>Cancel</Button>
-            <Button variant="primary" type="submit" disabled={!draft.name.trim() || saving}>
-              {saving ? 'Saving…' : 'Save Card Type'}
+            <Button variant="primary" type="submit" disabled={!draft.name.trim() || saving || sizeError(draft.image_size ?? '') !== null}>
+              {saving ? 'Saving…' : 'Save Image Type'}
             </Button>
           </form>
         </div>
@@ -150,7 +161,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
 
       {ui.discardConfirmOpen && (
         <ConfirmDialog title="Discard unsaved changes?"
-          body="You have unsaved changes to this card type. Closing now will discard them."
+          body="You have unsaved changes to this image type. Closing now will discard them."
           confirmLabel="Discard" cancelLabel="Keep editing"
           onConfirm={() => { ui.set({ discardConfirmOpen: false }); ui.closeDialog() }}
           onCancel={() => ui.set({ discardConfirmOpen: false })} />

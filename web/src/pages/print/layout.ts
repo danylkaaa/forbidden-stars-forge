@@ -4,18 +4,19 @@ import { persist } from 'zustand/middleware'
 
 export type LineStyle = 'dashed' | 'dotted' | 'solid'
 export type PrintSettings = {
-  paper: 'a4' | 'letter'; orientation: 'portrait' | 'landscape'
+  orientation: 'portrait' | 'landscape'
   cardWidth: number; cardHeight: number; // the finished (cut) card size
   gap: number; margin: number // mm
   evenSpacing: boolean // spread the free space equally around and between cards (margin is the minimum)
   flip: 'long' | 'short'; includeBacks: boolean
+  backsBeside: boolean // print each back next to its front on the same side instead of on the reverse of the sheet
   cutLines: boolean; cutLinesOnBacks: boolean; guidesToEdge: boolean
   trimBleed: boolean // fit more cards per sheet by trimming each card's bleed to the space between cards
   lineWidth: number; lineColor: string; lineStyle: LineStyle // width in CSS px
 }
 export const DEFAULT_SETTINGS: PrintSettings = {
-  paper: 'a4', orientation: 'portrait', cardWidth: 63.5, cardHeight: 88, gap: 0, margin: 8, evenSpacing: true,
-  flip: 'long', includeBacks: true,
+  orientation: 'portrait', cardWidth: 63.5, cardHeight: 88, gap: 0, margin: 8, evenSpacing: true,
+  flip: 'long', includeBacks: true, backsBeside: false,
   cutLines: true, cutLinesOnBacks: false, guidesToEdge: true, trimBleed: true, lineWidth: 2, lineColor: '#00a651', lineStyle: 'dashed',
 }
 export const usePrintSettings = create<{ settings: PrintSettings; update: (patch: Partial<PrintSettings>) => void; reset: () => void }>()(persist(set => ({
@@ -26,9 +27,9 @@ export const usePrintSettings = create<{ settings: PrintSettings; update: (patch
 
 export const MM_PT = 72 / 25.4
 export const PX_PT = 0.75
-const PAPER = { a4: [210, 297], letter: [215.9, 279.4] } as const
+const A4 = [210, 297] as const
 export const pageSize = (s: PrintSettings) => {
-  const [w, h] = PAPER[s.paper]
+  const [w, h] = A4
   return s.orientation === 'portrait' ? { width: w, height: h } : { width: h, height: w }
 }
 
@@ -107,18 +108,40 @@ export function mirrorPage(page: (number | null)[], cols: number, rows: number, 
   return out
 }
 
+// One-sided printing: each card takes two neighbouring slots in a row, the
+// front on the left and its back on the right. `cols` counts single slots.
+export const pairsPerRow = (cols: number) => Math.floor(cols / 2)
+export type Placed = { id: number; back: boolean } | null
+export function besideSlots(page: (number | null)[], cols: number, rows: number): Placed[] {
+  const out: Placed[] = Array.from({ length: cols * rows }, () => null), per = pairsPerRow(cols)
+  page.forEach((id, i) => {
+    if (id === null || per === 0) return
+    const slot = Math.floor(i / per) * cols + (i % per) * 2
+    out[slot] = { id, back: false }; out[slot + 1] = { id, back: true }
+  })
+  return out
+}
+// The pair index a slot of the expanded sheet belongs to, or null in the unused column.
+export function pairOfSlot(slot: number, cols: number): number | null {
+  const per = pairsPerRow(cols), col = slot % cols
+  return col >= per * 2 ? null : Math.floor(slot / cols) * per + Math.floor(col / 2)
+}
+
 export type Pages = (number | null)[][]
 // Keeps the user's arrangement while cards are added or removed: removed ids
 // leave holes, new ids fill holes (or new pages), and trailing empties go.
+// An id may be listed several times (copies of a card): each listing is one place on a sheet.
 export function reconcile(pages: Pages, ids: number[], perPage: number): Pages {
   if (perPage <= 0) return []
-  const wanted = new Set(ids), placed = new Set<number>()
+  const wanted = new Map<number, number>(), placed = new Map<number, number>()
+  for (const id of ids) wanted.set(id, (wanted.get(id) ?? 0) + 1)
   const next = pages.map(page => Array.from({ length: perPage }, (_, i) => {
     const id = page[i] ?? null
-    if (id === null || !wanted.has(id) || placed.has(id)) return null
-    placed.add(id); return id
+    if (id === null || (placed.get(id) ?? 0) >= (wanted.get(id) ?? 0)) return null
+    placed.set(id, (placed.get(id) ?? 0) + 1); return id
   }))
-  const fresh = ids.filter(id => !placed.has(id))
+  const left = new Map(placed)
+  const fresh = ids.filter(id => { const n = left.get(id) ?? 0; if (n > 0) { left.set(id, n - 1); return false } return true })
   for (const page of next) for (let i = 0; i < perPage && fresh.length; i++) if (page[i] === null) page[i] = fresh.shift()!
   while (fresh.length) next.push(Array.from({ length: perPage }, () => fresh.shift() ?? null))
   while (next.length && next.at(-1)!.every(id => id === null)) next.pop()

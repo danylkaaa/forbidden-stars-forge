@@ -1,6 +1,6 @@
 import type { ImageRef } from '../../lib/favorites'
 
-// One image on the Assets page, from Faction Lab, or uploaded.
+// One image on the Assets page, from AI Lab, or uploaded.
 export type GalleryEntry = {
   key: string
   name: string

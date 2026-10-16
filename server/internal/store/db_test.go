@@ -29,8 +29,8 @@ func TestOpenMigratesAndSeedsSettings(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM settings`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 11 {
-		t.Fatalf("settings rows = %d, want 11", n)
+	if n != 10 {
+		t.Fatalf("settings rows = %d, want 10", n)
 	}
 }
 

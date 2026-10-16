@@ -7,6 +7,7 @@ import { DiffPanel } from '../../components/DiffPanel'
 import { Field, inputClass } from '../../components/Field'
 import { isDraftDirty } from '../../lib/draftForm'
 import { createFaction, updateFaction, type FactionSave } from './api'
+import { SuggestInput } from '../../components/SuggestInput'
 import { DLC_VALUES, type DLC } from './dlc'
 import { useFactionDraft, useFactionsUi } from './store'
 
@@ -65,8 +66,8 @@ export function FactionDialog({ generateSlot, assistSlot }: { generateSlot?: Rea
     <>
       <Dialog
         title={ui.dialogMode === 'edit' ? 'Edit Faction' : 'New Faction'}
-        // Outside click closes only when there's nothing to lose.
-        onBackdropClick={() => { if (!dirty && !ui.assistOpen) ui.closeDialog() }}
+        // Outside click closes, after a confirmation when there are unsaved changes.
+        onBackdropClick={requestClose}
         titleExtra={dirty ? (
           <span className="whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[11px] text-warn">Unsaved changes</span>
         ) : undefined}
@@ -99,14 +100,8 @@ export function FactionDialog({ generateSlot, assistSlot }: { generateSlot?: Rea
           </Field>
           <Field label="Texture">
             {(id) => (
-              <>
-                <input id={id} type="text" list="faction-texture-suggestions" value={draft.texture}
-                  placeholder="e.g. metal, skin, wood"
-                  onChange={(e) => draftState.setField('texture', e.target.value)} className={`${inputClass} font-sans`} />
-                <datalist id="faction-texture-suggestions">
-                  {TEXTURE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
-                </datalist>
-              </>
+              <SuggestInput id={id} suggestions={TEXTURE_SUGGESTIONS} value={draft.texture} placeholder="e.g. metal, skin, wood"
+                onValueChange={(v) => draftState.setField('texture', v)} className={`${inputClass} font-sans`} />
             )}
           </Field>
         </div>

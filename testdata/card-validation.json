@@ -3,15 +3,15 @@
     "name": "combat zero values",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": true
   },
@@ -19,15 +19,15 @@
     "name": "level 1",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 1,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": true
   },
@@ -35,15 +35,15 @@
     "name": "level 2",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 2,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": true
   },
@@ -51,15 +51,15 @@
     "name": "level 3",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 3,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": true
   },
@@ -67,15 +67,15 @@
     "name": "maximum safe integer",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 9007199254740991,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": true
   },
@@ -83,7 +83,7 @@
     "name": "schema rotate_clockwise",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "schema",
       "text": "",
@@ -95,7 +95,7 @@
     "name": "schema rotate_counterclockwise",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "schema",
       "text": "",
@@ -107,7 +107,7 @@
     "name": "schema move_vertical",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "schema",
       "text": "",
@@ -119,7 +119,7 @@
     "name": "schema move_horizontal",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "schema",
       "text": "",
@@ -131,7 +131,7 @@
     "name": "tactic rotate_clockwise",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "tactic",
       "text": "",
@@ -143,7 +143,7 @@
     "name": "tactic rotate_counterclockwise",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "tactic",
       "text": "",
@@ -155,7 +155,7 @@
     "name": "tactic move_vertical",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "tactic",
       "text": "",
@@ -167,7 +167,7 @@
     "name": "tactic move_horizontal",
     "card": {
       "faction_id": 1,
-      "name": "План",
+      "name": "Plan",
       "category": "schema",
       "subtype": "tactic",
       "text": "",
@@ -184,7 +184,7 @@
       "upgrade_type": "deploy",
       "level": 2,
       "resource_cost": 3,
-      "text": "Текст"
+      "text": "Text"
     },
     "valid": true
   },
@@ -197,7 +197,7 @@
       "upgrade_type": "advance",
       "level": 2,
       "resource_cost": 3,
-      "text": "Текст"
+      "text": "Text"
     },
     "valid": true
   },
@@ -210,7 +210,7 @@
       "upgrade_type": "strategize",
       "level": 2,
       "resource_cost": 3,
-      "text": "Текст"
+      "text": "Text"
     },
     "valid": true
   },
@@ -223,7 +223,7 @@
       "upgrade_type": "dominate",
       "level": 2,
       "resource_cost": 3,
-      "text": "Текст"
+      "text": "Text"
     },
     "valid": true
   },
@@ -236,7 +236,7 @@
       "upgrade_type": "orbital_strike",
       "level": 2,
       "resource_cost": 3,
-      "text": "Текст"
+      "text": "Text"
     },
     "valid": true
   },
@@ -244,15 +244,15 @@
     "name": "invalid level -1",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": -1,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -260,15 +260,15 @@
     "name": "invalid level 4",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 4,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -276,15 +276,15 @@
     "name": "invalid resource_cost -1",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": -1,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -292,15 +292,15 @@
     "name": "invalid shields -1",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": -1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -308,15 +308,15 @@
     "name": "invalid guns 0.5",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 0.5,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -324,15 +324,15 @@
     "name": "invalid eagles 9007199254740992",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 9007199254740992,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -340,15 +340,15 @@
     "name": "invalid level 0",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": "0",
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -356,7 +356,7 @@
     "name": "invalid upper_text None",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
@@ -364,23 +364,23 @@
       "guns": 2,
       "eagles": 0,
       "upper_text": null,
-      "lower_text": ""
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
   {
-    "name": "invalid lower_text 2",
+    "name": "invalid unit_text 2",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": 2
+      "upper_text": "Upper",
+      "units": [], "unit_text": 2
     },
     "valid": false
   },
@@ -388,15 +388,15 @@
     "name": "invalid faction_id 999",
     "card": {
       "faction_id": 999,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -404,15 +404,15 @@
     "name": "invalid faction_id 0",
     "card": {
       "faction_id": 0,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -420,15 +420,15 @@
     "name": "invalid faction_id 1",
     "card": {
       "faction_id": "1",
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -443,8 +443,8 @@
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -459,8 +459,8 @@
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -468,30 +468,30 @@
     "name": "invalid category other",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "other",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
   {
     "name": "missing faction_id",
     "card": {
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -505,8 +505,8 @@
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -514,14 +514,14 @@
     "name": "missing category",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -529,14 +529,14 @@
     "name": "missing level",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -544,14 +544,14 @@
     "name": "missing resource_cost",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -559,14 +559,14 @@
     "name": "missing shields",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -574,14 +574,14 @@
     "name": "missing guns",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -589,14 +589,14 @@
     "name": "missing eagles",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
-      "upper_text": "Верх",
-      "lower_text": ""
+      "upper_text": "Upper",
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
@@ -604,45 +604,70 @@
     "name": "missing upper_text",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "lower_text": ""
+      "units": [], "unit_text": ""
     },
     "valid": false
   },
   {
-    "name": "missing lower_text",
+    "name": "missing unit_text",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх"
+      "upper_text": "Upper"
     },
+    "valid": false
+  },
+  {
+    "name": "units with names",
+    "card": { "faction_id": 1, "name": "Fire", "category": "combat", "level": 0, "resource_cost": 0, "shields": 1, "guns": 2, "eagles": 0, "upper_text": "Upper", "units": ["Skitarii", "Light Cruiser"], "unit_text": "Force your opponent to lose 1 [B]." },
+    "valid": true
+  },
+  {
+    "name": "units missing",
+    "card": { "faction_id": 1, "name": "Fire", "category": "combat", "level": 0, "resource_cost": 0, "shields": 1, "guns": 2, "eagles": 0, "upper_text": "Upper", "unit_text": "" },
+    "valid": false
+  },
+  {
+    "name": "units not an array",
+    "card": { "faction_id": 1, "name": "Fire", "category": "combat", "level": 0, "resource_cost": 0, "shields": 1, "guns": 2, "eagles": 0, "upper_text": "Upper", "units": "Skitarii", "unit_text": "" },
+    "valid": false
+  },
+  {
+    "name": "unit name with a slash",
+    "card": { "faction_id": 1, "name": "Fire", "category": "combat", "level": 0, "resource_cost": 0, "shields": 1, "guns": 2, "eagles": 0, "upper_text": "Upper", "units": ["Skitarii/Light Cruiser"], "unit_text": "" },
+    "valid": false
+  },
+  {
+    "name": "empty unit name",
+    "card": { "faction_id": 1, "name": "Fire", "category": "combat", "level": 0, "resource_cost": 0, "shields": 1, "guns": 2, "eagles": 0, "upper_text": "Upper", "units": [""], "unit_text": "" },
     "valid": false
   },
   {
     "name": "unknown key",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "unknown": true
     },
     "valid": false
@@ -651,15 +676,15 @@
     "name": "foreign null field",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "level": 0,
       "resource_cost": 0,
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "text": null
     },
     "valid": false
@@ -713,13 +738,13 @@
     "name": "starting card without level or price",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": true
     },
     "valid": true
@@ -728,13 +753,13 @@
     "name": "starting card at level 0",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": true,
       "level": 0,
       "resource_cost": 0
@@ -745,13 +770,13 @@
     "name": "starting card with a level",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": true,
       "level": 2,
       "resource_cost": 0
@@ -762,13 +787,13 @@
     "name": "starting card with a price",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": true,
       "level": 0,
       "resource_cost": 2
@@ -779,13 +804,13 @@
     "name": "regular card level 2",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": false,
       "level": 2,
       "resource_cost": 1
@@ -796,13 +821,13 @@
     "name": "regular card at level 0",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": false,
       "level": 0,
       "resource_cost": 0
@@ -813,13 +838,13 @@
     "name": "regular card without level",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": false,
       "resource_cost": 1
     },
@@ -829,13 +854,13 @@
     "name": "starting flag not a boolean",
     "card": {
       "faction_id": 1,
-      "name": "Огонь",
+      "name": "Fire",
       "category": "combat",
       "shields": 1,
       "guns": 2,
       "eagles": 0,
-      "upper_text": "Верх",
-      "lower_text": "",
+      "upper_text": "Upper",
+      "units": [], "unit_text": "",
       "starting": "yes",
       "level": 0,
       "resource_cost": 0

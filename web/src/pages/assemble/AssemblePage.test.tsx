@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
@@ -14,7 +14,7 @@ import NewCardPage from './NewCardPage'
 import BackPage from './BackPage'
 import LibraryFactionsPage from './LibraryFactionsPage'
 vi.mock('./render', () => ({ renderCard: vi.fn(), pngBlob: vi.fn(), loadFonts: vi.fn().mockResolvedValue(undefined), paintRun: vi.fn() }))
-const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', starting: true, level: 0, resource_cost: 0, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', lower_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
+const combat: Card = { id: 1, faction_id: 1, category: 'combat', name: 'Winged Horror', starting: true, level: 0, resource_cost: 0, guns: 2, shields: 0, eagles: 0, upper_text: 'Gain 3 [GUN].', units: [], unit_text: 'Gain 2 [SKULL].', created_at: '', updated_at: '' }
 const upgrade: Card = { id: 3, faction_id: 1, category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', level: 1, resource_cost: 2, text: 'Deploy one more unit.', created_at: '', updated_at: '' }
 let records: Card[], deleted: number[][], updates: unknown[], templates: AssemblyTemplate[], assemblies: Record<string, Assembly>, assemblyUpdates: unknown[]
 beforeEach(() => {
@@ -63,7 +63,7 @@ test('library renders every combat card of the faction on the chosen template', 
   await screen.findByRole('link', { name: 'Edit Second card' })
   await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Winged Horror' }), imageUrl: '/api/generations/5/image' })))
   expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Second card' }) }))
-  expect(screen.getByRole('link', { name: 'Edit in Faction Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
+  expect(screen.getByRole('link', { name: 'Edit in AI Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
   await userEvent.click(screen.getByRole('tab', { name: /Upgrades/ }))
   expect(await screen.findByRole('link', { name: 'Edit Forge World' })).toBeInTheDocument()
   await waitFor(() => expect(renderCard).toHaveBeenCalledWith(expect.objectContaining({ card: expect.objectContaining({ category: 'upgrade', name: 'Forge World', upgrade_type: 'deploy', level: 1, resource_cost: 2 }) })))
@@ -126,7 +126,9 @@ test('editor previews text edits and saves card and artwork position together; t
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: '/api/cards/1/artwork?v=a', imageUrl: '/api/generations/5/image' })))
   fireEvent.change(screen.getByLabelText('Upper text'), { target: { value: 'New [MORALE]' } })
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ upper_text: 'New [MORALE]' }) })))
-  fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
+  expect(screen.queryByLabelText('Offset X (%)')).not.toBeInTheDocument() // artwork is moved with the mouse, not with numbers
+  expect(screen.queryByLabelText(/Scale/)).not.toBeInTheDocument()
+  act(() => useAssembly.getState().transform('1', { scale: 1, x: 12, y: 0 }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 12, y: 0 } })))
   expect(screen.queryByLabelText('Start X (%)')).not.toBeInTheDocument()
   // The stepper never goes below zero, so a number field cannot hold an invalid value.
@@ -138,13 +140,13 @@ test('editor previews text edits and saves card and artwork position together; t
   expect(updates).toEqual([expect.objectContaining({ upper_text: 'New [MORALE]', guns: 3 })])
   expect(assemblyUpdates).toEqual([expect.objectContaining({ image_key: 'upload', transform: { scale: 1, x: 12, y: 0 } })])
   expect(useAssembly.getState()).toMatchObject({ edits: {}, transforms: {}, logoScales: {} })
-  expect(screen.getByRole('link', { name: 'Edit template in Faction Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
+  expect(screen.getByRole('link', { name: 'Edit template in AI Lab' })).toHaveAttribute('href', '/faction-lab?faction=1&card_type=3&generation=5')
 })
 
 test('editor uploads and removes artwork', async () => {
   mount('/assemble/cards/1')
   const file = new File(['png'], 'art.png', { type: 'image/png' })
-  await userEvent.upload(await screen.findByLabelText('Artwork file (PNG / JPEG)'), file)
+  await userEvent.upload(await screen.findByLabelText('Artwork file (any image)'), file)
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: '/api/cards/1/artwork?v=new' })))
   await userEvent.click(screen.getByRole('button', { name: 'Remove artwork' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: null })))
@@ -179,14 +181,16 @@ test('the editor has no subtype choice: starting cards take the faction logo and
 
 test('Cmd+Z in the card editor undoes artwork position changes', async () => {
   assemblies['1'] = { ...emptyAssembly(), image_key: 'upload', image_url: '/api/cards/1/artwork?v=a' }
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400, x: 0, y: 0, toJSON: () => ({}) })
   mount('/assemble/cards/1')
-  const offset = await screen.findByLabelText<HTMLInputElement>('Offset X (%)')
-  fireEvent.change(offset, { target: { value: '12' } })
-  fireEvent.change(screen.getByLabelText('Offset Y (%)'), { target: { value: '5' } })
-  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 12, y: 5 } })))
-  fireEvent.keyDown(offset, { key: 'z', metaKey: true })
+  const canvas = await screen.findByLabelText('Assembled card')
+  await waitFor(() => expect(canvas).not.toHaveClass('hidden'))
+  await userEvent.click(await screen.findByRole('button', { name: 'Move artwork' }))
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 100, clientY: 200, pointerId: 1 })
+  fireEvent.pointerMove(canvas, { clientX: 124, clientY: 200, pointerId: 1 })
+  fireEvent.pointerUp(canvas, { pointerId: 1 })
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 12, y: 0 } })))
-  fireEvent.keyDown(document.body, { key: 'z', metaKey: true })
+  await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 0, y: 0 } })))
   await userEvent.click(screen.getByRole('button', { name: 'Redo' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1, x: 12, y: 0 } })))
@@ -208,11 +212,11 @@ test('artwork moves only while selected; Enter keeps the move, Esc puts it back'
   await waitFor(() => expect(useAssembly.getState().transforms['1']).toEqual({ scale: 1, x: 10, y: 0 }))
   fireEvent.keyDown(window, { key: 'Escape' })
   await waitFor(() => expect(useAssembly.getState().transforms['1']).toBeUndefined())
-  expect(screen.getByRole('button', { name: 'Select artwork to move' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Move artwork' })).toBeInTheDocument()
   drag(); drag(); drag() // select, then two moves in one session
   await waitFor(() => expect(useAssembly.getState().transforms['1']).toEqual({ scale: 1, x: 20, y: 0 }))
   fireEvent.keyDown(window, { key: 'Enter' })
-  expect(await screen.findByRole('button', { name: 'Select artwork to move' })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Move artwork' })).toBeInTheDocument()
   expect(useAssembly.getState().transforms['1']).toEqual({ scale: 1, x: 20, y: 0 })
   await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
   await waitFor(() => expect(useAssembly.getState().transforms['1']).toBeUndefined())
@@ -261,17 +265,12 @@ test('artwork chosen on the new card form previews immediately and is uploaded a
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }))
   const router = mount('/assemble/cards/new?faction=1&tab=combat')
   await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
-  await userEvent.upload(screen.getByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
+  await userEvent.upload(screen.getByLabelText('Artwork file (any image)'), new File(['png'], 'art.png', { type: 'image/png' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: 'blob:art' })))
   expect(screen.getByRole('region', { name: 'Artwork' })).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
-  fireEvent.change(screen.getByLabelText('Offset Y (%)'), { target: { value: '-8' } })
-  fireEvent.change(screen.getByLabelText(/Scale/), { target: { value: '1.5' } })
+  act(() => useAssembly.getState().transform('-1', { scale: 1.5, x: 18, y: -12 }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artwork: { scale: 1.5, x: 18, y: -12 } })))
   expect(assemblyUpdates).toHaveLength(0) // Position stays local until creation.
-  await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
-  expect(screen.getByLabelText('Offset X (%)')).toHaveValue('12')
-  await userEvent.click(screen.getByRole('button', { name: 'Redo' }))
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
   expect(assemblies['9']).toMatchObject({ image_key: 'upload', transform: { scale: 1.5, x: 18, y: -12 } })
@@ -381,7 +380,7 @@ test('cards can be imported from JSON on the library page, with validation error
   fireEvent.change(within(dialog).getByLabelText('JSON content'), { target: { value: '{"cards":[{"faction_id":1,"name":"","category":"combat"}]}' } })
   expect(within(dialog).getByRole('alert')).toHaveTextContent('Card 1, name: A non-empty name is required')
   expect(within(dialog).getByRole('button', { name: 'Import' })).toBeDisabled()
-  const good = { cards: [{ faction_id: 1, name: 'Imported', category: 'combat', level: 1, resource_cost: 1, shields: 0, guns: 1, eagles: 0, upper_text: '', lower_text: '' }] }
+  const good = { cards: [{ faction_id: 1, name: 'Imported', category: 'combat', level: 1, resource_cost: 1, shields: 0, guns: 1, eagles: 0, upper_text: '', units: [], unit_text: '' }] }
   const upload = { source: 'deck.pdf', cards: good.cards.map(card => ({ ...card, faction_name: 'Tau', source_file_name: 'deck.pdf' })) }
   fireEvent.change(within(dialog).getByLabelText('JSON content'), { target: { value: JSON.stringify(upload) } })
   await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }))
@@ -394,17 +393,17 @@ test('new-card artwork supports drag, cancel, wheel zoom, and removal before sav
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:art'), revokeObjectURL: vi.fn() }))
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400, x: 0, y: 0, toJSON: () => ({}) })
   mount('/assemble/cards/new?faction=1&tab=combat')
-  await userEvent.upload(await screen.findByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
-  await screen.findByRole('button', { name: 'Select artwork to move' })
+  await userEvent.upload(await screen.findByLabelText('Artwork file (any image)'), new File(['png'], 'art.png', { type: 'image/png' }))
+  await screen.findByRole('button', { name: 'Move artwork' })
   const canvas = screen.getByLabelText('Assembled card')
-  await userEvent.click(screen.getByRole('button', { name: 'Select artwork to move' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Move artwork' }))
   fireEvent.pointerDown(canvas, { button: 0, clientX: 100, clientY: 200, pointerId: 1 })
   fireEvent.pointerMove(canvas, { clientX: 120, clientY: 200, pointerId: 1 })
   fireEvent.pointerUp(canvas, { pointerId: 1 })
   expect(useAssembly.getState().transforms['-1']).toEqual({ scale: 1, x: 10, y: 0 })
   await userEvent.click(screen.getByRole('button', { name: 'Cancel (Esc)' }))
   expect(useAssembly.getState().transforms['-1']).toBeUndefined()
-  await userEvent.click(screen.getByRole('button', { name: 'Select artwork to move' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Move artwork' }))
   fireEvent.wheel(canvas, { deltaY: -100, clientX: 100, clientY: 200 })
   expect(useAssembly.getState().transforms['-1']?.scale).toBeGreaterThan(1)
   await userEvent.click(screen.getByRole('button', { name: 'Apply (Enter)' }))
@@ -419,9 +418,9 @@ test('failed artwork upload opens the created card instead of creating a duplica
   server.use(http.post('/api/cards/:id/artwork', () => HttpResponse.json({ error: 'Upload failed' }, { status: 500 })))
   const router = mount('/assemble/cards/new?faction=1&tab=combat')
   await userEvent.type(await screen.findByLabelText('Title'), 'Iron Will')
-  await userEvent.upload(screen.getByLabelText('Artwork file (PNG / JPEG)'), new File(['png'], 'art.png', { type: 'image/png' }))
-  await screen.findByRole('button', { name: 'Select artwork to move' })
-  fireEvent.change(screen.getByLabelText('Offset X (%)'), { target: { value: '12' } })
+  await userEvent.upload(screen.getByLabelText('Artwork file (any image)'), new File(['png'], 'art.png', { type: 'image/png' }))
+  await screen.findByRole('button', { name: 'Move artwork' })
+  act(() => useAssembly.getState().transform('-1', { scale: 1, x: 12, y: 0 }))
   await userEvent.click(screen.getByRole('button', { name: 'Create card' }))
   await waitFor(() => expect(router.state.location.pathname).toBe('/assemble/cards/9'))
   expect(records.filter(c => c.name === 'Iron Will')).toHaveLength(1)
@@ -430,11 +429,16 @@ test('failed artwork upload opens the created card instead of creating a duplica
 })
 
 
-test('the faction logo has no per-card size control and is drawn at the same size', async () => {
+test('the faction logo size is one control shared by every card of the faction and category', async () => {
+  let saved: unknown = null
+  server.use(http.put('/api/card-logo-scales/1/combat', async ({ request }) => { saved = await request.json(); return HttpResponse.json({ faction_id: 1, category: 'combat', scale: 1.5 }) }))
   mount('/assemble/cards/1')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1 })))
   expect(screen.queryByLabelText(/Logo scale/)).not.toBeInTheDocument()
-  expect(screen.getByText(/same for every card of the faction/)).toBeInTheDocument()
+  fireEvent.change(await screen.findByLabelText('Faction logo size'), { target: { value: '1.5' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ logoScale: 1.5 })))
+  await waitFor(() => expect(saved).toEqual({ scale: 1.5 }))
+  expect(screen.getByText(/shared by every combat card of this faction/)).toBeInTheDocument()
 })
 
 test('template image checkboxes select for deletion without changing the chosen template', async () => {
@@ -557,9 +561,10 @@ test('a combat back edits nothing about its banner: no logo, banner size or nebu
     http.get('/api/card-types', () => HttpResponse.json([{ id: 3, name: 'combat', overlay_path: 'frame.png' }, { id: 4, name: 'card back', overlay_path: '' }])),
     http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])))
   mount('/assemble/back/combat?faction=1')
-  expect(await screen.findByRole('region', { name: 'Banner' })).toBeInTheDocument()
+  expect(await screen.findByRole('group', { name: 'Banner' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Upload card back logo')).not.toBeInTheDocument()
-  for (const name of ['Logo size', 'Banner size', 'Back nebula', 'Nebula']) expect(screen.queryByRole('region', { name })).not.toBeInTheDocument()
+  for (const name of ['Logo size', 'Banner size', 'Nebula']) expect(screen.queryByRole('group', { name })).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Back nebula' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
 })
 
@@ -571,7 +576,7 @@ test('an event back keeps its own logo size', async () => {
     http.get('/api/generations', () => HttpResponse.json([{ id: 5, name: 'Generated art', status: 'done', card_type_id: 4, faction_id: 1, image_path: 'art.png', created_at: '2026' }])),
     http.put('/api/nebula-placements/1/schema', async ({ request }) => { placementSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, category: 'schema', ...placementSaved }) }))
   mount('/assemble/back/events?faction=1')
-  const section = await screen.findByRole('region', { name: 'Logo size' })
+  const section = await screen.findByRole('group', { name: 'Logo size' })
   fireEvent.change(within(section).getByRole('slider'), { target: { value: '70' } })
   await userEvent.click(screen.getByRole('button', { name: 'Save' }))
   await waitFor(() => expect(placementSaved).toMatchObject({ logo_scale: 0.7 }))
@@ -586,10 +591,10 @@ test('the banner is assembled in the faction settings: logo size and element, sa
     http.put('/api/faction-banners/1', async ({ request }) => { bannerSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...bannerSaved }) }))
   mount('/assemble?faction=1&tab=config')
   const section = await screen.findByRole('region', { name: 'Banner' })
-  fireEvent.change(within(section).getByLabelText(/Logo size/), { target: { value: '35' } })
+  fireEvent.change(within(within(section).getByRole('group', { name: 'Logo' })).getByLabelText('Size'), { target: { value: '35' } })
   await userEvent.click(within(section).getByRole('button', { name: 'Choose element' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Use Gear crest as element' }))
-  fireEvent.change(within(section).getByLabelText(/Element size/), { target: { value: '60' } })
+  fireEvent.change(within(within(section).getByRole('group', { name: 'Element' })).getByLabelText('Size'), { target: { value: '60' } })
   await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
   await waitFor(() => expect(bannerSaved).toMatchObject({ logo_scale: 0.35, element_key: 'test-7', element_scale: 0.6 }))
   await userEvent.click(await within(section).findByRole('button', { name: 'Remove element' }))
@@ -605,7 +610,7 @@ test('the banner\'s nebula position is saved with the banner', async () => {
     http.put('/api/nebula-placements/1/combat', async ({ request }) => { placementSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, category: 'combat', ...placementSaved }) }))
   mount('/assemble?faction=1&tab=config')
   const section = await screen.findByRole('region', { name: 'Banner' })
-  fireEvent.change(within(section).getByLabelText(/Nebula rotation/), { target: { value: '40' } })
+  fireEvent.change(within(within(section).getByRole('group', { name: 'Nebula' })).getByLabelText('Rotation'), { target: { value: '40' } })
   await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
   await waitFor(() => expect(placementSaved).toMatchObject({ rotation: 40 }))
 })
@@ -631,7 +636,7 @@ test('the banner\'s nebula colour and brightness are set in the banner and saved
     http.put('/api/nebulas/1', async ({ request }) => { nebulaSaved = await request.json() as Record<string, unknown>; return HttpResponse.json({ faction_id: 1, ...nebulaSaved }) }))
   mount('/assemble?faction=1&tab=config')
   const section = await screen.findByRole('region', { name: 'Banner' })
-  fireEvent.change(within(section).getByLabelText(/Nebula brightness/), { target: { value: '150' } })
+  fireEvent.change(within(within(section).getByRole('group', { name: 'Nebula' })).getByLabelText('Brightness'), { target: { value: '150' } })
   await userEvent.click(within(section).getByRole('button', { name: 'Save banner' }))
   await waitFor(() => expect(nebulaSaved).toMatchObject({ density: 1.5 }))
 })
@@ -643,4 +648,66 @@ test('the nebula can be switched on as the card template from the banner', async
   const section = await screen.findByRole('region', { name: 'Banner' })
   await userEvent.click(within(section).getByLabelText(/Use the nebula as the card template/))
   await waitFor(() => expect(nebulaSaved).toMatchObject({ as_template: true }))
+})
+
+test('the card editor has a breadcrumb trail and Prev / Next buttons through the cards of its category', async () => {
+  mount('/assemble/cards/1')
+  const trail = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+  expect(within(trail).getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/assemble')
+  expect(within(trail).getByRole('link', { name: 'Tau' })).toHaveAttribute('href', '/assemble?faction=1')
+  expect(within(trail).getByRole('link', { name: 'Combat' })).toHaveAttribute('href', '/assemble?faction=1&tab=combat')
+  expect(within(trail).getByText('Winged Horror')).toHaveAttribute('aria-current', 'page')
+  const neighbours = await screen.findByRole('group', { name: 'Neighbouring cards' })
+  expect(within(neighbours).getByText('1 / 2')).toBeInTheDocument()
+  expect(within(neighbours).getByRole('button', { name: '← Prev' })).toBeDisabled()
+  await userEvent.click(within(neighbours).getByRole('button', { name: 'Next →' }))
+  expect(await screen.findByRole('heading', { name: 'Second card' })).toBeInTheDocument()
+  expect(within(await screen.findByRole('group', { name: 'Neighbouring cards' })).getByText('2 / 2')).toBeInTheDocument()
+})
+
+test('a card can override the margins above and below its text; they are drawn and saved with the card, and reset to the template', async () => {
+  mount('/assemble/cards/1')
+  await userEvent.click(await screen.findByText(/Text margins \(this card\)/))
+  const group = screen.getByText(/Space above and below each text panel/).closest('details')!
+  fireEvent.change(within(group).getByLabelText('Upper top'), { target: { value: '9' } })
+  fireEvent.change(within(group).getByLabelText('Lower bottom'), { target: { value: '2' } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ layout: expect.objectContaining({
+    upper_text: expect.objectContaining({ paddingTop: 9 }), lower_text: expect.objectContaining({ paddingBottom: 2 }) }) })))
+  expect(within(group).getByText('Upper top (custom)')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(assemblyUpdates).toEqual([expect.objectContaining({ layout: { text_padding: { upper_top: 9, lower_bottom: 2 } } })]))
+  await userEvent.click(await screen.findByRole('button', { name: "Use the template's margins" }))
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(assemblyUpdates.at(-1)).toEqual(expect.objectContaining({ layout: {} })))
+})
+
+test('an image dropped on the artwork block becomes the card artwork', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:dropped'), revokeObjectURL: vi.fn() }))
+  mount('/assemble/cards/new?faction=1&tab=combat')
+  const block = await screen.findByRole('region', { name: 'Artwork' })
+  const file = new File(['png'], 'art.png', { type: 'image/png' })
+  fireEvent.dragOver(block, { dataTransfer: { types: ['Files'], files: [file] } })
+  expect(within(block).getByText('Drop the image here.')).toBeInTheDocument()
+  fireEvent.drop(block, { dataTransfer: { types: ['Files'], files: [file] } })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: 'blob:dropped' })))
+  expect(within(block).queryByText('Drop the image here.')).not.toBeInTheDocument()
+})
+
+test('dragging an image over the page shows where it can be dropped: the artwork block and the artwork area of the preview', async () => {
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:area'), revokeObjectURL: vi.fn() }))
+  mount('/assemble/cards/new?faction=1&tab=combat')
+  await screen.findByRole('region', { name: 'Artwork' })
+  await waitFor(() => expect(renderCard).toHaveBeenCalled())
+  const file = new File(['png'], 'art.png', { type: 'image/png' })
+  const dataTransfer = { types: ['Files'], files: [file] }
+  expect(screen.queryByTestId('artwork-drop-area')).not.toBeInTheDocument()
+  fireEvent.dragEnter(window, { dataTransfer })
+  const area = await screen.findByTestId('artwork-drop-area')
+  expect(within(area).getByText('Drop the image here')).toBeInTheDocument()
+  fireEvent.dragOver(area, { dataTransfer })
+  expect(within(area).getByText('Release to set the artwork')).toBeInTheDocument()
+  fireEvent.drop(area, { dataTransfer })
+  await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ artworkUrl: 'blob:area' })))
+  fireEvent.drop(window, { dataTransfer })
+  await waitFor(() => expect(screen.queryByTestId('artwork-drop-area')).not.toBeInTheDocument())
 })

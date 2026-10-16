@@ -48,3 +48,8 @@ test('templateUrl builds cache-busted url or null', () => {
   expect(templateUrl(base)).toBe('/api/card-types/5/template?v=2026-07-17%2010%3A00%3A00')
   expect(templateUrl({ ...base, template_path: '' })).toBeNull()
 })
+
+test('buildCardTypeForm sends the image size only when it is set', () => {
+  expect(buildCardTypeForm({ name: 'x', description: '', constraints: '', image_size: '816x1104' }, null).get('image_size')).toBe('816x1104')
+  expect(buildCardTypeForm({ name: 'x', description: '', constraints: '' }, null).has('image_size')).toBe(false)
+})

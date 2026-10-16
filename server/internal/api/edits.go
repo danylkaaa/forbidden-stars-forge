@@ -126,7 +126,7 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	edit := openai.ImageEditRequest{
-		Model: model, Prompt: p, Quality: quality,
+		Model: model, Prompt: p, Quality: quality, Size: ct.ImageSize,
 		ImageURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(original),
 	}
 	if maskPNG != nil {

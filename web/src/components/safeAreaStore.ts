@@ -8,3 +8,6 @@ export const PRINT_DPI = 300
 export const mmToPx = (mm: number) => mm / 25.4 * PRINT_DPI
 // Text and important art should stay this far inside the cut line.
 export const SAFE_INSET_MM = 3
+
+// A generated card image is the 300 dpi canvas with bleed, so the cut and safe lines can be drawn on it.
+export const CARD_IMAGE_PX = { width: 816, height: 1104 }

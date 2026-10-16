@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Dialog } from '../../components/Dialog'
 import { Button } from '../../components/Button'
 import { inputClass } from '../../components/Field'
 import type { Faction } from '../factions/api'
 import { FIELDS } from './model'
 import { parseImport, type ValidationIssue } from './validation'
-import { exampleImport, readUTF8 } from './import'
+import { exampleImport, importPrompt, readUTF8 } from './import'
 import { ImportError, importCards } from './api'
 import { ImportTree } from './ImportTree'
 
@@ -16,6 +17,8 @@ export function ImportCardsDialog({ factions, onClose, onImported, onDirty }: { 
   const [serverErrors, setServerErrors] = useState<ValidationIssue[]>([])
   const [reading, setReading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmClose, setConfirmClose] = useState(false)
+  const [copied, setCopied] = useState<'copied' | 'failed' | null>(null)
   const readVersion = useRef(0)
   useEffect(() => () => { readVersion.current++ }, [])
   useEffect(() => { onDirty(Boolean(source || filename || reading)) }, [source, filename, reading, onDirty])
@@ -42,14 +45,18 @@ export function ImportCardsDialog({ factions, onClose, onImported, onDirty }: { 
       if (e instanceof ImportError) setServerErrors(e.issues.map(issue => issue.index === undefined ? issue : { ...issue, index: chosen[issue.index] ?? issue.index }))
     } finally { setSaving(false) }
   }
-  return <Dialog title="Import Cards" width="min(760px,100%)" onBackdropClick={() => { if (!saving && !reading) onClose() }}>
+  return <><Dialog title="Import Cards" width="min(760px,100%)" onBackdropClick={() => { if (saving || reading) return; if (source || filename) setConfirmClose(true); else onClose() }}>
     <p className="m-0 text-sm text-ink/70">Choose a UTF-8 JSON file. Review the cards before clicking Import. Every import creates new cards, including repeated uploads.</p>
     <details className="rounded border border-divider p-3 text-sm">
       <summary className="cursor-pointer">JSON format and validation rules</summary>
       <p>Use an object with a non-empty <code>cards</code> array. Every card needs an existing <code>faction_id</code>, a non-empty <code>name</code>, and a <code>category</code>.</p>
-      <p>Integers must be between 0 and 9007199254740991; a combat card is a starting card only with "starting": true (level 0, no price; level and resource_cost may be left out). Every other combat card is a regular card with a required level of 0–3, so level 0 alone does not make it a starting card. All text fields are required strings; empty text is allowed. Extra fields are ignored, including metadata and fields from another category. Required fields still reject nulls and numeric strings.</p>
+      <p>Integers must be between 0 and 9007199254740991; a combat card is a starting card only with "starting": true (level 0, no price; level and resource_cost may be left out). Every other combat card is a regular card with a required level of 0–3, so level 0 alone does not make it a starting card. All text fields are required strings; empty text is allowed. Extra fields are ignored, including metadata and fields from another category. Required fields still reject nulls and numeric strings; an optional field (limitation) may be null or left out.</p>
       {Object.entries(FIELDS).map(([category, fields]) => <p key={category}><strong>{category}:</strong> {fields.map(f => `${f.key}${f.optional ? ' (optional)' : ''}${f.options ? ` (${f.options.join(', ')})` : ''}`).join('; ')}.</p>)}
       <p>Available factions: {factions.map(f => `${f.name} (ID ${f.id})`).join(', ') || 'None — create a faction first.'}</p>
+      <button type="button" className="mr-3 cursor-pointer border-0 bg-transparent p-0 text-sm text-accent" onClick={() => {
+        navigator.clipboard.writeText(importPrompt(factions)).then(() => setCopied('copied'), () => setCopied('failed'))
+        setTimeout(() => setCopied(null), 2000)
+      }}>{copied === 'copied' ? 'Copied ✓' : copied === 'failed' ? 'Copy failed' : 'Copy AI prompt'}</button>
       <a className="text-accent" download="cards-example.json" href={`data:application/json;charset=utf-8,${encodeURIComponent(example)}`}>Download example JSON</a>
       <pre className="max-h-52 overflow-auto text-xs">{example}</pre>
     </details>
@@ -67,4 +74,6 @@ export function ImportCardsDialog({ factions, onClose, onImported, onDirty }: { 
       <Button type="button" variant="primary" disabled={saving || reading || !chosen.length || parsed.errors.length > 0 || !factions.length} onClick={() => void submit()}>{saving ? 'Importing…' : 'Import'}</Button>
     </div>
   </Dialog>
+  {confirmClose && <ConfirmDialog title="Discard this import?" body="The chosen file has not been imported yet." confirmLabel="Discard" onConfirm={onClose} onCancel={() => setConfirmClose(false)} />}
+  </>
 }

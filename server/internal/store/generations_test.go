@@ -172,3 +172,33 @@ func TestImageNamesNumberPerPair(t *testing.T) {
 		t.Fatal("favorite not saved")
 	}
 }
+
+func TestRecentDurationsFilterByModelQualityAndCardType(t *testing.T) {
+	s, fid, ctid := genFixtures(t)
+	run := func(model, quality string, ms int64) {
+		g, err := s.Create(fid, ctid, "draft", model, quality, "-x", "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkDone(g.ID, "x.png", 1, 1, 0.1, ms); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("m1", "low", 10000)
+	run("m1", "low", 20000)
+	run("m1", "high", 90000)
+	run("m2", "low", 50000)
+	failed, _ := s.Create(fid, ctid, "draft", "m1", "low", "-x", "p")
+	_ = s.MarkFailed(failed.ID, "boom")
+	us := NewUsageStore(s.db)
+	got, err := us.RecentDurations("m1", "low", ctid, 20)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("m1/low: %v %v", got, err)
+	}
+	if got, _ := us.RecentDurations("m1", "", 0, 20); len(got) != 3 {
+		t.Fatalf("m1 any quality: %v", got)
+	}
+	if got, _ := us.RecentDurations("m1", "low", ctid+99, 20); len(got) != 0 {
+		t.Fatalf("other card type: %v", got)
+	}
+}

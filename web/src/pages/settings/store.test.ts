@@ -5,7 +5,6 @@ const serverSettings: Settings = {
   openai_api_key_masked: 'sk-…34bc',
   openai_api_key_from_env: false,
   openai_model: 'gpt-image-2',
-  image_size: '816x1104',
   draft_quality: 'low',
   final_quality: 'high',
   input_fidelity: 'high',

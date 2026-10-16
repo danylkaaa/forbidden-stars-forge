@@ -9,8 +9,8 @@ const items: { to: string; label: string; Icon: ComponentType<{ className?: stri
   { to: '/assemble', label: 'Library', Icon: LibraryIcon },
   { to: '/factions', label: 'Factions', Icon: FactionsIcon },
   { to: '/card-templates', label: 'Card Templates', Icon: LayersIcon },
-  { to: '/card-types', label: 'Card Templates', Icon: CardTypesIcon },
-  { to: '/faction-lab', label: 'Faction Lab', Icon: LabIcon },
+  { to: '/card-types', label: 'Image Types', Icon: CardTypesIcon },
+  { to: '/faction-lab', label: 'AI Lab', Icon: LabIcon },
   { to: '/generations', label: 'Assets', Icon: GalleryIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]

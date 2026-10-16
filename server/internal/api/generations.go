@@ -120,7 +120,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality}, nil)
+	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize}, nil)
 	writeJSON(w, http.StatusCreated, g)
 }
 
@@ -194,7 +194,7 @@ func (h *GenerationsHandler) run(id int64, req openai.ImageEditRequest, postProc
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	start := time.Now()
-	req.Size, req.InputFidelity, req.Background = all["image_size"], all["input_fidelity"], all["background"]
+	req.InputFidelity, req.Background = all["input_fidelity"], all["background"]
 	if req.NoInput() {
 		req.Size = newImageSize(req.Size)
 	}
@@ -336,10 +336,12 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		model = all["openai_model"]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"prompt":        promptFor(ct, factionStyle(f)),
-		"has_file":      ct.OpenAIFileID != "" || ct.NoTemplate,
-		"est_draft_usd": estimatePerImage(h.Usage, all, model, "draft"),
-		"est_final_usd": estimatePerImage(h.Usage, all, model, "final"),
+		"prompt":            promptFor(ct, factionStyle(f)),
+		"has_file":          ct.OpenAIFileID != "" || ct.NoTemplate,
+		"est_draft_usd":     estimatePerImage(h.Usage, all, model, "draft", ct.ImageSize),
+		"est_final_usd":     estimatePerImage(h.Usage, all, model, "final", ct.ImageSize),
+		"est_draft_seconds": estimateSeconds(h.Usage, all, model, "draft", ct.ID),
+		"est_final_seconds": estimateSeconds(h.Usage, all, model, "final", ct.ID),
 	})
 }
 
@@ -360,7 +362,7 @@ func promptFor(ct store.CardType, f prompt.FactionStyle) string {
 	return prompt.ImageEdit(ct.Description, ct.Constraints, f)
 }
 
-// newImageSize is the size of a picture made without a template: the Settings size when it is a fixed one
+// newImageSize is the size of a picture made without a template: the card type's size when it is a fixed one
 // (the edit endpoint infers its size from the template, so the setting may be empty), else portrait.
 func newImageSize(configured string) string {
 	if sizePattern.MatchString(configured) {

@@ -1,5 +1,5 @@
 import { SearchableSelect } from '../../components/SearchableSelect'
-import { Field, inputClass, selectClass } from '../../components/Field'
+import { Field, selectClass } from '../../components/Field'
 import { ApiKeyField } from './ApiKeyField'
 import { ModelSelect } from './ModelSelect'
 import { TestButton } from './TestButton'
@@ -10,20 +10,6 @@ export function OpenAISection({ settings }: { settings: Settings }) {
   const draft = useSettingsStore((s) => s.draft)
   const setField = useSettingsStore((s) => s.setField)
   if (!draft) return null
-
-  const text = (key: 'image_size', label: string) => (
-    <Field label={label}>
-      {(id) => (
-        <input
-          id={id}
-          type="text"
-          value={draft[key]}
-          onChange={(e) => setField(key, e.target.value)}
-          className={inputClass}
-        />
-      )}
-    </Field>
-  )
 
   const select = <K extends 'draft_quality' | 'final_quality' | 'input_fidelity' | 'background'>(
     key: K,
@@ -54,7 +40,6 @@ export function OpenAISection({ settings }: { settings: Settings }) {
       <ApiKeyField settings={settings} />
       <ModelSelect settings={settings} />
       <div className="grid grid-cols-2 gap-3.5">
-        {text('image_size', 'Image size')}
         {select('background', 'Background', ['auto', 'opaque', 'transparent'])}
       </div>
       {draft.background === 'transparent' &&

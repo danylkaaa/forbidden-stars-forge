@@ -12,7 +12,7 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 func combatCard(f int64) CardInput {
-	return CardInput{FactionID: f, Name: "Огонь", Category: "combat", Level: ptr[int64](0), ResourceCost: ptr[int64](0), Shields: ptr[int64](1), Guns: ptr[int64](2), Eagles: ptr[int64](0), UpperText: ptr("Верх"), LowerText: ptr("")}
+	return CardInput{FactionID: f, Name: "Fire", Category: "combat", Level: ptr[int64](0), ResourceCost: ptr[int64](0), Shields: ptr[int64](1), Guns: ptr[int64](2), Eagles: ptr[int64](0), UpperText: ptr("Upper"), Units: &[]string{}, UnitText: ptr("")}
 }
 func setupCards(t *testing.T) (*CardsStore, int64, string) {
 	t.Helper()
@@ -39,11 +39,11 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 	}
 	for _, sub := range []string{"schema", "tactic"} {
 		for _, action := range []string{"rotate_clockwise", "rotate_counterclockwise", "move_vertical", "move_horizontal"} {
-			inputs = append(inputs, CardInput{FactionID: f, Name: "План", Category: "schema", Subtype: ptr(sub), Action: ptr(action), Text: ptr("")})
+			inputs = append(inputs, CardInput{FactionID: f, Name: "Plan", Category: "schema", Subtype: ptr(sub), Action: ptr(action), Text: ptr("")})
 		}
 	}
 	for _, kind := range []string{"deploy", "advance", "strategize", "dominate", "orbital_strike"} {
-		inputs = append(inputs, CardInput{FactionID: f, Name: "Улучшение", Category: "upgrade", UpgradeType: ptr(kind), Level: ptr[int64](2), ResourceCost: ptr[int64](3), Text: ptr("Текст")})
+		inputs = append(inputs, CardInput{FactionID: f, Name: "Upgrade", Category: "upgrade", UpgradeType: ptr(kind), Level: ptr[int64](2), ResourceCost: ptr[int64](3), Text: ptr("Text")})
 	}
 	for _, in := range inputs {
 		c, err := s.Create(in)
@@ -77,7 +77,7 @@ func TestCardsRoundTripCategoriesFiltersAndRestart(t *testing.T) {
 	}
 	defer db.Close()
 	got, err := NewCardsStore(db).Get(1)
-	if err != nil || got.Name != "Улучшение" || *got.Text != "Текст" {
+	if err != nil || got.Name != "Upgrade" || *got.Text != "Text" {
 		t.Fatalf("restart: %+v %v", got, err)
 	}
 }
@@ -201,5 +201,62 @@ func TestUpgradeLimitationIsOptionalAndOnlyForUpgrades(t *testing.T) {
 	combat.Limitation = ptr("nope")
 	if len(ValidateCard(combat)) == 0 {
 		t.Error("a combat card must not take a limitation")
+	}
+}
+
+func TestCombatUnitsAreStoredAndReturned(t *testing.T) {
+	s, f, _ := setupCards(t)
+	in := combatCard(f)
+	in.Units = &[]string{" Skitarii ", "Light Cruiser"}
+	in.UnitText = ptr("Force your opponent to lose 1 [B].")
+	c, err := s.Create(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get(c.ID)
+	if err != nil || got.Units == nil || len(*got.Units) != 2 || (*got.Units)[0] != "Skitarii" || (*got.Units)[1] != "Light Cruiser" || *got.UnitText != "Force your opponent to lose 1 [B]." {
+		t.Fatalf("units: %+v %v", got, err)
+	}
+	if plain, _ := s.Create(combatCard(f)); plain.Units == nil || len(*plain.Units) != 0 {
+		t.Fatalf("a card without units has %+v", plain.Units)
+	}
+}
+
+func TestUnitsMigrationSplitsTheLowerText(t *testing.T) {
+	s, f, _ := setupCards(t)
+	var ids []int64
+	for _, lower := range []string{"Skitarii/Light Cruiser: Force your opponent to lose 1 [B].", "Rout 1 enemy unit. Gain (M).", "**Battle:** Gain 1 (B).", "Marines: Draw: a card.", "Resolve one of the following: Sister Repentia: Replace 1."} {
+		in := combatCard(f)
+		in.UnitText = ptr(lower)
+		c, err := s.Create(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, c.ID)
+	}
+	if _, err := s.db.Exec("ALTER TABLE cards DROP COLUMN units"); err != nil {
+		t.Fatal(err)
+	}
+	migration, err := migrationsFS.ReadFile("migrations/0049_combat_units.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(string(migration)); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []struct {
+		units string
+		text  string
+	}{
+		{`["Skitarii","Light Cruiser"]`, "Force your opponent to lose 1 [B]."},
+		{`[]`, "Rout 1 enemy unit. Gain (M)."},
+		{`[]`, "**Battle:** Gain 1 (B)."},
+		{`[]`, "Marines: Draw: a card."},
+		{`[]`, "Resolve one of the following: Sister Repentia: Replace 1."},
+	} {
+		var units, text string
+		if err := s.db.QueryRow("SELECT units, lower_text FROM cards WHERE id=?", ids[i]).Scan(&units, &text); err != nil || units != want.units || text != want.text {
+			t.Errorf("card %d: units %s text %q (%v), want %s %q", i, units, text, err, want.units, want.text)
+		}
 	}
 }

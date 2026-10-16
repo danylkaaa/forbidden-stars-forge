@@ -7,10 +7,11 @@ export const server = setupServer(
   http.get('/api/settings', () =>
     HttpResponse.json({
       openai_api_key_masked: 'sk-…test', openai_api_key_from_env: false, openai_model: 'gpt-image-2',
-      image_size: '816x1104', draft_quality: 'low', final_quality: 'high', input_fidelity: 'high',
+      draft_quality: 'low', final_quality: 'high', input_fidelity: 'high',
       background: 'auto', claude_binary: 'claude', claude_model: '', claude_effort: '', price_table: '{}',
     }),
   ),
+  http.get('/api/card-logo-scales', () => HttpResponse.json([])),
   http.post('/api/settings/openai-models', () =>
     HttpResponse.json({ models: ['gpt-image-2', 'gpt-image-2.5-flare'] }),
   ),

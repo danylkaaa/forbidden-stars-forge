@@ -5,7 +5,6 @@ import type { Background, ClaudeEffort, Settings } from './api'
 export type SettingsDraft = {
   openai_api_key_input: string
   openai_model: string
-  image_size: string
   draft_quality: 'low' | 'medium'
   final_quality: 'medium' | 'high'
   input_fidelity: 'low' | 'high'
@@ -29,7 +28,6 @@ type SettingsState = {
 const fromSettings = (s: Settings): SettingsDraft => ({
   openai_api_key_input: '',
   openai_model: s.openai_model,
-  image_size: s.image_size,
   draft_quality: s.draft_quality,
   final_quality: s.final_quality,
   input_fidelity: s.input_fidelity,
@@ -80,7 +78,6 @@ export function selectIsDirty(st: SettingsState): boolean {
   const d = st.draft
   return (
     d.openai_model !== p.openai_model ||
-    d.image_size !== p.image_size ||
     d.draft_quality !== p.draft_quality ||
     d.final_quality !== p.final_quality ||
     d.input_fidelity !== p.input_fidelity ||

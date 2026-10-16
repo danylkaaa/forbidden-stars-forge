@@ -10,7 +10,7 @@ import (
 )
 
 func combatJSON(f int64) string {
-	return fmt.Sprintf(`{"faction_id":%d,"name":"Огонь","category":"combat","level":0,"resource_cost":0,"shields":1,"guns":2,"eagles":0,"upper_text":"Верх","lower_text":""}`, f)
+	return fmt.Sprintf(`{"faction_id":%d,"name":"Fire","category":"combat","level":0,"resource_cost":0,"shields":1,"guns":2,"eagles":0,"upper_text":"Upper","units":[],"unit_text":""}`, f)
 }
 func TestCardsCRUDImportAndFactionDeletion(t *testing.T) {
 	h := newTestRouter(t)
@@ -23,7 +23,7 @@ func TestCardsCRUDImportAndFactionDeletion(t *testing.T) {
 	}
 	cid := int64(c["id"].(float64))
 	rec, c = doJSON(t, h, "GET", fmt.Sprintf("/api/cards/%d", cid), "")
-	if rec.Code != 200 || c["upper_text"] != "Верх" {
+	if rec.Code != 200 || c["upper_text"] != "Upper" {
 		t.Fatal(c)
 	}
 	for _, category := range []string{"schema", "upgrade"} {
@@ -31,9 +31,9 @@ func TestCardsCRUDImportAndFactionDeletion(t *testing.T) {
 		if category == "upgrade" {
 			extra = `"upgrade_type":"dominate","level":2,"resource_cost":1`
 		}
-		update := fmt.Sprintf(`{"faction_id":%d,"name":"Новое","category":"%s","text":"Текст",%s}`, id, category, extra)
+		update := fmt.Sprintf(`{"faction_id":%d,"name":"New","category":"%s","text":"Text",%s}`, id, category, extra)
 		rec, c = doJSON(t, h, "PUT", fmt.Sprintf("/api/cards/%d", cid), update)
-		if rec.Code != 200 || (category == "schema" && c["level"] != nil) || c["text"] != "Текст" {
+		if rec.Code != 200 || (category == "schema" && c["level"] != nil) || c["text"] != "Text" {
 			t.Fatalf("%d %v", rec.Code, c)
 		}
 	}
@@ -68,7 +68,7 @@ func TestCardsJSONValidationAndNoPartialImport(t *testing.T) {
 	h := newTestRouter(t)
 	f := createFaction(t, h, "Tau")
 	body := combatJSON(int64(f["id"].(float64)))
-	invalid := []string{"null", "[]", "not json", body + " {}", strings.Replace(body, `"level":0`, `"level":4`, 1), strings.Replace(body, `"level":0`, `"level":null`, 1), strings.Replace(body, `"level":0`, `"level":"0"`, 1), strings.Replace(body, `"level":0`, `"level":0.5`, 1), strings.Replace(body, `"level":0,`, "", 1), strings.Replace(body, `"guns":2`, `"guns":-1`, 1), strings.Replace(body, `"guns":2`, `"guns":9007199254740992`, 1), strings.Replace(body, `"name":"Огонь"`, `"name":null`, 1), strings.Replace(body, `"lower_text":""`, `"lower_text":null`, 1), strings.Replace(body, `"lower_text":""`, `"lower_text":"","text":null`, 1), strings.Replace(body, `"lower_text":""`, `"lower_text":"","other":true`, 1), combatJSON(999), strings.Replace(body, `"category":"combat"`, `"category":"other"`, 1)}
+	invalid := []string{"null", "[]", "not json", body + " {}", strings.Replace(body, `"level":0`, `"level":4`, 1), strings.Replace(body, `"level":0`, `"level":null`, 1), strings.Replace(body, `"level":0`, `"level":"0"`, 1), strings.Replace(body, `"level":0`, `"level":0.5`, 1), strings.Replace(body, `"level":0,`, "", 1), strings.Replace(body, `"guns":2`, `"guns":-1`, 1), strings.Replace(body, `"guns":2`, `"guns":9007199254740992`, 1), strings.Replace(body, `"name":"Fire"`, `"name":null`, 1), strings.Replace(body, `"units":[],"unit_text":""`, `"lower_text":null`, 1), strings.Replace(body, `"units":[],"unit_text":""`, `"units":[],"unit_text":"","text":null`, 1), strings.Replace(body, `"units":[],"unit_text":""`, `"units":[],"unit_text":"","other":true`, 1), combatJSON(999), strings.Replace(body, `"category":"combat"`, `"category":"other"`, 1)}
 	for _, bad := range invalid {
 		rec, _ := doJSON(t, h, http.MethodPost, "/api/cards", bad)
 		if rec.Code != 400 {
@@ -132,5 +132,53 @@ func TestCardsEquivalentJSONIntegerForms(t *testing.T) {
 		if rec.Code != 201 {
 			t.Fatalf("%s: %d %s", value, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestDeleteAllCardsRemovesEveryCardAndItsArtwork(t *testing.T) {
+	h, _ := newTestRouterWithStore(t)
+	f := createFaction(t, h, "Tau")
+	fid := int64(f["id"].(float64))
+	for i := 0; i < 3; i++ {
+		if rec, out := doJSON(t, h, "POST", "/api/cards", combatJSON(fid)); rec.Code != 201 {
+			t.Fatalf("create: %d %v", rec.Code, out)
+		}
+	}
+	rec, out := doJSON(t, h, "DELETE", "/api/cards", "")
+	if rec.Code != 200 || out["deleted"] != float64(3) {
+		t.Fatalf("delete all: %d %v", rec.Code, out)
+	}
+	if rec, _ = doJSON(t, h, "GET", "/api/cards", ""); strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("cards left: %s", rec.Body.String())
+	}
+	if rec, out = doJSON(t, h, "DELETE", "/api/cards", ""); rec.Code != 200 || out["deleted"] != float64(0) {
+		t.Fatalf("empty reset: %d %v", rec.Code, out)
+	}
+}
+
+func TestCardLogoScaleIsSharedPerFactionAndCategory(t *testing.T) {
+	h, _ := newTestRouterWithStore(t)
+	f := createFaction(t, h, "Tau")
+	base := fmt.Sprintf("/api/card-logo-scales/%.0f/combat", f["id"])
+	if rec, out := doJSON(t, h, "PUT", base, `{"scale":1.5}`); rec.Code != 200 || out["scale"] != 1.5 {
+		t.Fatalf("save: %d %v", rec.Code, out)
+	}
+	if rec, out := doJSON(t, h, "PUT", base, `{"scale":1.25}`); rec.Code != 200 || out["scale"] != 1.25 {
+		t.Fatalf("replace: %d %v", rec.Code, out)
+	}
+	for _, bad := range []string{`{"scale":0}`, `{"scale":3.5}`, `{"scale":"big"}`, `{"scale":1,"x":2}`} {
+		if rec, _ := doJSON(t, h, "PUT", base, bad); rec.Code != 400 {
+			t.Errorf("%s accepted: %d", bad, rec.Code)
+		}
+	}
+	if rec, _ := doJSON(t, h, "PUT", fmt.Sprintf("/api/card-logo-scales/%.0f/tactic", f["id"]), `{"scale":1}`); rec.Code != 400 {
+		t.Errorf("unknown category accepted: %d", rec.Code)
+	}
+	if rec, _ := doJSON(t, h, "PUT", "/api/card-logo-scales/999/combat", `{"scale":1}`); rec.Code != 400 {
+		t.Errorf("unknown faction accepted: %d", rec.Code)
+	}
+	rec, _ := doJSON(t, h, "GET", "/api/card-logo-scales", "")
+	if strings.Count(rec.Body.String(), "faction_id") != 1 || !strings.Contains(rec.Body.String(), `"scale":1.25`) {
+		t.Fatalf("list: %s", rec.Body.String())
 	}
 }

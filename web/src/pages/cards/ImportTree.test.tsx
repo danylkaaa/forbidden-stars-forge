@@ -7,7 +7,7 @@ import type { CardInput } from './model'
 import type { Faction } from '../factions/api'
 
 const factions = [{ id: 1, name: 'Tau' }, { id: 2, name: 'Orks' }] as Faction[]
-const combat = (faction_id: number, name: string, starting = false): CardInput => ({ faction_id, name, category: 'combat', starting, level: 0, resource_cost: 0, shields: 0, guns: 0, eagles: 0, upper_text: '', lower_text: '' })
+const combat = (faction_id: number, name: string, starting = false): CardInput => ({ faction_id, name, category: 'combat', starting, level: 0, resource_cost: 0, shields: 0, guns: 0, eagles: 0, upper_text: '', units: [], unit_text: '' })
 const cards = [combat(1, 'A', true), combat(1, 'B'), combat(2, 'C')]
 
 function Harness() {

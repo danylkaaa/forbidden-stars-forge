@@ -165,3 +165,25 @@ export function PrintIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function BombIcon({ className }: IconProps) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true">
+      <circle cx="7.5" cy="11" r="5.2" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M11 6.6l2-2M13.2 2.6v1.6M15.6 4.8h-1.6M12.4 3.4l-.8-.8M15 6l.8.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M5 9.6a2.6 2.6 0 0 1 1.6-1.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// An image with an arrow pointing into it: a place to drop a picture.
+export function DropImageIcon({ className }: IconProps) {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className={className} aria-hidden="true">
+      <rect x="3" y="4" width="22" height="20" rx="3" stroke="currentColor" strokeWidth="1.8" strokeDasharray="3 2.4" />
+      <path d="M14 8v9m0 0l-3.6-3.6M14 17l3.6-3.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 21h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+

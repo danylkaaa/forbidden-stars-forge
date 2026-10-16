@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useId, useState } from 'react'
 import { computeAspectWarning } from './aspect'
 import { templateUrl, type CardType } from './api'
@@ -26,7 +27,7 @@ export function TemplateDropzone({ persisted }: { persisted: CardType | null }) 
       // Undecodable file: nothing was staged, so the store never learns
       // about this blob URL — release it here and tell the user.
       URL.revokeObjectURL(url)
-      setDecodeError(`${file.name} could not be read as an image — choose a PNG or JPEG`)
+      setDecodeError(`${file.name} could not be read as an image — choose a PNG, JPEG, WebP or AVIF file`)
     }
     img.src = url
   }
@@ -42,14 +43,14 @@ export function TemplateDropzone({ persisted }: { persisted: CardType | null }) 
         <input
           id={id}
           type="file"
-          accept="image/png,image/jpeg"
+          accept={IMAGE_ACCEPT}
           className="hidden"
           onChange={(e) => onFileSelect(e.target.files?.[0])}
         />
         {previewUrl ? (
           <img src={previewUrl} alt="Template preview" className="max-h-40 rounded" />
         ) : (
-          <span className="font-mono text-[11px] tracking-wide text-ink/60">Click to upload PNG or JPEG</span>
+          <span className="font-mono text-[11px] tracking-wide text-ink/60">Click to upload an image (PNG, JPEG, WebP, AVIF); saved as PNG</span>
         )}
         {meta && (
           <span className="font-mono text-[10px] text-ink/55">

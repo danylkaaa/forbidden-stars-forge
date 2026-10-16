@@ -388,6 +388,9 @@ export async function renderBack(url: string, logoUrl: string | undefined, scale
   const canvas = document.createElement('canvas'); canvas.width = size.width; canvas.height = size.height
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Your browser could not create a canvas.')
+  // The generated back can be partly transparent. Backs are on a dark ground on screen, so it is drawn over that:
+  // left transparent, it would print (JPEG, white paper) as a washed-out tint.
+  ctx.fillStyle = BACK_GROUND; ctx.fillRect(0, 0, canvas.width, canvas.height)
   const cover = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
   ctx.drawImage(img, (canvas.width - img.naturalWidth * cover) / 2, (canvas.height - img.naturalHeight * cover) / 2, img.naturalWidth * cover, img.naturalHeight * cover)
   await decorate(ctx, img, canvas.width, canvas.height, category, settings, overlayScale, picture, place, { logo, logoScale: scale, elementUrl, elementPlace })
@@ -398,6 +401,9 @@ export async function renderBack(url: string, logoUrl: string | undefined, scale
   }
   return canvas
 }
+
+// The ground a card back is drawn on, matching the dark app background it is previewed on.
+export const BACK_GROUND = '#0b0706'
 
 export const hasBackDecor = (category?: Category) => category === 'combat' || category === 'upgrade' || category === 'schema'
 

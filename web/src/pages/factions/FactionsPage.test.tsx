@@ -115,7 +115,7 @@ test('delete failure shows alert, keeps dialog open, cancel still dismisses', as
   expect(screen.queryByText('Delete faction?')).not.toBeInTheDocument()
 })
 
-test('clicking outside closes an unchanged dialog but not a changed one', async () => {
+test('clicking outside closes an unchanged dialog and asks before closing a changed one', async () => {
   renderPage()
   await screen.findByText('Tau Empire')
   await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
@@ -127,9 +127,15 @@ test('clicking outside closes an unchanged dialog but not a changed one', async 
 
   await userEvent.type(within(dialog).getByLabelText('Name'), 'X')
   await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  const confirm = screen.getByRole('dialog', { name: 'Discard unsaved changes?' })
+  await userEvent.click(within(confirm).getByRole('button', { name: 'Keep editing' }))
   expect(screen.getByRole('dialog', { name: 'Edit Faction' })).toBeInTheDocument()
 
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }))
+  await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Discard unsaved changes?' })).getByRole('button', { name: 'Discard' }))
+  expect(screen.queryByRole('dialog', { name: 'Edit Faction' })).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
   await userEvent.click(screen.getByTestId('dialog-backdrop'))
   expect(screen.queryByRole('dialog', { name: 'Edit Faction' })).not.toBeInTheDocument()
 })

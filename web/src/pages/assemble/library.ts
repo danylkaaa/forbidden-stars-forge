@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCardTypes, type CardType } from '../card-types/api'
 import { useGenerations, generationImageUrl } from '../test-generation/api'
-import type { Category } from '../cards/model'
+import type { Card, Category } from '../cards/model'
 import { useFactions } from '../factions/api'
 import { useFactionLogos } from './logos'
 import { nebulaTemplateUrl } from './backDecor'
@@ -10,7 +10,7 @@ import { useAssemblyTemplates, useBackLogoScale, useCardTypeLayouts, useFactionB
 import { LIBRARY_TABS, assemblyLayout } from './model'
 import type { ImageRef } from '../../lib/favorites'
 
-// A finished generated image (Faction Lab) usable as a card template.
+// A finished generated image (AI Lab) usable as a card template.
 export type LibraryImage = { key: string; name: string; factionId: number; cardTypeId: number; url: string; createdAt: string; source: 'Lab'; favorite: boolean; generationId?: number; logoUrl?: string; logoScale?: number; elementUrl?: string; ref: ImageRef }
 
 export function useLibraryImages() {
@@ -32,7 +32,7 @@ export function matchesCategory(type: CardType | undefined, category: Category, 
 // The card type backs (and for upgrades, the top/bottom element) are generated with.
 export const backTypeName = (category: Category) => category === 'upgrade' ? 'upgrade element' : 'card back'
 
-// Faction Lab opens on the template's faction and card type, with the
+// AI Lab opens on the template's faction and card type, with the
 // generation itself selected so it can be area-edited.
 export function labLink(image: LibraryImage) {
   const params = new URLSearchParams({ faction: String(image.factionId), card_type: String(image.cardTypeId) })
@@ -102,3 +102,13 @@ export function usePreviewTemplate(factionId: number | null, category: Category)
   const fallback = own.find(i => matchesCategory(types.data?.find(t => t.id === i.cardTypeId), category)) ?? own[0]
   return { image: template.image ?? fallback, chosen: !!template.image, isPending: template.isPending || types.isPending }
 }
+
+// The cards of one category in the order the library shows them: combat cards by starting, then level 0 to 3; the
+// others as given.
+export function libraryOrder(cards: Card[], category: Category): Card[] {
+  const inCategory = cards.filter(c => c.category === category)
+  if (category !== 'combat') return inCategory
+  const rank = (c: Card) => c.category !== 'combat' ? 0 : c.starting ? 0 : c.level + 1
+  return [...inCategory].sort((a, b) => rank(a) - rank(b))
+}
+

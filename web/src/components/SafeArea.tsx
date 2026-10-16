@@ -10,13 +10,14 @@ export function SafeAreaToggle({ className = '' }: { className?: string }) {
 // Lines over a preview of an image of `px` pixels (300 dpi): the cut rectangle
 // of `cutMm`, centred in the image (the rest is bleed), and the safe area
 // inside it. Place inside a relatively positioned box that fits the preview.
+// The lines are the top layer of the card (above its reference overlay), but below every popup and viewer.
 export function SafeAreaLines({ px, cutMm }: { px: { width: number; height: number }; cutMm: { width: number; height: number } }) {
   const show = useSafeArea(s => s.show)
   if (!show || !px.width || !px.height) return null
   const cw = Math.min(px.width, mmToPx(cutMm.width)), ch = Math.min(px.height, mmToPx(cutMm.height))
   const cx = (px.width - cw) / 2, cy = (px.height - ch) / 2, inset = mmToPx(SAFE_INSET_MM)
   const stroke = Math.max(px.width, px.height) / 700
-  return <svg viewBox={`0 0 ${px.width} ${px.height}`} preserveAspectRatio="none" aria-hidden="true" className="pointer-events-none absolute inset-0 z-[60] h-full w-full">
+  return <svg viewBox={`0 0 ${px.width} ${px.height}`} preserveAspectRatio="none" aria-hidden="true" className="pointer-events-none absolute inset-0 z-[6] h-full w-full">
     <rect x={cx} y={cy} width={cw} height={ch} fill="none" stroke="#ff2d2d" strokeWidth={stroke} strokeDasharray={`${stroke * 6} ${stroke * 4}`} />
     <rect x={cx + inset} y={cy + inset} width={Math.max(0, cw - 2 * inset)} height={Math.max(0, ch - 2 * inset)} fill="none" stroke="#22e07a" strokeWidth={stroke} strokeDasharray={`${stroke * 3} ${stroke * 3}`} />
   </svg>

@@ -315,3 +315,35 @@ func TestBuiltinCardTypesCannotBeDeletedOrRenamed(t *testing.T) {
 		t.Fatalf("edit builtin: %d", rec.Code)
 	}
 }
+
+func TestCardTypeImageSizeIsSavedAndValidated(t *testing.T) {
+	h, _ := newTestRouterWithStore(t)
+	rec, ct := doMultipart(t, h, http.MethodPost, "/api/card-types", map[string]string{"name": "combat", "image_size": "816x1104"}, "", nil)
+	if rec.Code != http.StatusCreated || ct["image_size"] != "816x1104" {
+		t.Fatalf("create: %d %v", rec.Code, ct)
+	}
+	id := int64(ct["id"].(float64))
+	// A form without the field leaves the size alone.
+	_, ct = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "combat"}, "", nil)
+	if ct["image_size"] != "816x1104" {
+		t.Fatalf("size lost: %v", ct)
+	}
+	if rec, _ = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "combat", "image_size": "big"}, "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad size accepted: %d", rec.Code)
+	}
+	if rec, _ = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "combat", "image_size": "472x295"}, "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("size not divisible by 16 accepted: %d", rec.Code)
+	}
+	_, ct = doMultipart(t, h, http.MethodPut, fmt.Sprintf("/api/card-types/%d", id), map[string]string{"name": "combat", "image_size": ""}, "", nil)
+	if ct["image_size"] != "" {
+		t.Fatalf("size not cleared: %v", ct)
+	}
+}
+
+func TestImageSizeProblem(t *testing.T) {
+	for size, ok := range map[[2]int]bool{{816, 1104}: true, {1024, 1536}: true, {3840, 2160}: true, {480, 288}: false, {472, 295}: false, {4096, 2048}: false, {3840, 1024}: false, {1024, 160}: false} {
+		if got := imageSizeProblem(size[0], size[1]) == ""; got != ok {
+			t.Errorf("%v: ok = %v, want %v", size, got, ok)
+		}
+	}
+}

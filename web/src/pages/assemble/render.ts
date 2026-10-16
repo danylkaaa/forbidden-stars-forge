@@ -17,7 +17,7 @@ import clockwiseIcon from '../../images/events/clockwise.png?url'
 import counterclockwiseIcon from '../../images/events/counterclockwise.png?url'
 import horizontalIcon from '../../images/events/horizontal.png?url'
 import verticalIcon from '../../images/events/vertical.png?url'
-import type { UpgradeType } from '../cards/model'
+import { lowerText, type UpgradeType } from '../cards/model'
 import { LAYERS, LAYER_LABELS, artWindow, defaultLayout, framedLayers, layerLabel, textRuns, type CombatCard, type Layout, type Placement, type Run, type FramedCard } from './model'
 
 // Average colour of an image's last two rows ('#rrggbb'); a dark neutral if it cannot be read.
@@ -267,7 +267,7 @@ export async function renderCard(input: RenderInput): Promise<RenderOutput> {
 }
 async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork() }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
   // The ribbon for the card's type; its size is the finished card's.
-  const [template, ribbon, levelBadge, gear, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), loadImage(combatRibbon(card)), card.starting ? null : loadImage(BUNDLED_ICONS.tech), card.starting ? null : loadImage(BUNDLED_ICONS.gear), loadImage(backgroundSrc), card.lower_text.trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
+  const [template, ribbon, levelBadge, gear, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), loadImage(combatRibbon(card)), card.starting ? null : loadImage(BUNDLED_ICONS.tech), card.starting ? null : loadImage(BUNDLED_ICONS.gear), loadImage(backgroundSrc), lowerText(card).trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
   const w = ribbon.naturalWidth
   const h = ribbon.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
@@ -294,13 +294,13 @@ async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   // Fonts are fixed: headline for the title and numbers, rules font for text.
   const familyFor = (_p: Placement, layer: string) => layer === 'name' || layer === 'level' || layer === 'resource_cost' ? 'CardHeadline' : 'CardRules'
   const upperBlock = measureBlock(ctx, card.upper_text, layout.upper_text, familyFor(layout.upper_text, 'upper_text'), w, h)
-  const lowerBlock = measureBlock(ctx, card.lower_text, layout.lower_text, familyFor(layout.lower_text, 'lower_text'), w, h)
+  const lowerBlock = measureBlock(ctx, lowerText(card), layout.lower_text, familyFor(layout.lower_text, 'lower_text'), w, h)
   const bottomHeight = bottom.naturalHeight * w / bottom.naturalWidth
   // Images are 300 dpi with the card centred in them: the margin below the cut line is bleed.
   const bleedBottom = Math.max(0, (h - CARD_CUT_HEIGHT_MM / 25.4 * 300) / 2)
   const panels = combatPanels(w, h, bottomHeight,
     { text: card.upper_text, height: upperBlock.height, placement: layout.upper_text },
-    { text: card.lower_text, height: lowerBlock.height, placement: layout.lower_text },
+    { text: lowerText(card), height: lowerBlock.height, placement: layout.lower_text },
     textureInsets(w / background.naturalWidth, foreground ? w / foreground.naturalWidth : undefined), bleedBottom)
   // Preserve each texture's aspect ratio; extend it vertically only when text
   // needs more parchment than the source image supplies. The canvas crops it.
@@ -313,7 +313,7 @@ async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
   // Colours are fixed per layer, whatever an older saved layout says.
   const colors = defaultLayout()
   const paintLayout = Object.fromEntries(LAYERS.map(key => [key, { ...layout, ...textPositions }[key]]).map(([key, p]) => [key, { ...(p as Placement), color: colors[key as typeof LAYERS[number]].color }])) as Layout
-  const texts = { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.upper_text, lower_text: card.lower_text }
+  const texts = { name: card.name.toUpperCase(), level: String(card.level), resource_cost: String(card.resource_cost), upper_text: card.upper_text, lower_text: lowerText(card) }
   const warnings: string[] = []
   if (panels.overflow) warnings.push('Rules text extends beyond the parchment area. Reduce its size or adjust its position.')
   if (panels.overlap) warnings.push('Upper text overlaps the lower panel. Adjust the manual text positions.')

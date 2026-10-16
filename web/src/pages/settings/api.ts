@@ -5,7 +5,6 @@ export type Settings = {
   openai_api_key_masked: string
   openai_api_key_from_env: boolean
   openai_model: string
-  image_size: string
   draft_quality: 'low' | 'medium'
   final_quality: 'medium' | 'high'
   input_fidelity: 'low' | 'high'

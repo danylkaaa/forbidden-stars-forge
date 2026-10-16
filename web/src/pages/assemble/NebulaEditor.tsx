@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -44,7 +45,7 @@ function NebulaTile({ label, factionId, render, spin, picture }: { label: string
     <figcaption className="mt-1 text-center text-xs text-ink/60">{label}</figcaption>
     {picture && <div className="mt-1 flex flex-col items-center gap-0.5 text-[11px] text-ink/60">
       <label className="cursor-pointer text-accent underline">{change.isPending ? 'Saving…' : picture.custom ? 'Replace nebula' : 'Upload nebula'}
-        <input type="file" accept="image/png,image/jpeg" aria-label={`Upload nebula picture for ${label}`} className="sr-only" disabled={change.isPending}
+        <input type="file" accept={IMAGE_ACCEPT} aria-label={`Upload nebula picture for ${label}`} className="sr-only" disabled={change.isPending}
           onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }} /></label>
       {picture.custom && <button type="button" disabled={change.isPending} onClick={() => change.mutate(null)} className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-ink/60 underline">Use default</button>}
       {!picture.custom && <span>or drop an image here</span>}

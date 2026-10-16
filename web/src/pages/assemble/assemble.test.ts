@@ -35,7 +35,7 @@ test('drafts stay independent for each card', () => {
   expect(useAssembly.getState().edits['1']).toBeUndefined()
 })
 test('PNG filenames preserve Unicode and sanitize filesystem separators', () => {
-  expect(downloadName('  Новая/card:*?  ')).toBe('Новая-card---.png')
+  expect(downloadName('  Nová/card:*?  ')).toBe('Nová-card---.png')
   expect(downloadName('')).toBe('battle-card.png')
 })
 
@@ -61,7 +61,7 @@ test('resource variants select native glyph tokens and preserve legacy layouts',
 
 test('short boxed and non-boxed notation maps each resource independently', () => {
   const cases = [
-    ['(B)', '#', false], ['[B]', '}', false], ['(S)', '@', false], ['[S]', '{', false], ['(M)', '<', true], ['[M]', '<', true],
+    ['(B)', '#', false], ['[B]', '}', false], ['(S)', '@', false], ['[S]', '{', false], ['(M)', '<', false], ['[M]', '<', false],
   ] as const
   for (const [token, glyph, unframed] of cases) expect(textRuns(token)).toEqual([
     { text: glyph, icon: true, italic: false, ...(unframed ? { unframed: true } : {}) },

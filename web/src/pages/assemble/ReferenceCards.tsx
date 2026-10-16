@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -51,7 +52,7 @@ export function ReferenceField({ category, side }: { category: ReferenceCategory
         <div className="flex flex-wrap items-center gap-2">
           <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider hover:border-accent/60 ${upload.isPending ? 'pointer-events-none opacity-45' : ''}`}>
             {upload.isPending ? 'Uploading…' : shown ? 'Add reference' : 'Upload reference'}
-            <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label={`Upload reference ${side}`} disabled={upload.isPending}
+            <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={`Upload reference ${side}`} disabled={upload.isPending}
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload.mutate(f) }} />
           </label>
           {shown && <button type="button" aria-label={`Remove reference ${shown.name}`} disabled={remove.isPending} onClick={() => remove.mutate(shown.id)} className="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-ink/60 underline hover:text-danger">Remove</button>}
@@ -77,7 +78,7 @@ export function ReferenceCards({ category, compact = false }: { category: Refere
       <h2 className="m-0 font-display text-sm font-semibold text-accent-300">Reference {LABEL[category]} cards</h2>
       {([['front', front], ['back', back]] as const).map(([side, m]) => <label key={side} className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3 py-1.5 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${m.upload.isPending ? 'pointer-events-none opacity-45' : ''}`}>
         {m.upload.isPending ? 'Uploading…' : `Upload ${side}`}
-        <input type="file" accept="image/png,image/jpeg" multiple className="sr-only" aria-label={`Upload reference card ${side}`} disabled={m.upload.isPending}
+        <input type="file" accept={IMAGE_ACCEPT} multiple className="sr-only" aria-label={`Upload reference card ${side}`} disabled={m.upload.isPending}
           onChange={e => { const files = [...e.target.files ?? []]; e.target.value = ''; files.forEach(f => m.upload.mutate(f)) }} />
       </label>)}
     </div>

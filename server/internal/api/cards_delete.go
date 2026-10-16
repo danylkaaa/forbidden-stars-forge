@@ -30,3 +30,16 @@ func (h *CardsHandler) DeleteMany(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]int{"deleted": len(in.IDs)})
 }
+
+// DeleteAll removes every card (a debugging reset); the cards' artwork files go with them.
+func (h *CardsHandler) DeleteAll(w http.ResponseWriter, _ *http.Request) {
+	n, files, err := h.Store.DeleteAll()
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	for _, f := range files {
+		_ = os.Remove(filepath.Join(h.DataDir, f))
+	}
+	writeJSON(w, 200, map[string]int{"deleted": n})
+}

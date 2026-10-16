@@ -1,5 +1,6 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { SearchableSelect } from '../../components/SearchableSelect'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -12,27 +13,31 @@ import { StepperInput } from '../../components/StepperInput'
 import { BUNDLED_ICONS } from '../faction-card/bundled'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { apiGet } from '../../lib/api'
-import { createCard, updateCard } from '../cards/api'
+import { createCard, updateCard, useCards } from '../cards/api'
 import { ACTION_LABELS, CATEGORIES, newDraft, orderLabel, UPGRADE_TYPES, type Card, type CardInput, type Category } from '../cards/model'
 import { draftInput } from '../cards/validation'
 import { useFactions } from '../factions/api'
-import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, type Assembly } from './api'
-import { defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
-import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS } from './model'
+import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, useSharedLogoScale, type Assembly } from './api'
+import { useFileDrag } from '../../lib/useFileDrag'
+import { DropImageIcon } from '../../components/icons'
+import { artworkRect, defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
+import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS, libraryLink } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
-import { labLink, useTemplate, useTemplateLayout } from './library'
+import { useImageSize } from './useImageSize'
+import { labLink, libraryOrder, useTemplate, useTemplateLayout } from './library'
 import { undoShortcut } from './useUndoable'
 import { useCardDraft, useCardRenderInput, useRenderedCard } from './useCardView'
 import { CardCanvas } from './CardCanvas'
-import { SymbolPicker } from './SymbolPicker'
+import { SymbolButtons } from './SymbolPicker'
 import { Preview3DButton } from './Card3DViewer'
-import { PositionNumber } from './LayerControls'
 
 const panel = 'space-y-4 rounded-lg border border-divider bg-surface p-4'
 const NUMBER_FIELDS = [['resource_cost', 'Resource price', 'gear'], ['guns', 'Guns', 'dice'], ['shields', 'Shields', 'health'], ['eagles', 'Morale / eagles', 'morale']] as const
 // A field name with the icon of what it counts, as on the faction card.
-const iconLabel = (label: string, icon: string) => <span className="inline-flex items-center gap-1.5"><img src={BUNDLED_ICONS[icon]} alt="" className="h-4 w-4 object-contain" />{label}</span>
+// The icons are dark, so they sit on a light chip to stay visible on the dark panel.
+const SHORT_LABELS: Record<string, string> = { resource_cost: 'Price', eagles: 'Morale' }
+const iconLabel = (label: string, icon: string, shown = label) => <span className="inline-flex items-center gap-1.5" title={label}><span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#ecdfcb]"><img src={BUNDLED_ICONS[icon]} alt="" className="h-3.5 w-3.5 object-contain" /></span>{shown}</span>
 
 export default function CardEditorPage({ newFactionId, newCategory = 'combat', onCategoryChange }: { newFactionId?: string; newCategory?: Category; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
   const creating = newFactionId !== undefined
@@ -66,25 +71,50 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const category = source?.category ?? newCategory
   const upgrade = category === 'upgrade', schema = category === 'schema', framed = upgrade || schema
   const ART_WINDOW = artWindow(category)
+  // The neighbours in the library's order, for the Prev / Next buttons.
+  const factionCards = useCards(factionId ? String(factionId) : '', '')
+  const siblings = useMemo(() => libraryOrder(factionCards.data ?? [], category), [factionCards.data, category])
+  const position = siblings.findIndex(c => String(c.id) === id)
+  const previous = position > 0 ? siblings[position - 1] : undefined
+  const next = position >= 0 ? siblings[position + 1] : undefined
   const template = useTemplate(factionId, category)
   const templateLayout = useTemplateLayout(category)
   const back = useTemplate(factionId, category, 'back')
-  const { input, assembly, logoScale, titleScale, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
+  const { input, assembly, logoScale, titleScale, textPadding, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
   const preview = useRef<HTMLCanvasElement | null>(null)
   const textTarget = useRef<{ key: string; element: HTMLInputElement | HTMLTextAreaElement } | null>(null)
   const firstText = useRef<HTMLTextAreaElement>(null), firstTextKey = framed ? 'text' : 'upper_text'
+  const [sharedLogoScale, setSharedLogoScale] = useSharedLogoScale(factionId, category)
   const logoScaleDirty = state.logoScales[id] !== undefined
   const titleScaleDirty = state.titleScales[id] !== undefined
+  const paddingDirty = state.textPaddings?.[id] !== undefined
   const transformDirty = !!state.transforms[id]
   const hasArtwork = !!assembly.data?.image_url
   // The artwork moves only while selected: click it on the preview (or use
   // the Artwork panel button). Enter (or a click elsewhere) keeps the move,
   // Esc puts the artwork back where it was when selected.
   const [artSelected, setArtSelected] = useState(false)
+  // While image files are dragged over the page, the artwork block and the artwork area of the preview show where to drop them.
+  const fileDrag = useFileDrag(!upgrade)
+  const [artworkDrag, setArtworkDrag] = useState<'block' | 'area' | null>(null)
+  const dropTarget = (where: 'block' | 'area') => ({
+    onDragOver: (e: React.DragEvent) => { if (busy || !e.dataTransfer.types.includes('Files')) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setArtworkDrag(where) },
+    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArtworkDrag(null) },
+    onDrop: (e: React.DragEvent) => {
+      setArtworkDrag(null)
+      if (busy || !e.dataTransfer.files.length) return
+      e.preventDefault()
+      const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'))
+      if (file) artwork.mutate(file)
+    },
+  })
   const movable = hasArtwork && artSelected
+  // While the artwork is selected its own edges are outlined, so you can see where it ends.
+  const artSize = useImageSize(movable ? assembly.data?.image_url : null)
+  const artEdges = movable && artSize && result ? artworkRect(ART_WINDOW, artSize, result.canvas, transform) : null
   const previewBox = useRef<HTMLDivElement>(null), artworkPanel = useRef<HTMLElement>(null)
 
   const save = useMutation({
@@ -94,13 +124,13 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         let artworkError = ''
         try {
           const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
-          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale) })
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale, textPadding) })
           queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
         } catch (e) {
           artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
           // Keep the chosen position available for saving from the editor.
           useAssembly.getState().transform(String(created.id), transform)
-          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale)
+          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale); useAssembly.getState().textPadding(String(created.id), textPadding)
         }
         queryClient.setQueryData(['cards', 'one', String(created.id)], created)
         useAssembly.getState().select({ factionId: created.faction_id, category: created.category })
@@ -112,12 +142,13 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         queryClient.setQueryData(['cards', 'one', id], updated)
         useAssembly.getState().clearEdits(id)
       }
-      if ((transformDirty || logoScaleDirty || titleScaleDirty) && assembly.data) {
+      if ((transformDirty || logoScaleDirty || titleScaleDirty || paddingDirty) && assembly.data) {
         const value = { ...assembly.data, transform, logo_scale: logoScale }
-        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale) }))
+        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale, textPadding) }))
         useAssembly.getState().clearTransform(id)
         useAssembly.getState().clearLogoScale(id)
         useAssembly.getState().clearTitleScale(id)
+        useAssembly.getState().clearTextPadding(id)
       }
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['cards'] }),
@@ -220,8 +251,11 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
     edit(target.key, text.slice(0, start) + token + text.slice(end))
     requestAnimationFrame(() => { target.element.focus(); target.element.setSelectionRange(start + token.length, start + token.length) })
   }
+  // An icon bar over the top-right corner of a text field, shown when the field is pointed at or focused: it inserts at the cursor.
+  const withSymbols = (field: ReactNode) => <div className="group/symbols relative">{field}
+    <div className="absolute right-1 top-1 z-[1] opacity-0 transition-opacity focus-within:opacity-100 group-focus-within/symbols:opacity-100 group-hover/symbols:opacity-100"><SymbolButtons insert={insertSymbol} disabled={busy} /></div></div>
   function discard() {
-    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id)
+    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearTextPadding(id)
     if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
   }
   async function download() {
@@ -238,17 +272,32 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   if (!creating && cardQuery.isError) return <div role="alert" className="text-danger">{cardQuery.error.message} <Link to="/assemble" className="text-accent underline">Back to library</Link></div>
   if (!source || !draft || !saved) return <p role="status" className="text-sm text-ink/60">Loading card…</p>
 
-  const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty
+  const anyDirty = creating || dirty || transformDirty || logoScaleDirty || titleScaleDirty || paddingDirty
   const busy = save.isPending || artwork.isPending
   const queryError = [assembly, ...template.queries].find(q => q.isError)?.error ?? templateLayout.error
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <Link to="/assemble" className="text-sm text-accent no-underline hover:underline">← Library</Link>
+      <div className="min-w-0 space-y-1">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-ink/60">
+          <Link to="/assemble" className="text-accent no-underline hover:underline">Library</Link>
+          {factionId && <>
+            <span aria-hidden="true">›</span>
+            <Link to={`/assemble?faction=${factionId}`} className="text-accent no-underline hover:underline">{factions.data?.find(f => f.id === factionId)?.name ?? `Faction ${factionId}`}</Link>
+            <span aria-hidden="true">›</span>
+            <Link to={libraryLink(factionId, category)} className="text-accent no-underline hover:underline">{LIBRARY_TABS.find(t => t.category === category)?.label}</Link>
+          </>}
+          <span aria-hidden="true">›</span>
+          <span aria-current="page" className="text-ink/80">{creating ? 'New card' : draft.name || 'Untitled card'}</span>
+        </nav>
         <h1 className="m-0 font-display text-2xl text-accent-300">{creating ? 'New card' : draft.name || 'Untitled card'}</h1>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {template.image && <Link to={labLink(template.image)} className="inline-flex items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-ink no-underline hover:border-accent/60">Edit template in Faction Lab</Link>}
+        {!creating && siblings.length > 1 && <div role="group" aria-label="Neighbouring cards" className="mr-1 inline-flex items-center gap-1.5">
+          <Button disabled={!previous} title={previous ? `Previous: ${previous.name}` : 'This is the first card'} onClick={() => previous && navigate(`/assemble/cards/${previous.id}`)}>← Prev</Button>
+          <span className="text-xs tabular-nums text-ink/60">{position + 1} / {siblings.length}</span>
+          <Button disabled={!next} title={next ? `Next: ${next.name}` : 'This is the last card'} onClick={() => next && navigate(`/assemble/cards/${next.id}`)}>Next →</Button>
+        </div>}
+        {template.image && <Link to={labLink(template.image)} className="inline-flex items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-ink no-underline hover:border-accent/60">Edit template in AI Lab</Link>}
         <Button title="Undo position change (⌘Z)" disabled={!undoStack.current.length} onClick={undo}>Undo</Button>
         <Button title="Redo (⇧⌘Z)" disabled={!redoStack.current.length} onClick={redo}>Redo</Button>
         <Button disabled={!anyDirty || busy} onClick={discard}>Discard changes</Button>
@@ -282,6 +331,14 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
           {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
           {result && <ReferenceOverlay category={source.category} side="front" />}
           {result && !movable && <Preview3DButton category={category} factionId={factionId ?? undefined} title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} backElementUrl={back.image?.elementUrl} className="absolute right-2 top-2 z-10" />}
+          {fileDrag && !upgrade && result && <div data-testid="artwork-drop-area" {...dropTarget('area')}
+            className={`absolute z-[7] grid place-items-center border-2 border-dashed transition-colors ${artworkDrag === 'area' ? 'border-accent bg-accent/35 text-accent-100' : 'border-accent/80 bg-black/45 text-accent'}`}
+            style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
+            <span className="pointer-events-none flex flex-col items-center gap-1 text-xs font-medium"><DropImageIcon className="h-10 w-10" />{artworkDrag === 'area' ? 'Release to set the artwork' : 'Drop the image here'}</span>
+          </div>}
+          {artEdges && <div aria-hidden="true" data-testid="artwork-edges" className="pointer-events-none absolute inset-0 z-[4] overflow-hidden">
+            <div className="absolute border-2 border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.7)]" style={{ left: `${artEdges.x}%`, top: `${artEdges.y}%`, width: `${artEdges.width}%`, height: `${artEdges.height}%` }} />
+          </div>}
           {result && movable && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]"
             style={{ left: `${ART_WINDOW.x}%`, top: `${ART_WINDOW.y}%`, width: `${ART_WINDOW.width}%`, height: `${ART_WINDOW.height}%` }}>
             <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] text-accent-100">Drag to move · scroll to zoom · Enter applies · Esc cancels</span>
@@ -294,8 +351,6 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         {renderError && <Button onClick={retry}>Retry rendering</Button>}
         {!!result?.warnings.length && <div role="status" className="space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w} className="m-0">{w}</p>)}</div>}
         {!template.image && !template.isPending && <Link to="/assemble" className="text-sm text-accent underline">Choose a template in the library</Link>}
-        <ReferenceField category={source.category} side="front" />
-        <details className="text-sm"><summary className="cursor-pointer text-accent">All reference cards</summary><div className="mt-2"><ReferenceCards category={source.category} compact /></div></details>
       </section>
 
       <div className="space-y-5">
@@ -310,63 +365,76 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               {CATEGORIES.map(category => <option key={category} value={category}>{LIBRARY_TABS.find(t => t.category === category)!.label}</option>)}
             </select>}</Field>
           </div>}
-          <Field label="Title">{fid => <input id={fid} autoFocus={creating} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />}</Field>
-          <Field label={`Title size (${Math.round(titleScale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={titleScale} disabled={busy} className="w-full"
-            onChange={e => { save.reset(); state.titleScale(id, Number(e.target.value)) }} />}</Field>
-          {titleScale !== 1 && <Button disabled={busy} onClick={() => { save.reset(); state.titleScale(id, 1) }}>Reset title size</Button>}
+          <div className="grid items-end gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_14rem]">
+            <Field label="Title">{fid => withSymbols(<input id={fid} autoFocus={creating} className={inputClass} value={draft.name} onFocus={e => { textTarget.current = { key: 'name', element: e.currentTarget } }} onChange={e => edit('name', e.target.value)} />)}</Field>
+            <Field label={<span className="flex items-center justify-between gap-2">Title size <span className="font-mono text-ink/80">{Math.round(titleScale * 100)}%{titleScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.titleScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={titleScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
+              onChange={e => { save.reset(); state.titleScale(id, Number(e.target.value)) }} />}</Field>
+          </div>
           {schema && <div className="grid grid-cols-2 gap-3">
             <Field label="Kind">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.subtype} onChange={e => edit('subtype', e.target.value)}>{['schema', 'tactic'].map(t => <option key={t} value={t}>{t === 'schema' ? 'Scheme' : 'Tactic'}</option>)}</SearchableSelect>}</Field>
             <Field label="Action">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.action} onChange={e => edit('action', e.target.value)}>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SearchableSelect>}</Field>
           </div>}
           {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
-          {!schema && <div className="max-w-48 space-y-3">
-            {category === 'combat'
-              ? <div className="space-y-2">
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-ink/70" title="Starting cards have no level requirement or price and show the faction logo instead of a level number.">
-                  <input type="checkbox" checked={draft.starting === 'true'} onChange={e => setStarting(e.target.checked)} className="accent-[var(--color-accent)]" />Starting card</label>
-                <Field label="Level">{fid => <StepperInput id={fid} label="Level" value={Number(draft.level) || 0} min={0} max={3} disabled={draft.starting === 'true'} onChange={n => edit('level', String(n))} />}</Field>
-              </div>
-              : <Field label="Level">{fid => <StepperInput id={fid} label="Level" value={Number(draft.level) || 0} min={0} max={3} onChange={n => edit('level', String(n))} />}</Field>}
+          {upgrade && <Field label="Order">{fid => <SearchableSelect id={fid} className={selectClass} value={draft.upgrade_type} onChange={e => edit('upgrade_type', e.target.value)}>{UPGRADE_TYPES.map(t => <option key={t} value={t}>{orderLabel(t)}</option>)}</SearchableSelect>}</Field>}
+          {!schema && <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+            {category === 'combat' && <label className="mr-1 flex cursor-pointer items-center gap-2 self-center text-xs text-ink/70" title="Starting cards have no level requirement or price and show the faction logo instead of a level number.">
+              <input type="checkbox" checked={draft.starting === 'true'} onChange={e => setStarting(e.target.checked)} className="accent-[var(--color-accent)]" />Starting card</label>}
+            <Field label={iconLabel('Level', 'tech')}>{fid => <div className="w-[4.75rem]"><StepperInput id={fid} label="Level" value={Number(draft.level) || 0} min={0} max={3} disabled={category === 'combat' && draft.starting === 'true'} onChange={n => edit('level', String(n))} /></div>}</Field>
             {(upgrade ? NUMBER_FIELDS.slice(0, 1) : NUMBER_FIELDS).map(([key, label, icon]) => { const locked = !upgrade && key === 'resource_cost' && draft.starting === 'true'
-              return <Field key={key} label={iconLabel(label, icon)}>{fid => <StepperInput id={fid} label={label} value={Number(draft[key]) || 0} disabled={locked} title={locked ? 'Starting cards have no resource price' : undefined} onChange={n => edit(key, String(n))} />}</Field> })}
+              return <Field key={key} label={iconLabel(label, icon, SHORT_LABELS[key])}>{fid => <div className="w-[4.75rem]"><StepperInput id={fid} label={label} value={Number(draft[key]) || 0} disabled={locked} title={locked ? 'Starting cards have no resource price' : undefined} onChange={n => edit(key, String(n))} /></div>}</Field> })}
           </div>}
-          {(upgrade ? ['text', 'limitation'] as const : framed ? ['text'] as const : ['upper_text', 'lower_text'] as const).map(key => <Field key={key} label={key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation (optional)' : LAYER_LABELS[key]}>{fid => <textarea id={fid} rows={key === 'limitation' ? 2 : 4} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={inputClass} value={draft[key] ?? ''} onChange={e => edit(key, e.target.value)} />}</Field>)}
-          <SymbolPicker insert={insertSymbol} disabled={busy} />
-          <p className="m-0 text-xs text-ink/60">(B), (S), (M), (D) insert boltgun, shield, morale, and dice icons; [B], [S] boxed boltgun and shield (morale is never boxed). *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
+          {(upgrade ? ['text', 'limitation'] as const : framed ? ['text'] as const : ['upper_text', 'units', 'unit_text'] as const).map(key => key === 'units'
+            ? <Field key={key} label="Unit names (separate with /, shown in italics before the unit text)">{fid => <input id={fid} className={inputClass} placeholder="Skitarii/Light Cruiser" value={draft.units ?? ''} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} onChange={e => edit('units', e.target.value)} />}</Field>
+            : <Field key={key} label={key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation (optional)' : key === 'unit_text' ? 'Unit text' : LAYER_LABELS[key]}>{fid => withSymbols(<textarea id={fid} rows={key === 'limitation' ? 2 : framed ? 3 : 2} ref={key === firstTextKey ? firstText : undefined} onFocus={e => { textTarget.current = { key, element: e.currentTarget } }} className={`${inputClass} resize-y`} value={draft[key] ?? ''} onChange={e => edit(key, e.target.value)} />)}</Field>)}
+          {!framed && <details className="rounded-md border border-divider px-3 py-1.5">
+            <summary className="cursor-pointer text-sm text-accent">Text margins (this card){Object.keys(textPadding).length > 0 && <span className="ml-2 text-xs text-ink/60">custom</span>}</summary>
+            <div className="space-y-2 pb-2 pt-2">
+              <p className="m-0 text-xs text-ink/60">Space above and below each text panel, in % of the card's width. Left alone, the card follows the template.</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-2">
+                {([['Upper top', 'upper_top', 'upper_text', 'paddingTop'], ['Upper bottom', 'upper_bottom', 'upper_text', 'paddingBottom'], ['Lower top', 'lower_top', 'lower_text', 'paddingTop'], ['Lower bottom', 'lower_bottom', 'lower_text', 'paddingBottom']] as const).map(([label, key, layer, side]) => {
+                  const inherited = templateLayout.layout[layer][side] ?? 4, own = textPadding[key]
+                  return <Field key={key} label={<span className={own !== undefined ? 'text-accent' : ''}>{label}{own !== undefined ? ' (custom)' : ''}</span>}>{fid =>
+                    <div className="w-[4.75rem]"><StepperInput id={fid} label={label} value={own ?? inherited} min={0} max={20} disabled={busy} onChange={n => { save.reset(); state.textPadding(id, { ...textPadding, [key]: n }) }} /></div>}</Field>
+                })}
+              </div>
+              {Object.keys(textPadding).length > 0 && <div><Button disabled={busy} onClick={() => { save.reset(); state.textPadding(id, {}) }}>Use the template's margins</Button></div>}
+            </div>
+          </details>}
+          {(framed || draft.starting === 'true') && factionId && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <label htmlFor="shared-logo-scale" className="text-ink/80">Faction logo size</label>
+            <input id="shared-logo-scale" type="range" min={0.2} max={3} step={0.05} value={sharedLogoScale} className="w-32 accent-[var(--color-accent)]" onChange={e => setSharedLogoScale(Number(e.target.value))} />
+            <span className="font-mono text-xs text-ink/80">{Math.round(sharedLogoScale * 100)}%</span>
+            <span className="text-xs text-ink/60">shared by every {LIBRARY_TABS.find(t => t.category === category)?.label.toLowerCase()} card of this faction</span>
+          </div>}
+          {!upgrade && <section ref={artworkPanel} aria-label="Artwork" data-undo-scope
+            {...dropTarget('block')}
+            className={`space-y-2 rounded-md border p-3 transition-colors ${artworkDrag === 'block' ? 'border-accent bg-accent/10' : fileDrag ? 'border-dashed border-accent/70' : 'border-divider'}`}>
+            <h3 className="m-0 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-accent">Artwork{fileDrag && <DropImageIcon className="h-6 w-6" />}</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${busy ? 'pointer-events-none opacity-45' : ''}`}>
+                {hasArtwork ? 'Replace artwork' : 'Add artwork'}
+                <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label="Artwork file (any image)" disabled={busy}
+                  onChange={e => { const file = e.target.files?.[0]; if (file) artwork.mutate(file); e.target.value = '' }} />
+              </label>
+              {hasArtwork && <Button disabled={busy} onClick={() => artwork.mutate(null)}>Remove artwork</Button>}
+              {hasArtwork && (artSelected
+                ? <><Button variant="primary" onClick={confirmArtwork}>Apply (Enter)</Button><Button onClick={cancelArtwork}>Cancel (Esc)</Button></>
+                : <Button onClick={selectArtwork}>Move artwork</Button>)}
+              {hasArtwork && <Button disabled={transform.scale === 1 && transform.x === 0 && transform.y === 0} onClick={() => setTransform(defaultArtwork())}>Reset position</Button>}
+              {artwork.isPending && <span role="status" className="text-xs text-ink/60">Updating artwork…</span>}
+            </div>
+            <p className="m-0 text-xs text-ink/60">{artworkDrag === 'block' ? 'Drop the image here.' : hasArtwork ? 'Drop another image here to replace it. Click the artwork on the preview, then drag it to move and scroll to zoom.' : 'Drop an image here or use the button (PNG, JPEG, WebP, AVIF …; saved as PNG, up to 20 MiB). It is placed in the frame’s open art area.'}</p>
+          </section>}
+          <div className="border-t border-divider pt-2">
+            <ReferenceField category={source.category} side="front" />
+            <details className="mt-1 text-sm"><summary className="cursor-pointer text-accent">All reference cards</summary><div className="mt-2"><ReferenceCards category={source.category} compact /></div></details>
+          </div>
+          <p className="m-0 text-xs text-ink/60">Point at a text field to insert an icon at the cursor: (B), (S), (D) plain boltgun, shield, dice; [B], [S] boxed; (M) or [M] morale, always boxed. *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={(schema ? ['subtype', 'action'] : upgrade ? ['upgrade_type', 'level', 'resource_cost'] : ['level', 'resource_cost', 'guns', 'shields', 'eagles']).filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}
-            textDiffs={(upgrade ? ['name', 'text', 'limitation'] as const : framed ? ['name', 'text'] as const : ['name', 'upper_text', 'lower_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation' : LAYER_LABELS[key], before: saved[key] ?? '', after: draft[key] ?? '' }))} /></details>}
+            textDiffs={(upgrade ? ['name', 'text', 'limitation'] as const : framed ? ['name', 'text'] as const : ['name', 'upper_text', 'units', 'unit_text'] as const).map(key => ({ field: key === 'text' ? 'Text' : key === 'limitation' ? 'Limitation' : key === 'units' ? 'Unit names' : key === 'unit_text' ? 'Unit text' : LAYER_LABELS[key], before: saved[key] ?? '', after: draft[key] ?? '' }))} /></details>}
         </section>
-
-        {(framed || draft.starting === 'true') && <p className="m-0 text-xs text-ink/60">The faction logo on this card is the same for every card of the faction. Change it on Library → Faction config.</p>}
-
-        {!upgrade && <section ref={artworkPanel} aria-label="Artwork" data-undo-scope className={panel}>
-          <h2 className="m-0 font-display text-accent-300">Artwork</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${busy ? 'pointer-events-none opacity-45' : ''}`}>
-              {hasArtwork ? 'Replace artwork' : 'Add artwork'}
-              <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label="Artwork file (PNG / JPEG)" disabled={busy}
-                onChange={e => { const file = e.target.files?.[0]; if (file) artwork.mutate(file); e.target.value = '' }} />
-            </label>
-            {hasArtwork && <Button disabled={busy} onClick={() => artwork.mutate(null)}>Remove artwork</Button>}
-            {artwork.isPending && <span role="status" className="text-xs text-ink/60">Updating artwork…</span>}
-          </div>
-          {hasArtwork ? <>
-            <div className="flex flex-wrap items-center gap-2">
-              {artSelected
-                ? <><Button variant="primary" onClick={confirmArtwork}>Apply (Enter)</Button><Button onClick={cancelArtwork}>Cancel (Esc)</Button></>
-                : <Button onClick={selectArtwork}>Select artwork to move</Button>}
-              <span className="text-xs text-ink/60">Or click the artwork on the preview. While selected, drag to move and scroll to zoom.</span>
-            </div>
-            <Field label={`Scale (${Math.round(transform.scale * 100)}%)`}>{fid => <input id={fid} type="range" min={0.1} max={5} step={0.01} value={transform.scale} className="w-full" onChange={e => setTransform(zoomArtwork(transform, Number(e.target.value)))} />}</Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Offset X (%)">{fid => <PositionNumber id={fid} value={transform.x} min={-200} max={200} onChange={x => setTransform({ ...transform, x })} />}</Field>
-              <Field label="Offset Y (%)">{fid => <PositionNumber id={fid} value={transform.y} min={-200} max={200} onChange={y => setTransform({ ...transform, y })} />}</Field>
-            </div>
-            <Button onClick={() => setTransform(defaultArtwork())}>Reset position</Button>
-          </> : <p className="m-0 text-xs text-ink/60">Upload a PNG or JPEG (up to 20 MiB). It is placed in the frame’s open art area.</p>}
-        </section>}
 
       </div>
     </div>

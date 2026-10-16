@@ -5,7 +5,7 @@ test('crc32 matches the standard check value', () => {
 })
 
 test('zip stores each file with headers and a central directory', async () => {
-  const blob = zip([{ name: 'a.png', data: new Uint8Array([1, 2, 3]) }, { name: 'Ж.png', data: new Uint8Array([4]) }])
+  const blob = zip([{ name: 'a.png', data: new Uint8Array([1, 2, 3]) }, { name: 'É.png', data: new Uint8Array([4]) }])
   const bytes = new Uint8Array(await blob.arrayBuffer())
   const view = new DataView(bytes.buffer)
   expect(view.getUint32(0, true)).toBe(0x04034b50)

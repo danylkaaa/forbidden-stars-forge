@@ -4,6 +4,7 @@ import { useSettingsStore, selectIsDirty } from './store'
 import { OpenAISection } from './OpenAISection'
 import { ClaudeSection } from './ClaudeSection'
 import { SaveBar } from './SaveBar'
+import { DebugSection } from './DebugSection'
 
 export default function SettingsPage() {
   const { data, isLoading, error } = useSettings()
@@ -40,6 +41,7 @@ export default function SettingsPage() {
       <OpenAISection settings={data} />
       <ClaudeSection />
       <SaveBar settings={data} />
+      <DebugSection />
     </div>
   )
 }

@@ -10,3 +10,14 @@ export function zoomArtwork(t: ArtworkTransform, scale: number, px = 0, py = 0):
   const next = clamp(scale, .1, 5), ratio = next / t.scale
   return { scale: next, x: clamp(px - (px - t.x) * ratio, -200, 200), y: clamp(py - (py - t.y) * ratio, -200, 200) }
 }
+
+// Where the artwork's own edges are on the card, in % of the card (the part outside the artwork window is clipped when
+// drawn). Mirrors how the card renderers place it: scaled to cover the window, centred, then moved by the transform.
+export function artworkRect(win: { x: number; y: number; width: number; height: number }, art: { width: number; height: number }, card: { width: number; height: number }, t: ArtworkTransform) {
+  const ww = win.width * card.width / 100, wh = win.height * card.height / 100
+  const scale = Math.max(ww / art.width, wh / art.height) * t.scale
+  const width = art.width * scale, height = art.height * scale
+  const left = win.x * card.width / 100 + (ww - width) / 2 + t.x * card.width / 100
+  const top = win.y * card.height / 100 + (wh - height) / 2 + t.y * card.height / 100
+  return { x: left / card.width * 100, y: top / card.height * 100, width: width / card.width * 100, height: height / card.height * 100 }
+}

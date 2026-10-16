@@ -42,6 +42,7 @@ beforeEach(() => {
   gens = []
   ctSaved = false
   usePreviewLayers.setState({ mask: false, maskOpacity: 0.5 })
+  usePreviewLayers.setState({ overlay: false })
   useFactionLab.setState({ factionId: null, cardTypeId: 1, mode: 'draft', model: '', drafts: {}, snapshots: {}, ctDrafts: {}, ctSnapshots: {} })
   server.use(
     http.get('/api/factions', () => HttpResponse.json([faction])),
@@ -76,7 +77,7 @@ const prompt = () => screen.getByLabelText('Assembled prompt')
 test('editing fields re-assembles the prompt without saving; generate sends that prompt', async () => {
   renderAt()
   await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color black'))
-  const color = screen.getByLabelText('Primary color')
+  const color = screen.getByRole('textbox', { name: 'Primary color' })
   await userEvent.clear(color)
   await userEvent.type(color, 'crimson')
   await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color crimson'))
@@ -89,6 +90,28 @@ test('editing fields re-assembles the prompt without saving; generate sends that
   expect(generated[0]).toMatchObject({ faction_id: 1, card_type_id: 1, mode: 'draft', prompt_override: '## Primary color\ncrimson\n\n## Faction style\ngothic' })
   expect(saved).toBeNull() // still not saved
   expect(useFactionLab.getState().snapshots[50]).toEqual({ primary_color: 'crimson', texture: 'ceramite', description: 'gothic' })
+})
+
+test('each prompt part is labelled at the side, and a part built from text you changed says custom', async () => {
+  renderAt()
+  await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color black'))
+  expect(prompt()).not.toHaveTextContent('custom')
+  const color = screen.getByRole('textbox', { name: 'Primary color' })
+  await userEvent.clear(color)
+  await userEvent.type(color, 'crimson')
+  await waitFor(() => expect(prompt()).toHaveTextContent('Primary color · custom, edited'))
+  expect(prompt()).not.toHaveTextContent('Faction style · custom')
+})
+
+test('a prompt part can be switched off so it is not shown or sent', async () => {
+  renderAt()
+  await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color black'))
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Primary color' }))
+  expect(prompt()).not.toHaveTextContent('Primary color')
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  await waitFor(() => expect(generated).toHaveLength(1))
+  expect(generated[0]).toMatchObject({ prompt_override: '## Faction style\ngothic' })
 })
 
 test('save to faction writes the experiment; reset discards it', async () => {
@@ -112,7 +135,7 @@ test('a result made with other fields can be restored into the editor', async ()
   renderAt()
   await screen.findByText('lab experiment')
   await userEvent.click(screen.getByRole('button', { name: 'Use these fields' }))
-  expect(screen.getByLabelText('Primary color')).toHaveValue('ivory')
+  expect(screen.getByRole('textbox', { name: 'Primary color' })).toHaveValue('ivory')
   expect(screen.getByLabelText('Texture')).toHaveValue('marble')
   expect(screen.getByText('current fields')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Use these fields' })).not.toBeInTheDocument()
@@ -144,7 +167,7 @@ test('result preview has an inline mask control and no overlay layer', async () 
   gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
   renderAt()
   await screen.findByRole('button', { name: 'Open Sisters × combat #41' })
-  expect(screen.queryByRole('button', { name: /Overlay/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Overlay off' })).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Mask off' }))
   expect(screen.getByTestId('mask').getAttribute('src')).toMatch(/^\/api\/card-types\/1\/template/)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // toggles don't open the lightbox
@@ -153,19 +176,19 @@ test('result preview has an inline mask control and no overlay layer', async () 
 test('card type tab: unsaved constraints feed the prompt and the snapshot; save writes the card type', async () => {
   renderAt()
   await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color black'))
-  await userEvent.click(screen.getByRole('tab', { name: 'Card type' }))
+  await userEvent.click(screen.getByRole('tab', { name: 'Image type' }))
   const constraints = screen.getByLabelText('Constraints')
   expect(constraints).toHaveValue('fill green')
   await userEvent.type(constraints, ' and keep banner')
   await waitFor(() => expect(assembled.at(-1)).toMatchObject({ card_type_constraints: 'fill green and keep banner', card_type_description: '' }))
-  expect(screen.getByRole('tab', { name: /Card type/ })).toHaveTextContent('•')
+  expect(screen.getByRole('tab', { name: /Image type/ })).toHaveTextContent('•')
   expect(ctSaved).toBe(false)
 
   await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
   await waitFor(() => expect(useFactionLab.getState().ctSnapshots[50]).toEqual({ description: '', constraints: 'fill green and keep banner' }))
 
-  await userEvent.click(screen.getByRole('button', { name: 'Save to card type' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Save to image type' }))
   await waitFor(() => expect(ctSaved).toBe(true))
 })
 
@@ -174,14 +197,14 @@ test('a finished run can be previewed as a card with an existing card of the fac
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null)
   gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
   server.use(
-    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', lower_text: '', created_at: '', updated_at: '' }])),
+    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', units: [], unit_text: '', created_at: '', updated_at: '' }])),
     http.get('/api/cards/7/assembly', () => HttpResponse.json({ image_key: 'upload', image_url: '/api/cards/7/artwork?v=a', overlay_id: 'auto', subtype_id: 0, transform: { scale: 1.5, x: 3, y: 0 }, layout: {} })),
     http.get('/api/card-type-layouts', () => HttpResponse.json([])),
     http.get('/api/subtypes', () => HttpResponse.json([])),
     http.get('/api/faction-logos', () => HttpResponse.json([])),
   )
   renderAt()
-  await userEvent.click(await screen.findByRole('tab', { name: 'Card preview' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Overlay off' }))
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ imageUrl: '/api/generations/41/image', card: expect.objectContaining({ name: 'Righteous Fury' }) })))
   await userEvent.selectOptions(screen.getByLabelText('Preview with card'), '7')
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ card: expect.objectContaining({ name: 'Purge' }), artworkUrl: '/api/cards/7/artwork?v=a', artwork: { scale: 1.5, x: 3, y: 0 } })))
@@ -233,9 +256,9 @@ test('back generation attaches a selected front and clears it when the pair chan
   await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
   await waitFor(() => expect(generated.at(-1)).toMatchObject({ front_image: { kind: 'generation', id: 9 } }))
-  await userEvent.selectOptions(screen.getByLabelText('Card Type'), '1')
+  await userEvent.selectOptions(screen.getByLabelText('Image Type'), '1')
   expect(screen.queryByRole('button', { name: 'Choose front image' })).not.toBeInTheDocument()
-  await userEvent.selectOptions(screen.getByLabelText('Card Type'), '2')
+  await userEvent.selectOptions(screen.getByLabelText('Image Type'), '2')
   expect(screen.getByRole('button', { name: 'Choose front image' })).toBeInTheDocument()
   expect(screen.queryByAltText('Selected front reference')).not.toBeInTheDocument()
   await waitFor(() => expect(assembled.at(-1)).toMatchObject({ has_front_image: false }))
@@ -254,7 +277,7 @@ test.each(['combat', 'card back'])('%s opens a 3D preview on the generated side'
   server.use(
     http.get('/api/card-types', () => HttpResponse.json([{ ...cardTypes[0], name }])),
     http.get('/api/assembly-templates', () => HttpResponse.json([])),
-    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', lower_text: '', created_at: '', updated_at: '' }])),
+    http.get('/api/cards', () => HttpResponse.json([{ id: 7, faction_id: 1, category: 'combat', name: 'Purge', level: 1, resource_cost: 2, guns: 1, shields: 0, eagles: 0, upper_text: 'u', units: [], unit_text: '', created_at: '', updated_at: '' }])),
     http.get('/api/cards/7/assembly', () => HttpResponse.json({ image_url: '/api/cards/7/artwork', subtype_id: 0, transform: { scale: 1.5, x: 3, y: 0 }, layout: {} })),
     http.get('/api/card-type-layouts', () => HttpResponse.json([])),
     http.get('/api/subtypes', () => HttpResponse.json([])),
@@ -289,7 +312,6 @@ test.each(['combat', 'card back'])('%s opens a 3D preview on the generated side'
   await userEvent.click(within(lightbox).getByRole('button', { name: `3D preview of ${title}` }))
   expect(screen.getByRole('dialog', { name: `3D preview of ${title}` })).toBeInTheDocument()
   if (side === 'back') {
-    expect(screen.queryByRole('tab', { name: 'Card preview' })).not.toBeInTheDocument()
     expect(within(lightbox).queryByRole('button', { name: 'Card preview' })).not.toBeInTheDocument()
   }
 })
@@ -302,4 +324,53 @@ test('non-combat types do not offer combat overlay or 3D preview', async () => {
   expect(screen.queryByRole('tab', { name: 'Card preview' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Card preview' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /3D preview/ })).not.toBeInTheDocument()
+})
+
+test('failed runs show their error when newest but are not kept in the history', async () => {
+  gens = [
+    { ...gen, id: 43, status: 'failed', prompt: 'p', image_path: '', error: 'openai: Invalid size' },
+    { ...gen, id: 42, status: 'failed', prompt: 'p', image_path: '', error: 'older failure' },
+    { ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' },
+  ]
+  renderAt()
+  expect(await screen.findByText('openai: Invalid size')).toBeInTheDocument()
+  expect(screen.getByText('All runs (1)')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Show run #43' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Show run #42' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Show run #41' }))
+  expect(screen.queryByText('openai: Invalid size')).not.toBeInTheDocument()
+})
+
+test('clicking a part of the prompt opens the tab with its field and focuses it', async () => {
+  server.use(http.post('/api/generate/assemble', () => HttpResponse.json({ prompt: '## Constraints\nkeep it flat\n\n## Primary color\nblack\n\n## Texture\nmetal\n\n## Rendering\n- photo', has_file: true })))
+  renderAt()
+  await waitFor(() => expect(prompt()).toHaveTextContent('## Primary color black'))
+  await userEvent.click(within(prompt()).getByRole('button', { name: 'Edit Constraints' }))
+  expect(screen.getByRole('tab', { name: /Image type/ })).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Constraints' })).toHaveFocus())
+  await userEvent.click(within(prompt()).getByRole('button', { name: 'Edit Primary color' }))
+  expect(screen.getByRole('tab', { name: 'Faction' })).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Primary color' })).toHaveFocus())
+  await userEvent.click(within(prompt()).getByRole('button', { name: 'Edit Texture' }))
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Texture' })).toHaveFocus())
+  expect(within(prompt()).queryByRole('button', { name: 'Edit Rendering' })).not.toBeInTheDocument()
+})
+
+test('"Use for faction" makes the shown image the faction default for its image type', async () => {
+  let saved: unknown = null
+  gens = [{ ...gen, id: 41, status: 'done', prompt: 'p', image_path: 'x' }]
+  server.use(http.put('/api/assembly-templates', async ({ request }) => { saved = await request.json(); return HttpResponse.json(saved as Record<string, unknown>) }))
+  renderAt()
+  await userEvent.click(await screen.findByRole('button', { name: 'Use for faction' }))
+  await waitFor(() => expect(saved).toEqual({ faction_id: 1, category: 'combat', side: 'front', image_key: 'test-41' }))
+})
+
+test('the expected time for the chosen mode comes from past runs, near the cost estimate and on a running generation', async () => {
+  server.use(http.get('/api/generate/preview', () => HttpResponse.json({ prompt: 'p', has_file: true, est_draft_usd: 0.015, est_final_usd: 0.048, est_draft_seconds: 12, est_final_seconds: 75 })))
+  gens = [{ ...gen, id: 42, mode: 'final', status: 'pending', prompt: 'p', image_path: '' }]
+  renderAt()
+  expect(await screen.findByText(/usually ~12s · uses the fields/)).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Final' }))
+  expect(await screen.findByText(/usually ~1m 15s · uses the fields/)).toBeInTheDocument()
+  expect(await screen.findByText(/elapsed · taking longer than the usual ~1m 15s/)).toBeInTheDocument() // the fixture run started long ago
 })

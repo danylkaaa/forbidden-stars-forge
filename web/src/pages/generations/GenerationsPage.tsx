@@ -20,7 +20,7 @@ import { UPLOADED_PROMPT, filtersToParams, parseFilters, type GalleryEntry, type
 
 const PER_PAGE_OPTIONS = [24, 48, 96]
 
-// Every asset — finished Faction Lab images, and your uploads — in one filterable
+// Every asset — finished AI Lab images, and your uploads — in one filterable
 // grid. Filters are kept in the URL so other pages can deep-link here.
 export default function GenerationsPage() {
   const [params, setParams] = useSearchParams()
@@ -94,7 +94,7 @@ export default function GenerationsPage() {
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="mb-1.5 text-[32px] font-medium leading-tight tracking-tight">Assets</h1>
-          <p className="m-0 text-sm text-ink/60">Every finished image from Faction Lab, and your uploads</p>
+          <p className="m-0 text-sm text-ink/60">Every finished image from AI Lab, and your uploads</p>
         </div>
         <span className="text-sm text-ink/60">{filtering ? 'Filtered total' : 'Total'}: {formatCost(total)}</span>
       </div>
@@ -115,7 +115,7 @@ export default function GenerationsPage() {
           })} />
         <MultiSelect label="Faction" selected={factionIds} onChange={(next) => setFilters({ factionIds: next })}
           options={(factions ?? []).filter((f) => dlcs.length === 0 || dlcs.includes(f.dlc)).map((f) => ({ value: f.id, label: f.name }))} />
-        <MultiSelect label="Card type" selected={cardTypeIds} onChange={(next) => setFilters({ cardTypeIds: next })}
+        <MultiSelect label="Image type" selected={cardTypeIds} onChange={(next) => setFilters({ cardTypeIds: next })}
           options={(cardTypes ?? []).map((c) => ({ value: c.id, label: c.name }))} />
         <MultiSelect label="Origin" selected={origins} onChange={(next) => setFilters({ origins: next })}
           options={[{ value: 'generated' as const, label: 'Generated' }, { value: 'uploaded' as const, label: 'Uploaded' }]} />

@@ -70,7 +70,7 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, onCl
       <div className="w-64"><Field label="Faction">{id => <SearchableSelect id={id} className={selectClass} value={factionId ?? ''} onChange={e => setFactionId(Number(e.target.value) || null)}>
         {factions.data?.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
       </SearchableSelect>}</Field></div>
-      {selectedImage && <Link to={labLink(selectedImage)} className="text-sm text-accent underline">Edit selected image in Faction Lab</Link>}
+      {selectedImage && <Link to={labLink(selectedImage)} className="text-sm text-accent underline">Edit selected image in AI Lab</Link>}
       {selected && category !== 'upgrade' && <Button disabled={save.isPending || !factionId} onClick={() => factionId && choose({ faction_id: factionId, category, side, image_key: '' })}>Clear choice</Button>}
     </div>
     <CategoryTabs value={category} onChange={setCategory} badges={counts} />
@@ -94,8 +94,8 @@ export function TemplateSettingsDialog({ initialFactionId, initialCategory, onCl
       onUploaded={key => choose({ faction_id: factionId, category, side, image_key: key })} />}
     {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
     {templates.isError && <p role="alert" className="m-0 text-sm text-danger">{templates.error.message}</p>}
-    {!images.isPending && !options.length && favoritesOnly && <p className="m-0 text-sm text-ink/60">No favourite images for this faction. Star images in Faction Lab or Generations, or turn off the filter.</p>}
-    {!images.isPending && !options.length && !favoritesOnly && <p className="m-0 text-sm text-ink/60">No finished images for this faction yet. <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">Generate one in Faction Lab</Link>.</p>}
+    {!images.isPending && !options.length && favoritesOnly && <p className="m-0 text-sm text-ink/60">No favourite images for this faction. Star images in AI Lab or Generations, or turn off the filter.</p>}
+    {!images.isPending && !options.length && !favoritesOnly && <p className="m-0 text-sm text-ink/60">No finished images for this faction yet. <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">Generate one in AI Lab</Link>.</p>}
     <ImageSelectionControls selection={imageSelection} images={options} disabled={save.isPending} />
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {factionId && options.map(image => {

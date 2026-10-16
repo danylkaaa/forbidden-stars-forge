@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFactions } from '../factions/api'
 import { cardDraft, type Card } from '../cards/model'
 import { draftInput, validateCard } from '../cards/validation'
-import { useCardAssembly, type Assembly } from './api'
+import { cardLogoScale, useCardAssembly, useCardLogoScales, type Assembly } from './api'
 import { defaultArtwork } from './artwork'
 import type { CombatCard, FramedCard } from './model'
 import { renderCard, type RenderInput } from './render'
@@ -12,6 +12,28 @@ import type { LibraryImage, useTemplateLayout } from './library'
 
 const NO_TRANSFORM = defaultArtwork()
 export type RenderResult = Awaited<ReturnType<typeof renderCard>>
+
+// Full-size card renders are heavy, so only a couple run at a time, each started from a fresh turn of the event loop
+// (a library with hundreds of cards would otherwise freeze the page). A render whose tile went away while it
+// waited is skipped.
+const MAX_RENDERS = 2
+let rendering = 0
+const waiting: (() => void)[] = []
+function startNext() {
+  while (rendering < MAX_RENDERS && waiting.length) { rendering++; waiting.shift()!() }
+}
+function queued<T>(job: () => Promise<T>, stale: () => boolean): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    waiting.push(() => {
+      setTimeout(() => {
+        const done = () => { rendering--; startNext() }
+        if (stale()) { done(); resolve(undefined); return }
+        job().then(resolve, reject).finally(done)
+      }, 0)
+    })
+    startNext()
+  })
+}
 
 // Renders whenever the (memoized) input changes; stale renders are dropped.
 export function useRenderedCard(input: RenderInput | null) {
@@ -23,7 +45,7 @@ export function useRenderedCard(input: RenderInput | null) {
     let cancelled = false
     setError(''); setRendering(!!input)
     if (!input) { setResult(null); return }
-    renderCard(input).then(value => { if (!cancelled) { setResult(value); setRendering(false) } })
+    queued(() => renderCard(input), () => cancelled).then(value => { if (!cancelled && value) { setResult(value); setRendering(false) } })
       .catch(e => { if (!cancelled) { setResult(null); setRendering(false); setError(e instanceof Error ? e.message : 'Could not render card.') } })
     return () => { cancelled = true }
   }, [input, retry])
@@ -50,21 +72,44 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const { id, card } = useCardDraft(source, localAssembly ? 'New card' : '')
   const savedAssembly = useCardAssembly(localAssembly ? '' : id)
   const assembly = { ...savedAssembly, data: localAssembly ?? savedAssembly.data }
-  // The faction logo is the same size on every card of a faction; nothing per card.
-  const logoScale = 1
+  // The faction logo is the same size on every card of a faction and category.
+  const logoScales = useCardLogoScales()
+  const logoScale = cardLogoScale(logoScales.data, card?.faction_id, card?.category)
   const localTransform = useAssembly(s => s.transforms[id])
   const transform = localTransform ?? assembly.data?.transform ?? NO_TRANSFORM
   const artworkUrl = card?.category === 'upgrade' ? null : assembly.data?.image_url || null
   const localTitleScale = useAssembly(s => s.titleScales[id])
   const titleScale = localTitleScale ?? assembly.data?.layout?.title_scale ?? 1
+  const localPadding = useAssembly(s => s.textPaddings?.[id])
+  const textPadding = localPadding ?? assembly.data?.layout?.text_padding
   const layout = useMemo(() => {
-    const base = template.layout
-    return titleScale === 1 ? base : { ...base, name: { ...base.name, size: base.name.size * titleScale } }
-  }, [template.layout, titleScale])
+    let base = template.layout
+    if (titleScale !== 1) base = { ...base, name: { ...base.name, size: base.name.size * titleScale } }
+    if (textPadding) base = {
+      ...base,
+      upper_text: { ...base.upper_text, ...(textPadding.upper_top !== undefined ? { paddingTop: textPadding.upper_top } : {}), ...(textPadding.upper_bottom !== undefined ? { paddingBottom: textPadding.upper_bottom } : {}) },
+      lower_text: { ...base.lower_text, ...(textPadding.lower_top !== undefined ? { paddingTop: textPadding.lower_top } : {}), ...(textPadding.lower_bottom !== undefined ? { paddingBottom: textPadding.lower_bottom } : {}) },
+    }
+    return base
+  }, [template.layout, titleScale, textPadding])
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
   const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !logos.isPending
     ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform }
     : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform])
-  return { input, assembly, logoScale, titleScale, transform, layout, artworkUrl }
+  return { input, assembly, logoScale, titleScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
+}
+
+// True once the element has come near the viewport (and stays true). Without IntersectionObserver it is always true.
+export function useNearViewport(margin = '800px') {
+  const [near, setNear] = useState(typeof IntersectionObserver === 'undefined')
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (near || !el) return
+    const observer = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) { setNear(true); observer.disconnect() } }, { rootMargin: margin })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [near, margin])
+  return { near, ref }
 }

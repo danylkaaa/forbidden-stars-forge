@@ -1,3 +1,4 @@
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -21,7 +22,7 @@ export function LogoCell({ factionId, name, url }: { factionId: number; name: st
     </span>
     <label className={`cursor-pointer text-xs text-accent hover:underline ${change.isPending ? 'pointer-events-none opacity-45' : ''}`}>
       {url ? 'Replace' : 'Upload'}
-      <input type="file" accept="image/png,image/jpeg" className="sr-only" aria-label={`Upload logo for ${name}`} disabled={change.isPending}
+      <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={`Upload logo for ${name}`} disabled={change.isPending}
         onChange={e => { const file = e.target.files?.[0]; if (file) change.mutate(file); e.target.value = '' }} />
     </label>
     {url && <Button className="px-2! py-1!" disabled={change.isPending} aria-label={`Remove logo for ${name}`} onClick={() => change.mutate(null)}>✕</Button>}

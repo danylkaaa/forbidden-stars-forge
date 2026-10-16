@@ -409,3 +409,12 @@ func TestGenerateBackWithFrontReference(t *testing.T) {
 		t.Fatalf("preview: %v", preview)
 	}
 }
+
+func TestMedianSeconds(t *testing.T) {
+	if got := medianSeconds([]int64{30000, 10000, 20000}); got != 20 {
+		t.Errorf("odd median = %v", got)
+	}
+	if got := medianSeconds([]int64{10000, 40000}); got != 25 {
+		t.Errorf("even median = %v", got)
+	}
+}

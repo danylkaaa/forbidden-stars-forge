@@ -17,6 +17,7 @@ import { useAssembly } from './state'
 import { useFactionLogos } from './logos'
 import { BackLogoEditor } from './BackLogoEditor'
 import { FactionNebulaSection } from './NebulaEditor'
+import { Group } from '../../components/Group'
 import { ReferenceOverlay } from './ReferenceOverlay'
 import { ReferenceField } from './ReferenceCards'
 import { useNebulaPlacementDraft } from './useNebulaPlacementDraft'
@@ -95,8 +96,7 @@ export default function BackPage() {
         </div>
       </section>
       <div className="min-w-0 space-y-5">
-        <section aria-label="Back image" className="space-y-3">
-          <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Back image</h2>
+        <Group title="Back image">
           {isUpgrade
             ? <p className="m-0 text-sm text-ink/70">The upgrade back uses one texture for every faction (<code>src/images/upgrades/upgrade-back.png</code>). It differs by the logo, the nebula in the frame and its colour.</p>
             : <>
@@ -104,39 +104,35 @@ export default function BackPage() {
               <div className="flex flex-wrap items-center gap-3 text-sm text-ink/60">
                 <Button variant="primary" onClick={() => setPicking(true)}>{selected ? 'Change back image' : 'Choose back image'}</Button>
                 {selected && <Button disabled={save.isPending} onClick={() => choose({ faction_id: factionId, category, side: 'back', image_key: '' })}>Clear choice</Button>}
-                {selectedImage && <Link to={labLink(selectedImage)} className="text-accent underline">Edit selected image in Faction Lab</Link>}
+                {selectedImage && <Link to={labLink(selectedImage)} className="text-accent underline">Edit selected image in AI Lab</Link>}
               </div>
               {selectedImage && <p className="m-0 text-sm text-ink/70">{selectedImage.name}</p>}
-              {backType && <p className="m-0 text-sm text-ink/60">Backs are generated in Faction Lab with the “{backType.name}” card type. <Link to={`/faction-lab?faction=${factionId}&card_type=${backType.id}`} className="text-accent underline">Generate a back</Link>.</p>}
+              {backType && <p className="m-0 text-sm text-ink/60">Backs are generated in AI Lab with the “{backType.name}” card type. <Link to={`/faction-lab?faction=${factionId}&card_type=${backType.id}`} className="text-accent underline">Generate a back</Link>.</p>}
             </>}
           {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
           {saveAll.isError && <p role="alert" className="m-0 text-sm text-danger">{saveAll.error.message}</p>}
-        </section>
-        {!bannered && <section aria-label="Logo size" className="space-y-3">
-            <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Logo size</h2>
+        </Group>
+        {!bannered && <Group title="Logo size">
             {selectedImage
               ? <BackLogoEditor scale={logoScale} logoUrl={factionLogo} onScale={scale => { saveAll.reset(); setLive({ key: logoKey, scale }) }} />
               : <p className="m-0 text-sm text-ink/60">Choose a back image to set the logo size.</p>}
-          </section>}
+          </Group>}
         {bannered
-          ? <section aria-label="Banner" className="space-y-2">
-            <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Banner</h2>
+          ? <Group title="Banner">
             <p className="m-0 text-sm text-ink/70">The banner on this back (the frame with its nebula, the logo and the ornament) is assembled in <Link to={`/assemble?faction=${factionId}&tab=config`} className="text-accent underline">this faction's settings</Link> and sized on the card template. Nothing about it is edited here.</p>
-          </section>
-          : <section aria-label="Nebula" className="space-y-3">
-            <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Nebula</h2>
+          </Group>
+          : <Group title="Nebula">
             <FactionNebulaSection key={`${factionId}-${category}`} factionId={factionId} scope={category} placement={placement} />
-          </section>}
-        <section aria-label="Reference" className="space-y-2">
-          <h2 className="m-0 border-b border-divider pb-1.5 font-display text-lg text-accent-300">Reference</h2>
+          </Group>}
+        <Group title="Reference">
           <ReferenceField category={category} side="back" />
-        </section>
+        </Group>
       </div>
     </div>}
     {picking && factionId && <Dialog title={`Choose ${type.label.toLowerCase()} back`} width="min(1000px,100%)" onBackdropClick={() => setPicking(false)} titleExtra={<Button onClick={() => setPicking(false)}>Close</Button>}>
       <UploadImageButton factionId={factionId} cardTypeId={types.data?.find(t => matchesCategory(t, imageCategory, 'back'))?.id} disabled={save.isPending}
         onUploaded={key => choose({ faction_id: factionId, category, side: 'back', image_key: key })} />
-      {!images.isPending && !options.length && <p className="m-0 text-sm text-ink/60">No {type.label.toLowerCase()} back images for this faction yet. {backType && <Link to={`/faction-lab?faction=${factionId}&card_type=${backType.id}`} className="text-accent underline">Generate one in Faction Lab</Link>}.</p>}
+      {!images.isPending && !options.length && <p className="m-0 text-sm text-ink/60">No {type.label.toLowerCase()} back images for this faction yet. {backType && <Link to={`/faction-lab?faction=${factionId}&card_type=${backType.id}`} className="text-accent underline">Generate one in AI Lab</Link>}.</p>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {options.map(image => <button key={image.key} type="button" aria-pressed={selected === image.key} aria-label={`Use ${image.name} as back`} disabled={save.isPending}
           onClick={() => choose({ faction_id: factionId, category, side: 'back', image_key: image.key })}

@@ -1,14 +1,19 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiSend, apiSendForm } from '../../lib/api'
 import { defaultArtwork, type ArtworkTransform } from './artwork'
 import type { Layout } from './model'
 import type { Category } from '../cards/model'
 import { DEFAULT_NEBULA, NO_PLACEMENT, type NebulaPlacement, type NebulaSettings } from './backDecor'
 // A card's own tweaks: its title size as a multiple of the card type's size.
-export type AssemblyLayout = Partial<Layout> & { title_scale?: number }
-export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number): AssemblyLayout => {
-  const { title_scale: _, ...rest } = layout
-  return scale === 1 ? rest : { ...rest, title_scale: scale }
+// A card's own margins above and below its upper and lower text, in % of the card's width (the template's apply where unset).
+export type TextPadding = { upper_top?: number; upper_bottom?: number; lower_top?: number; lower_bottom?: number }
+export type AssemblyLayout = Partial<Layout> & { title_scale?: number; text_padding?: TextPadding }
+// The layout to save with a card: its title size and text margins are kept only when they differ from the template's.
+export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number, padding?: TextPadding): AssemblyLayout => {
+  const { title_scale: _, text_padding: __, ...rest } = layout
+  const set = Object.fromEntries(Object.entries(padding ?? {}).filter(([, v]) => typeof v === 'number')) as TextPadding
+  return { ...rest, ...(scale === 1 ? {} : { title_scale: scale }), ...(Object.keys(set).length ? { text_padding: set } : {}) }
 }
 export type Assembly = { image_key: string; image_url: string; overlay_id: string; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
 export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', logo_scale: 1, transform: defaultArtwork(), layout: {} })
@@ -135,3 +140,27 @@ export function useFactionBanner(factionId: number | null | undefined): BannerSe
   return banner
 }
 export const saveFactionBanner = (factionId: number, b: BannerSettings) => apiSend<FactionBanner>('PUT', `/api/faction-banners/${factionId}`, b)
+
+// The size of a faction's logo on its cards, shared by every card of that faction and category (1 = the layout's logo box).
+export type CardLogoScale = { faction_id: number; category: Category; scale: number }
+export function useCardLogoScales() {
+  return useQuery({ queryKey: ['card-logo-scales'], queryFn: () => apiGet<CardLogoScale[]>('/api/card-logo-scales') })
+}
+export const cardLogoScale = (rows: CardLogoScale[] | undefined, factionId: number | null | undefined, category: Category | undefined) =>
+  rows?.find(r => r.faction_id === factionId && r.category === category)?.scale ?? 1
+export const saveCardLogoScale = (factionId: number, category: Category, scale: number) =>
+  apiSend<CardLogoScale>('PUT', `/api/card-logo-scales/${factionId}/${category}`, { scale })
+// The shared logo size and a setter: the new size shows at once on every card, and is saved shortly after the last change.
+export function useSharedLogoScale(factionId: number | null | undefined, category: Category | undefined): [number, (scale: number) => void] {
+  const rows = useCardLogoScales(), queryClient = useQueryClient()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const set = (scale: number) => {
+    if (!factionId || !category) return
+    queryClient.setQueryData<CardLogoScale[]>(['card-logo-scales'], old => [...(old ?? []).filter(r => !(r.faction_id === factionId && r.category === category)), { faction_id: factionId, category, scale }])
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { void saveCardLogoScale(factionId, category, scale).catch(() => queryClient.invalidateQueries({ queryKey: ['card-logo-scales'] })) }, 300)
+  }
+  return [cardLogoScale(rows.data, factionId, category), set]
+}
+

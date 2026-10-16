@@ -70,14 +70,14 @@ test('create flow posts multipart with staged file', async () => {
     }),
   )
   renderPage()
-  await userEvent.click(await screen.findByRole('button', { name: /New Card Type/ }))
-  const dialog = screen.getByRole('dialog', { name: 'New Card Type' })
+  await userEvent.click(await screen.findByRole('button', { name: /New Image Type/ }))
+  const dialog = screen.getByRole('dialog', { name: 'New Image Type' })
   await userEvent.type(within(dialog).getByLabelText('Name'), 'schema')
   await userEvent.type(within(dialog).getByLabelText('Constraints'), 'blue grid')
   const file = new File(['png'], 'schema.png', { type: 'image/png' })
   await userEvent.upload(within(dialog).getByLabelText(/Template image/), file)
   expect(await within(dialog).findByText(/deviates from 816:1104/)).toBeInTheDocument() // FakeImage is 830x1080
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Save Card Type' }))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save Image Type' }))
   await screen.findByText('combat') // dialog closed
   expect(gotName).toBe('schema')
   // NOTE: vitest's jsdom environment drops the File.name when a FormData
@@ -95,8 +95,8 @@ test('create flow posts multipart with staged file', async () => {
 test('staged file makes form dirty; discard clears it', async () => {
   renderPage()
   await screen.findByText('combat')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
-  const dialog = screen.getByRole('dialog', { name: 'Edit Card Type' })
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
   expect(within(dialog).queryByText('Unsaved changes')).not.toBeInTheDocument()
   const file = new File(['png'], 'new.png', { type: 'image/png' })
   await userEvent.upload(within(dialog).getByLabelText(/Template image/), file)
@@ -110,8 +110,8 @@ test('upload-to-openai disabled while template staged; works in clean edit mode'
   server.use(http.post('/api/card-types/1/upload-to-openai', () => { uploaded = true; return HttpResponse.json({ openai_file_id: 'file-new' }) }))
   renderPage()
   await screen.findByText('combat')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
-  const dialog = screen.getByRole('dialog', { name: 'Edit Card Type' })
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
   const uploadBtn = within(dialog).getByRole('button', { name: /Re-upload|Upload to OpenAI/ })
   expect(uploadBtn).toBeEnabled()
   const file = new File(['png'], 'new.png', { type: 'image/png' })
@@ -126,8 +126,8 @@ test('upload-to-openai failure shows alert', async () => {
   server.use(http.post('/api/card-types/1/upload-to-openai', () => HttpResponse.json({ error: 'openai: invalid file (request id req_1)' }, { status: 502 })))
   renderPage()
   await screen.findByText('combat')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
-  const dialog = screen.getByRole('dialog', { name: 'Edit Card Type' })
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  const dialog = screen.getByRole('dialog', { name: 'Edit Image Type' })
   await userEvent.click(within(dialog).getByRole('button', { name: /Re-upload|Upload to OpenAI/ }))
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(/invalid file/)
 })
@@ -137,7 +137,7 @@ test('delete failure shows alert in confirm dialog', async () => {
   renderPage()
   await screen.findByText('relic')
   await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0])
-  await userEvent.click(screen.getByRole('button', { name: 'Delete card type' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete image type' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('boom')
 })
 
@@ -156,8 +156,8 @@ test('undecodable file shows error, revokes blob url, stages nothing', async () 
     static revokeObjectURL = revoke
   })
   renderPage()
-  await userEvent.click(await screen.findByRole('button', { name: /New Card Type/ }))
-  const dialog = screen.getByRole('dialog', { name: 'New Card Type' })
+  await userEvent.click(await screen.findByRole('button', { name: /New Image Type/ }))
+  const dialog = screen.getByRole('dialog', { name: 'New Image Type' })
   const file = new File(['junk'], 'broken.png', { type: 'image/png' })
   await userEvent.upload(within(dialog).getByLabelText(/Template image/), file)
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(/could not be read as an image/)
@@ -177,7 +177,7 @@ test('edit constraints with Claude: sends draft fields + conversation, accept up
   )
   renderPage()
   await screen.findByText('combat')
-  await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
   await userEvent.click(screen.getByRole('button', { name: 'Edit constraints with Claude' }))
   const panel = screen.getByRole('region', { name: 'Claude assistant: constraints' })
   await userEvent.type(within(panel).getByRole('textbox'), 'keep the banner')
@@ -192,9 +192,13 @@ test('edit constraints with Claude: sends draft fields + conversation, accept up
   expect(screen.queryByRole('region', { name: /Claude assistant/ })).not.toBeInTheDocument()
 })
 
-test('card type name links to its generations', async () => {
+test('clicking a row opens its form; there is no link to the assets library', async () => {
   renderPage()
-  expect(await screen.findByRole('link', { name: 'combat' })).toHaveAttribute('href', '/generations?card_type=1')
+  expect(await screen.findByText('combat')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'combat' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByText('combat'))
+  expect(screen.getByRole('dialog', { name: 'Edit Image Type' })).toBeInTheDocument()
 })
 
 test('rows show a small template thumbnail; rows without a template show none', async () => {
@@ -209,4 +213,18 @@ test('built-in card types cannot be deleted', async () => {
   await screen.findByText('relic')
   expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1)
   expect(screen.getByText('built-in')).toBeInTheDocument()
+})
+
+test('clicking outside the form asks before discarding changes', async () => {
+  renderPage()
+  await screen.findByText('combat')
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  expect(screen.queryByRole('dialog', { name: 'Edit Image Type' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getAllByRole('row', { name: /^Edit / })[0])
+  await userEvent.type(within(screen.getByRole('dialog', { name: 'Edit Image Type' })).getByLabelText('Description'), 'X')
+  await userEvent.click(screen.getByTestId('dialog-backdrop'))
+  expect(screen.getByRole('dialog', { name: 'Edit Image Type' })).toBeInTheDocument()
+  const confirm = screen.getAllByRole('dialog').at(-1)!
+  expect(confirm).toHaveAccessibleName(/Discard/)
 })

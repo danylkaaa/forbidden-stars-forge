@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { IMAGE_ACCEPT } from '../../lib/imageUpload'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
-import { Field } from '../../components/Field'
+import { Group } from '../../components/Group'
 import { useCardTypes } from '../card-types/api'
 import { DEFAULT_BANNER, removeNebulaPicture, saveFactionBanner, saveNebula, useNebula, uploadNebulaPicture, useFactionBanner, useFactionColor, useNebulaPicture, type BannerSettings } from './api'
 import { useNebulaPlacementDraft } from './useNebulaPlacementDraft'
@@ -14,6 +15,16 @@ import { useFactionLogos } from './logos'
 import { UploadImageButton } from './UploadImageButton'
 
 const SIZE = { width: 612, height: 828 }
+
+// A short slider: its name, the slider, and its current value (with what it is a share of, when it is one).
+function Slider({ label, hint, value, min, max, step = 1, shown, onChange }: { label: string; hint?: string; value: number; min: number; max: number; step?: number; shown: string; onChange: (value: number) => void }) {
+  const id = useId()
+  return <div className="grid grid-cols-[5rem_minmax(0,14rem)_auto] items-center gap-x-3 text-sm">
+    <label htmlFor={id} className="text-ink/80">{label}</label>
+    <input id={id} type="range" min={min} max={max} step={step} value={value} className="w-full accent-[var(--color-accent)]" onChange={e => onChange(Number(e.target.value))} />
+    <span className="whitespace-nowrap text-xs text-ink/60"><span className="font-mono text-ink/80">{shown}</span>{hint ? ` ${hint}` : ''}</span>
+  </div>
+}
 
 // Assembles a faction's banner: the logo's size inside the frame, and the ornament over the
 // frame's edges (chosen or uploaded; its place and size). Combat and upgrade backs draw the
@@ -67,7 +78,7 @@ export function BannerEditor({ factionId }: { factionId: number }) {
   const moveElement = !!element && moves === 'element'
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return <div className="flex flex-wrap gap-5 pt-3">
-    <div className="w-full shrink-0 sm:w-[min(300px,calc((100vh_-_200px)*0.739))]">
+    <div className="w-full shrink-0 sm:w-[min(460px,calc((100vh_-_150px)*0.739))]">
       <div className={`relative touch-none select-none overflow-hidden rounded-lg ring-1 ring-divider cursor-grab active:cursor-grabbing`} aria-label="Banner preview"
         onPointerDown={e => { if (e.button !== 0) return; e.currentTarget.setPointerCapture?.(e.pointerId); drag.current = { x: e.clientX, y: e.clientY } }}
         onPointerMove={e => {
@@ -82,53 +93,61 @@ export function BannerEditor({ factionId }: { factionId: number }) {
         {preview ? <img src={preview} alt="Banner" draggable={false} className="block aspect-[612/828] w-full object-cover" /> : <div className="aspect-[612/828] w-full bg-black/30" />}
       </div>
     </div>
-    <div className="min-w-64 flex-1 space-y-3">
-      <Field label={`Logo size (${pct(banner.logo_scale)} of the banner's width)`}>{id => <input id={id} type="range" min="5" max="100" step="1" value={Math.round(banner.logo_scale * 100)} className="w-full accent-[var(--color-accent)]"
-        onChange={e => change({ logo_scale: Number(e.target.value) / 100 })} />}</Field>
-      {!logoUrl && <p className="m-0 text-xs text-ink/60">This faction has no logo yet; upload it above.</p>}
-      <div className="flex flex-wrap items-center gap-3 text-sm text-ink/60">
-        {element && <img src={element.url} alt="Banner element" className="h-12 max-w-40 rounded border border-divider bg-black/30 object-contain" />}
-        <Button onClick={() => setPicking(true)}>{element ? 'Change element' : 'Choose element'}</Button>
-        {element && <Button onClick={() => change({ element_key: '' })}>Remove element</Button>}
-      </div>
-      {element && <>
-        <p className="m-0 text-sm text-ink/70">Drag the preview to move the element, or use the sliders.</p>
-        <Field label={`Element across (${pct(banner.element_x)} of the banner)`}>{id => <input id={id} type="range" min="-50" max="50" step="1" value={Math.round(banner.element_x * 100)} className="w-full accent-[var(--color-accent)]"
-          onChange={e => change({ element_x: Number(e.target.value) / 100 })} />}</Field>
-        <Field label={`Element down (${pct(banner.element_y)} of the banner)`}>{id => <input id={id} type="range" min="-30" max="30" step="1" value={Math.round(banner.element_y * 100)} className="w-full accent-[var(--color-accent)]"
-          onChange={e => change({ element_y: Number(e.target.value) / 100 })} />}</Field>
-        <Field label={`Element size (${pct(banner.element_scale)} of the banner's width)`}>{id => <input id={id} type="range" min="10" max="100" step="1" value={Math.round(banner.element_scale * 100)} className="w-full accent-[var(--color-accent)]"
-          onChange={e => change({ element_scale: Number(e.target.value) / 100 })} />}</Field>
-        <Button onClick={() => change({ element_x: DEFAULT_BANNER.element_x, element_y: DEFAULT_BANNER.element_y, element_scale: DEFAULT_BANNER.element_scale })}>Reset element position</Button>
-      </>}
-      <div className="space-y-2 rounded-md border border-divider p-3">
-        <p className="m-0 text-sm font-medium text-ink/80">Nebula in the frame</p>
+    <div className="min-w-64 max-w-xl flex-1 space-y-4">
+      <Group title="Logo">
+        <Slider label="Size" hint="of the banner's width" value={Math.round(banner.logo_scale * 100)} min={5} max={100} shown={pct(banner.logo_scale)}
+          onChange={v => change({ logo_scale: v / 100 })} />
+        {!logoUrl && <p className="m-0 text-xs text-ink/60">This faction has no logo yet; upload it above.</p>}
+      </Group>
+
+      <Group title="Element">
+        <div className="flex flex-wrap items-center gap-3">
+          {element && <img src={element.url} alt="Banner element" className="h-12 max-w-40 rounded border border-divider bg-black/30 object-contain" />}
+          <Button onClick={() => setPicking(true)}>{element ? 'Change element' : 'Choose element'}</Button>
+          {element && <Button onClick={() => change({ element_key: '' })}>Remove element</Button>}
+        </div>
+        {element ? <>
+          <p className="m-0 text-xs text-ink/60">Drag the preview to move the element, or use the sliders.</p>
+          <Slider label="Across" hint="of the banner" value={Math.round(banner.element_x * 100)} min={-50} max={50} shown={pct(banner.element_x)}
+            onChange={v => change({ element_x: v / 100 })} />
+          <Slider label="Down" hint="of the banner" value={Math.round(banner.element_y * 100)} min={-30} max={30} shown={pct(banner.element_y)}
+            onChange={v => change({ element_y: v / 100 })} />
+          <Slider label="Size" hint="of the banner's width" value={Math.round(banner.element_scale * 100)} min={10} max={100} shown={pct(banner.element_scale)}
+            onChange={v => change({ element_scale: v / 100 })} />
+          <div><Button onClick={() => change({ element_x: DEFAULT_BANNER.element_x, element_y: DEFAULT_BANNER.element_y, element_scale: DEFAULT_BANNER.element_scale })}>Reset element position</Button></div>
+        </> : <p className="m-0 text-xs text-ink/60">No element chosen.</p>}
+      </Group>
+
+      <Group title="Nebula">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">Colour
             <input type="color" aria-label="Nebula colour" value={nebulaDraft.value.color || factionColor || '#6a3a8a'} onChange={e => nebulaDraft.change({ color: e.target.value })} className="h-8 w-12 cursor-pointer" /></label>
           {nebulaDraft.value.color ? <Button onClick={() => nebulaDraft.change({ color: '' })}>Use faction colour</Button> : <span className="text-xs text-ink/50">The faction's colour</span>}
         </div>
-        <Field label={`Nebula brightness (${Math.round(nebulaDraft.value.density * 100)}%)`}>{id => <input id={id} type="range" min="20" max="200" step="5" value={Math.round(nebulaDraft.value.density * 100)} className="w-full accent-[var(--color-accent)]"
-          onChange={e => nebulaDraft.change({ density: Number(e.target.value) / 100 })} />}</Field>
-        {element && <div role="tablist" aria-label="Drag moves" className="inline-flex overflow-hidden rounded-md border border-divider text-sm">
-          {([['Element', 'element'], ['Nebula', 'nebula']] as const).map(([name, value]) => <button key={value} type="button" role="tab" aria-selected={moves === value} onClick={() => setMoves(value)}
-            className={`cursor-pointer border-0 px-3 py-1 ${moves === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
-        </div>}
-        <p className="m-0 text-xs text-ink/60">{element ? 'The Nebula tab makes dragging move the nebula instead of the element. ' : 'Drag the preview to move the nebula. '}</p>
-        <Field label={`Nebula rotation (${Math.round(placement.value.rotation)}°)`}>{id => <input id={id} type="range" min="-180" max="180" step="1" value={Math.round(placement.value.rotation)} className="w-full accent-[var(--color-accent)]"
-          onChange={e => placement.change({ rotation: Number(e.target.value) })} />}</Field>
+        <Slider label="Brightness" value={Math.round(nebulaDraft.value.density * 100)} min={20} max={200} step={5} shown={`${Math.round(nebulaDraft.value.density * 100)}%`}
+          onChange={v => nebulaDraft.change({ density: v / 100 })} />
+        <Slider label="Rotation" value={Math.round(placement.value.rotation)} min={-180} max={180} shown={`${Math.round(placement.value.rotation)}°`}
+          onChange={v => placement.change({ rotation: v })} />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+          {element && <div role="tablist" aria-label="Drag moves" className="inline-flex overflow-hidden rounded-md border border-divider">
+            {([['Element', 'element'], ['Nebula', 'nebula']] as const).map(([name, value]) => <button key={value} type="button" role="tab" aria-selected={moves === value} onClick={() => setMoves(value)}
+              className={`cursor-pointer border-0 px-3 py-1 ${moves === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{name}</button>)}
+          </div>}
+          <span className="text-xs text-ink/60">{element ? 'Choose what dragging the preview moves.' : 'Drag the preview to move the nebula.'}</span>
+        </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Button onClick={placement.randomize}>Randomize nebula</Button>
           <label className={`cursor-pointer text-accent underline ${picturing.isPending ? 'pointer-events-none opacity-45' : ''}`}>{picture ? 'Replace nebula picture' : 'Upload nebula picture'}
-            <input type="file" accept="image/png,image/jpeg" aria-label="Upload nebula picture" className="sr-only" disabled={picturing.isPending}
+            <input type="file" accept={IMAGE_ACCEPT} aria-label="Upload nebula picture" className="sr-only" disabled={picturing.isPending}
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) picturing.mutate(f) }} /></label>
           {picture && <button type="button" disabled={picturing.isPending} onClick={() => picturing.mutate(null)} className="cursor-pointer border-0 bg-transparent p-0 text-ink/60 underline">Use the default picture</button>}
         </div>
+        <p className="m-0 text-xs text-ink/50">The picture is shared by every faction (it is recoloured for each); its position and rotation are this faction's.</p>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!savedNebula.as_template} disabled={asTemplate.isPending} onChange={e => asTemplate.mutate(e.target.checked)} className="accent-[var(--color-accent)]" />Use the nebula as the card template where none is chosen</label>
         {asTemplate.isError && <p role="alert" className="m-0 text-sm text-danger">{asTemplate.error.message}</p>}
-        <p className="m-0 text-xs text-ink/50">The nebula picture is shared by every faction (it is recoloured for each); its position and rotation are this faction's.</p>
         {picturing.isError && <p role="alert" className="m-0 text-sm text-danger">{picturing.error.message}</p>}
-      </div>
+      </Group>
+
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save banner'}</Button>
         <Button disabled={!dirty || save.isPending} onClick={() => { save.reset(); setDraft(null); placement.discard(); nebulaDraft.discard() }}>Discard</Button>
@@ -139,7 +158,7 @@ export function BannerEditor({ factionId }: { factionId: number }) {
     </div>
     {picking && <Dialog title="Choose banner element" width="min(1000px,100%)" onBackdropClick={() => setPicking(false)} titleExtra={<Button onClick={() => setPicking(false)}>Close</Button>}>
       <UploadImageButton factionId={factionId} cardTypeId={elementType?.id} onUploaded={key => { change({ element_key: key }); setPicking(false) }} />
-      {!images.isPending && !options.length && <p className="m-0 text-sm text-ink/60">No elements for this faction yet. {elementType && <Link to={`/faction-lab?faction=${factionId}&card_type=${elementType.id}`} className="text-accent underline">Generate one in Faction Lab</Link>} (the “back element” card type) or upload your own.</p>}
+      {!images.isPending && !options.length && <p className="m-0 text-sm text-ink/60">No elements for this faction yet. {elementType && <Link to={`/faction-lab?faction=${factionId}&card_type=${elementType.id}`} className="text-accent underline">Generate one in AI Lab</Link>} (the “back element” card type) or upload your own.</p>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {options.map(image => <button key={image.key} type="button" aria-pressed={banner.element_key === image.key} aria-label={`Use ${image.name} as element`}
           onClick={() => { change({ element_key: image.key }); setPicking(false) }}

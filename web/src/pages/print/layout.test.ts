@@ -1,4 +1,4 @@
-import { backSlot, cutGuides, slotRect, mirrorPage, DEFAULT_SETTINGS, gridFor, reconcile, reflow, swapSlots } from './layout'
+import { backSlot, besideSlots, pairOfSlot, pairsPerRow, cutGuides, slotRect, mirrorPage, DEFAULT_SETTINGS, gridFor, reconcile, reflow, swapSlots } from './layout'
 
 test('A4 portrait fits 3 × 3 cards of 63 × 88 mm', () => {
   const g = gridFor(DEFAULT_SETTINGS)
@@ -57,4 +57,20 @@ test('extended guides run edge to edge along cut edges of occupied columns and r
   const lines = cutGuides(g, DEFAULT_SETTINGS, [1, null, null, null, null, null, null, null, null])
   expect(lines).toHaveLength(4)
   expect(lines.filter(l => l.x1 === l.x2).every(l => l.y1 === 0 && l.y2 === 297)).toBe(true)
+})
+
+test('reconcile places copies of a card: each listing is one place', () => {
+  expect(reconcile([], [1, 1, 2], 4)).toEqual([[1, 1, 2, null]])
+  const pages = [[1, 2, 1, null]]
+  expect(reconcile(pages, [1, 1, 1, 2], 4)).toEqual([[1, 2, 1, 1]])
+  expect(reconcile(pages, [1, 2], 4)).toEqual([[1, 2, null, null]])
+  expect(reconcile(pages, [2, 2, 1, 1], 4)).toEqual([[1, 2, 1, 2]])
+})
+
+test('one-sided printing puts each back right of its front', () => {
+  expect(pairsPerRow(3)).toBe(1)
+  const sheet = besideSlots([7, 8, null], 4, 2)
+  expect(sheet).toEqual([{ id: 7, back: false }, { id: 7, back: true }, { id: 8, back: false }, { id: 8, back: true }, null, null, null, null])
+  expect(besideSlots([1, 2, 3], 4, 2).slice(4, 6)).toEqual([{ id: 3, back: false }, { id: 3, back: true }])
+  expect([0, 1, 2, 3, 4, 5].map(s => pairOfSlot(s, 5))).toEqual([0, 0, 1, 1, null, 2])
 })
