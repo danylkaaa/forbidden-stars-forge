@@ -126,3 +126,11 @@ test('a number is never separated from the icon after it', () => {
   // Without a number the icon wraps alone as before.
   expect(text(5, 'lose [GUN]')).toEqual(['lose ', '#'])
 })
+test('lines after a typed break start a new paragraph, wrapped lines do not', async () => {
+  const { measureBlock } = await import('./render')
+  const ctx = { font: '', measureText: (t: string) => ({ width: t.length * 5, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }) } as unknown as CanvasRenderingContext2D
+  const p = { x: 0, y: 0, width: 1000, height: 10, size: 10, lineHeight: 1.2, color: '#000', font: 'rules' as const }
+  const one = measureBlock(ctx, 'a\nb', p, 'serif', 100, 100), none = measureBlock(ctx, 'a b', { ...p, width: 1 }, 'serif', 100, 100)
+  expect(one.offsets[1]).toBeGreaterThan(one.lineHeight)
+  expect(none.offsets[1]).toBe(none.lineHeight)
+})

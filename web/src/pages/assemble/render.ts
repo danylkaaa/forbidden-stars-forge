@@ -74,6 +74,8 @@ type Atom = Run & { width: number }
 function font(run: Run, size: number, family: string) { return `${run.italic ? 'italic ' : ''}${run.bold ? 'bold ' : ''}${size}px ${run.icon ? 'CardSymbols' : family}, CardEvent, serif` }
 // Measure the same runs we paint: symbols occupy one glyph and stay intact
 // during wrapping. Newlines and long words are supported without squeezing.
+// Lines that begin a new paragraph (after a typed line break), as opposed to a wrapped continuation.
+const paragraphStarts = new WeakSet<Atom[]>()
 export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => number): Atom[][] {
   const lines: Atom[][] = [[]]
   let width = 0
@@ -94,7 +96,7 @@ export function wrapText(runs: Run[], maxWidth: number, measure: (run: Run) => n
   for (const run of runs) {
     const parts = run.icon ? [run.text] : run.text.split(/(\n|[^\S\n]+|[^\s]+)/g).filter(Boolean)
     for (const text of parts) {
-      if (text === '\n') { newline(); dropped = null; continue }
+      if (text === '\n') { newline(); paragraphStarts.add(lines.at(-1)!); dropped = null; continue }
       const word = { ...run, text }
       const wordWidth = measure(word)
       if (/^\s+$/.test(text) && width === 0) continue
@@ -145,7 +147,9 @@ export function paintRun(ctx: CanvasRenderingContext2D, run: Run, x: number, bas
     ctx.fillText(run.text, x, baseline); ctx.restore()
   } else ctx.fillText(run.text, x, baseline)
 }
-function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number) {
+// Extra space between paragraphs, as a fraction of the font size.
+const PARAGRAPH_GAP = 0.4
+export function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number) {
   const size = p.size * h / 100
   const lineHeight = size * p.lineHeight
   const measure = (run: Run) => { ctx.font = font(run, size, family); return run.dice ? size * .9 : ctx.measureText(run.text).width }
@@ -162,12 +166,15 @@ function measureBlock(ctx: CanvasRenderingContext2D, text: string, p: Placement,
       descent = Math.max(descent, metrics.actualBoundingBoxDescent ?? size * .18)
     }
   }
-  const height = text.trim() ? (lines.length - 1) * lineHeight + ascent + descent : 0
-  return { size, lineHeight, lines, ascent, height }
+  // Each paragraph after the first is set apart by a little extra space.
+  let paragraphs = 0
+  const offsets = lines.map((line, i) => { if (i > 0 && paragraphStarts.has(line)) paragraphs++; return i * lineHeight + paragraphs * size * PARAGRAPH_GAP })
+  const height = text.trim() ? offsets.at(-1)! + ascent + descent : 0
+  return { size, lineHeight, lines, offsets, ascent, height }
 }
 // Text is left aligned unless the caller (the event card's label) asks otherwise.
 function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, family: string, w: number, h: number, align: 'left' | 'center' | 'digit' = 'left'): boolean {
-  const { size, lineHeight, lines, ascent, height: textHeight } = measureBlock(ctx, text, p, family, w, h)
+  const { size, lines, offsets, ascent, height: textHeight } = measureBlock(ctx, text, p, family, w, h)
   ctx.fillStyle = p.color
   // Centre visible glyph bounds, including inline icons, rather than the font's em box.
   const top = p.y * h / 100 + (p.verticalAlign === 'center' ? Math.max(0, (p.height * h / 100 - textHeight) / 2) : 0)
@@ -191,7 +198,7 @@ function paintText(ctx: CanvasRenderingContext2D, text: string, p: Placement, fa
     }
     for (const atom of line) {
       ctx.font = font(atom, size, family)
-      paintRun(ctx, atom, x, top + ascent + i * lineHeight, size)
+      paintRun(ctx, atom, x, top + ascent + offsets[i], size)
       x += atom.width
     }
   }
