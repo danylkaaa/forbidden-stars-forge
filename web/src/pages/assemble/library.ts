@@ -8,6 +8,7 @@ import { nebulaTemplateUrl } from './backDecor'
 import { UPGRADE_BACK_KEY, UPGRADE_FRONT_KEY, upgradeBackUrl, upgradeFrontUrl } from './upgradeBack'
 import { maskedImageUrl, useImageMasks } from '../../lib/imageMasks'
 import { useAssemblyTemplates, useBackLogoScale, useCardTypeLayouts, useFactionBanner, useDrawnNebula, useFactionColor, useNebulaPicture, type Side } from './api'
+import { withAdjust } from './adjustedImage'
 import { LIBRARY_TABS, assemblyLayout } from './model'
 import type { ImageRef } from '../../lib/favorites'
 
@@ -83,11 +84,20 @@ export function useTemplate(factionId: number | null, category: Category, side: 
   const imageCategory = side === 'back' && category === 'schema' ? 'combat' : category
   const saved = templates.data?.find(t => t.faction_id === factionId && t.category === category && (t.side ?? 'front') === side)
   // Upgrade cards use bundled pictures, the same for every faction.
-  const key = category === 'upgrade' ? (side === 'back' ? UPGRADE_BACK_KEY : UPGRADE_FRONT_KEY) : templates.data?.find(t => t.faction_id === factionId && t.category === imageCategory && (t.side ?? 'front') === side)?.image_key
+  const chosen = templates.data?.find(t => t.faction_id === factionId && t.category === imageCategory && (t.side ?? 'front') === side)
+  const key = category === 'upgrade' ? (side === 'back' ? UPGRADE_BACK_KEY : UPGRADE_FRONT_KEY) : chosen?.image_key
+  const adjust = category === 'upgrade' ? undefined : chosen?.adjust
   const source = key === UPGRADE_BACK_KEY ? BUNDLED_UPGRADE_BACK : key === UPGRADE_FRONT_KEY ? UPGRADE_FRONT_IMAGE : key ? images.data.find(i => i.key === key) : undefined
   // Cards are made from the image with its hiding mask applied (what it hides shows the artwork through).
   const masks = useImageMasks()
-  const masked = useMemo(() => source?.generationId ? { ...source, url: maskedImageUrl(source.url, source.generationId, masks.data) } : source, [source, masks.data])
+  // The faction's tone and colour correction of the image rides along in its address.
+  const masked = useMemo(() => {
+    if (!source) return source
+    const url = withAdjust(source.generationId ? maskedImageUrl(source.url, source.generationId, masks.data) : source.url, adjust)
+    return url === source.url ? source : { ...source, url }
+  // The correction is compared by value: the saved list is a new object after every refetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, masks.data, JSON.stringify(adjust)])
   const nebula = useNebulaTemplate(factionId, side === 'front' && !source && !templates.isPending && !images.isPending)
   // Combat and upgrade backs show the faction's banner: its logo size (a share of the banner) and its ornament.
   // The event back keeps its own logo size, a share of the card.

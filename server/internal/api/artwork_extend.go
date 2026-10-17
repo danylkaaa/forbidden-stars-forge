@@ -128,7 +128,7 @@ func (h *ArtworkExtendHandler) redo(w http.ResponseWriter, r *http.Request, id i
 	old := a.ArtworkPath
 	a.ArtworkPath, a.ImageKey = path, "upload"
 	if !keepPlace {
-		a.Transform = store.ArtworkTransform{Scale: 1, Adjust: a.Transform.Adjust}
+		a.Transform = store.ArtworkTransform{Scale: 1, Adjust: a.Transform.Adjust, Flip: a.Transform.Flip, Rotate: a.Transform.Rotate}
 	}
 	saved, err := h.Cards.Store.SaveAssembly(a)
 	if err != nil {

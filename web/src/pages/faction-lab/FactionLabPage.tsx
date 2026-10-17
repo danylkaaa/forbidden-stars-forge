@@ -21,6 +21,7 @@ import { GenerationPreview3D } from '../assemble/GenerationPreview3D'
 import { BackFlatPreview } from '../assemble/BackLogoPreview'
 import { Tag } from '../../components/Tag'
 import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, useCardTypes, type CardType } from '../card-types/api'
+import { useFactionColors } from '../assemble/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
 import { useElapsedMs } from '../../lib/useElapsedMs'
 import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
@@ -61,6 +62,7 @@ export default function FactionLabPage() {
   const [params] = useSearchParams()
   const lab = useFactionLab()
   const { data: factions } = useFactions()
+  const { data: colors } = useFactionColors()
   const { data: cardTypes } = useCardTypes()
   const { data: gens, isPending: gensLoading, error: gensError } = useGenerations()
   const [frontKey, setFrontKey] = useState('')
@@ -246,7 +248,7 @@ export default function FactionLabPage() {
                 <SearchableSelect id={id} className={selectClass} value={lab.factionId ?? ''}
                   onChange={(e) => { lab.set({ factionId: e.target.value ? Number(e.target.value) : null }); setAssistOpen(false); setSelectedId(null) }}>
                   <option value="">Select…</option>
-                  {factions?.map((f) => <option key={f.id} value={f.id}>{f.name}{lab.drafts[f.id] && !sameFields(lab.drafts[f.id], savedFields(f)) ? ' •' : ''}</option>)}
+                  {factions?.map((f) => <option key={f.id} value={f.id} data-color={colors?.find(c => c.faction_id === f.id)?.color}>{f.name}{lab.drafts[f.id] && !sameFields(lab.drafts[f.id], savedFields(f)) ? ' •' : ''}</option>)}
                 </SearchableSelect>
               )}
             </Field>
@@ -255,7 +257,7 @@ export default function FactionLabPage() {
                 <SearchableSelect id={id} className={selectClass} value={lab.cardTypeId ?? ''}
                   onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
                   <option value="">Select…</option>
-                  {cardTypes?.filter((c) => c.name !== 'upgrade').map((c) => <option key={c.id} value={c.id}>{c.openai_file_id ? c.name : c.no_template ? `${c.name} (no template)` : `${c.name} (no file)`}</option>)}
+                  {cardTypes?.filter((c) => c.name !== 'upgrade').map((c) => <option key={c.id} value={c.id}>{c.openai_file_id || c.no_template ? c.name : `${c.name} (no file)`}</option>)}
                 </SearchableSelect>
               )}
             </Field>

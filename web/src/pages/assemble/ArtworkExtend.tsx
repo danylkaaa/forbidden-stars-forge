@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { IconButton } from '../../components/IconButton'
+import { ExpandIcon, SparkleIcon } from '../../components/icons'
 import { Button } from '../../components/Button'
 import { formatCost } from '../../lib/format'
 import { enhanceArtwork, extendArtwork, type Assembly } from './api'
@@ -19,10 +21,10 @@ export function ArtworkExtend({ cardId, ratio, disabled, onDone }: { cardId: str
   const toggle = (m: Mode) => { run.reset(); setMode(mode === m ? null : m) }
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
-      <Button disabled={disabled || run.isPending} onClick={() => toggle('extend')} aria-expanded={mode === 'extend'}
-        title="Ask the AI to paint more around the artwork, so it fills the artwork area">Extend with AI</Button>
-      <Button disabled={disabled || run.isPending} onClick={() => toggle('enhance')} aria-expanded={mode === 'enhance'}
-        title="Ask the AI to render the artwork at a higher resolution, with more detail and fewer flaws">Improve quality</Button>
+      <IconButton label="Extend with AI" icon={<ExpandIcon />} disabled={disabled || run.isPending} onClick={() => toggle('extend')} aria-expanded={mode === 'extend'}
+        title="Extend with AI: ask the AI to paint more around the artwork, so it fills the artwork area" />
+      <IconButton label="Improve quality" icon={<SparkleIcon />} disabled={disabled || run.isPending} onClick={() => toggle('enhance')} aria-expanded={mode === 'enhance'}
+        title="Improve quality: ask the AI to render the artwork at a higher resolution, with more detail and fewer flaws" />
       {run.isSuccess && <span role="status" className="text-xs text-ink/60">{run.variables === 'extend' ? 'Artwork extended' : 'Artwork improved'} ({formatCost(run.data.cost_usd)}).</span>}
     </div>
     {mode && <div className="space-y-2 rounded-md border border-divider p-2.5">

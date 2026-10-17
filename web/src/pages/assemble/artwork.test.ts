@@ -37,3 +37,34 @@ test('neutral adjustments leave pixels alone and each control moves them the exp
   expect([levels[0], levels[4]]).toEqual([255, 0])
   expect(isNeutralAdjust({ ...NEUTRAL_ADJUST, gamma: 1.2 })).toBe(false)
 })
+
+test('colour, light and vignette controls, and adjustments saved before they existed', async () => {
+  const { adjustPixels } = await import('./artworkAdjust')
+  const { NEUTRAL_ADJUST, isNeutralAdjust } = await import('./artwork')
+  const px = () => new Uint8ClampedArray([200, 100, 50, 255, 10, 10, 10, 255])
+  const warm = px(); adjustPixels(warm, 2, 1, { ...NEUTRAL_ADJUST, temperature: 60 })
+  expect(warm[0]).toBeGreaterThan(200); expect(warm[2]).toBeLessThan(50)
+  const hue = px(); adjustPixels(hue, 2, 1, { ...NEUTRAL_ADJUST, hue: 180 })
+  expect(hue[2]).toBeGreaterThan(hue[0]) // a red-orange pixel turns blue-ish
+  const lifted = px(); adjustPixels(lifted, 2, 1, { ...NEUTRAL_ADJUST, shadows: 100 })
+  expect(lifted[4]).toBeGreaterThan(10); expect(lifted[0]).toBeGreaterThanOrEqual(200)
+  const dark = new Uint8ClampedArray(3 * 3 * 4).fill(200); adjustPixels(dark, 3, 3, { ...NEUTRAL_ADJUST, vignette: -100 })
+  expect(dark[16]).toBe(200); expect(dark[0]).toBeLessThan(200) // centre kept, corner darkened
+  // Values saved before the new controls existed read as unchanged.
+  const old = { brightness: 0, contrast: 0, saturation: 0, sharpness: 0, black: 0, white: 255, gamma: 1 }
+  expect(isNeutralAdjust(old)).toBe(true)
+  const same = px(); adjustPixels(same, 2, 1, old)
+  expect([...same]).toEqual([...px()])
+})
+
+test('rotation turns in quarter steps, mirroring toggles, and a sideways artwork swaps its width and height', async () => {
+  const { defaultArtwork, rotateArtwork, flipArtwork, artworkRect } = await import('./artwork')
+  const t = defaultArtwork()
+  expect(rotateArtwork(t, -90).rotate).toBe(270)
+  expect(rotateArtwork(rotateArtwork(t, 90), 90).rotate).toBe(180)
+  expect(flipArtwork(flipArtwork(t)).flip).toBe(false)
+  const win = { x: 0, y: 0, width: 50, height: 50 }, card = { width: 100, height: 100 }
+  const upright = artworkRect(win, { width: 200, height: 100 }, card, t)
+  const sideways = artworkRect(win, { width: 200, height: 100 }, card, rotateArtwork(t, 90))
+  expect(upright.width).toBeGreaterThan(upright.height); expect(sideways.height).toBeGreaterThan(sideways.width)
+})

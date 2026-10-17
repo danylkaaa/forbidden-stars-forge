@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ColorInput } from '../../components/ColorInput'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { SafeAreaLines } from '../../components/SafeArea'
@@ -142,7 +143,7 @@ export function FactionCardLayoutEditor() {
       </SearchableSelect>}</Field>
       <div className="grid grid-cols-2 gap-3">
         {fields.map(f => <Field key={f} label={f === 'color' && ELEMENTS.find(e => e.key === selected)!.kind === 'icon' ? 'Outline colour' : ELEMENTS.find(e => e.key === selected)!.kind === 'icon' && (f === 'x' || f === 'y') ? `Offset ${f.toUpperCase()} (%)` : FIELD_LABELS[f]}>{id => f === 'color'
-          ? <input id={id} type="color" className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={current.color ?? '#ffffff'} onChange={e => patch(selected, { color: e.target.value })} />
+          ? <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={current.color ?? '#ffffff'} onChange={color => patch(selected, { color })} />
           : <PositionNumber key={`${selected}-${f}`} id={id} value={Number(current[f] ?? 0)} min={['x', 'y', 'nx', 'ny', 'sx', 'sy'].includes(f) ? -100 : f === 'shadow' || f === 'blur' || f === 'outline' ? 0 : 0.01} max={f === 'scale' ? 5 : f === 'shadow' ? 1 : 200} onChange={n => patch(selected, { [f]: n })} />}</Field>)}
       </div>
       <ModelStyleControls open value={layout.modelStyle} onStart={() => history.begin()} onChange={modelStyle => { save.reset(); history.replace(d => ({ ...d, modelStyle })) }} />

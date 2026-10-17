@@ -127,7 +127,7 @@ elsewhere) applies the move as one undo step; Esc puts the artwork back. The sca
 (⌘Z undoes artwork moves). Unsaved drafts are kept in this browser.
 Artwork chosen on the new card form is uploaded when the card is created.
 `(B)`, `(S)`, `(M)` insert boltgun, shield and morale icons; `[B]` and `[S]`
-are boxed versions. Morale is never boxed (older `[M]` renders as `(M)`).
+are boxed versions. Morale is never boxed (older `[M]` renders as `(M)`). `{B}`, `{S}` and `{M}` draw the boltgun, shield and morale eagle without a box.
 `**Italic text**` formats keywords. **Download PNG** exports at the
 overlay's native resolution.
 

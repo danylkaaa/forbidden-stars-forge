@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 type IconProps = { className?: string }
 
 // Heraldic shield with a chevron: a faction's banner.
@@ -207,3 +209,21 @@ export function DropImageIcon({ className }: IconProps) {
   )
 }
 
+
+const stroke = { stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+function Glyph({ className, children }: IconProps & { children: ReactNode }) {
+  return <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className={className} aria-hidden="true" {...stroke}>{children}</svg>
+}
+// Small action glyphs for icon buttons.
+export const UploadIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M9 12V3M5.5 6.5L9 3l3.5 3.5M3 12.5v2h12v-2" /></Glyph>
+export const DownloadIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M9 3v9M5.5 8.5L9 12l3.5-3.5M3 12.5v2h12v-2" /></Glyph>
+export const TrashIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M3 5h12M7 5V3h4v2M5 5l.7 10h6.6L13 5M7.5 8v4.5M10.5 8v4.5" /></Glyph>
+export const MoveIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M9 2v14M2 9h14M9 2L7 4M9 2l2 2M9 16l-2-2M9 16l2-2M2 9l2-2M2 9l2 2M16 9l-2-2M16 9l-2 2" /></Glyph>
+export const ResetPositionIcon = ({ className }: IconProps) => <Glyph className={className}><circle cx="9" cy="9" r="2" /><path d="M9 2v3M9 13v3M2 9h3M13 9h3" /></Glyph>
+export const MirrorIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M9 2v14" strokeDasharray="2 2" /><path d="M7 5L2.5 13H7zM11 5l4.5 8H11z" /></Glyph>
+export const RotateLeftIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M3 9a6 6 0 1 0 1.76-4.24" /><path d="M3 2.5v3h3" /></Glyph>
+export const RotateRightIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M15 9a6 6 0 1 1-1.76-4.24" /><path d="M15 2.5v3h-3" /></Glyph>
+export const ExpandIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M2.5 6.5v-4h4M15.5 6.5v-4h-4M2.5 11.5v4h4M15.5 11.5v4h-4" /><rect x="6.5" y="6.5" width="5" height="5" rx="0.5" /></Glyph>
+export const SparkleIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M8 2.5L9.4 6.6 13.5 8 9.4 9.4 8 13.5 6.6 9.4 2.5 8l4.1-1.4zM14 12.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5L12 14.5l1.5-.5z" /></Glyph>
+export const CheckIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M3.5 9.5l4 4 7-8" /></Glyph>
+export const CloseIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M4 4l10 10M14 4L4 14" /></Glyph>

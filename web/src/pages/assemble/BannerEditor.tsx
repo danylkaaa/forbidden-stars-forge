@@ -1,4 +1,5 @@
 import { IMAGE_ACCEPT } from '../../lib/imageUpload'
+import { ColorInput } from '../../components/ColorInput'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -116,7 +117,7 @@ export function BannerEditor({ factionId }: { factionId: number }) {
       <Group title="Nebula">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">Colour
-            <input type="color" aria-label="Nebula colour" value={nebulaDraft.value.color || factionColor || '#6a3a8a'} onChange={e => nebulaDraft.change({ color: e.target.value })} className="h-8 w-12 cursor-pointer" /></label>
+            <ColorInput aria-label="Nebula colour" value={nebulaDraft.value.color || factionColor || '#6a3a8a'} onChange={color => nebulaDraft.change({ color })} className="h-8 w-12 cursor-pointer" /></label>
           {nebulaDraft.value.color ? <Button onClick={() => nebulaDraft.change({ color: '' })}>Use faction colour</Button> : <span className="text-xs text-ink/50">The faction's colour</span>}
         </div>
         <Slider label="Brightness" value={Math.round(nebulaDraft.value.density * 100)} min={20} max={200} step={5} shown={`${Math.round(nebulaDraft.value.density * 100)}%`}

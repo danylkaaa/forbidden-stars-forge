@@ -3,6 +3,7 @@ import teethSrc from '../../images/events/event-teeth.png?url'
 import combatBackSrc from '../../images/combat/combat-back.png?url'
 import edgeSrc from '../../images/upgrades/upgrade-edge.png?url'
 import type { Category } from '../cards/model'
+import { resolveImageSrc } from './adjustedImage'
 
 // Decoded images are kept, so redrawing a back (while a nebula is dragged, say)
 // does not decode the same pictures again.
@@ -14,7 +15,7 @@ function load(url: string, message = 'Could not load the card back image.') {
     known = new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image()
       img.onload = () => resolve(img); img.onerror = () => reject(new Error(message))
-      img.src = url
+      resolveImageSrc(url).then(src => { img.src = src }, () => reject(new Error(message)))
     })
     images.set(url, known); known.catch(() => images.delete(url))
   }

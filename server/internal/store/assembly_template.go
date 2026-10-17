@@ -1,6 +1,9 @@
 package store
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+)
 
 type AssemblyTemplate struct {
 	FactionID int64   `json:"faction_id"`
@@ -10,10 +13,12 @@ type AssemblyTemplate struct {
 	LogoPath  string  `json:"-"`
 	LogoURL   string  `json:"logo_url,omitempty"`
 	LogoScale float64 `json:"logo_scale,omitempty"`
+	// Tone and colour correction applied to the image wherever cards are made from it.
+	Adjust *ArtworkAdjust `json:"adjust,omitempty"`
 }
 
 func (s *CardsStore) AssemblyTemplates() ([]AssemblyTemplate, error) {
-	rows, err := s.db.Query(`SELECT faction_id,category,side,image_key,logo_path,logo_scale FROM assembly_templates ORDER BY faction_id,category,side`)
+	rows, err := s.db.Query(`SELECT faction_id,category,side,image_key,logo_path,logo_scale,adjust FROM assembly_templates ORDER BY faction_id,category,side`)
 	if err != nil {
 		return nil, err
 	}
@@ -21,8 +26,15 @@ func (s *CardsStore) AssemblyTemplates() ([]AssemblyTemplate, error) {
 	out := []AssemblyTemplate{}
 	for rows.Next() {
 		var t AssemblyTemplate
-		if err := rows.Scan(&t.FactionID, &t.Category, &t.Side, &t.ImageKey, &t.LogoPath, &t.LogoScale); err != nil {
+		var adjust string
+		if err := rows.Scan(&t.FactionID, &t.Category, &t.Side, &t.ImageKey, &t.LogoPath, &t.LogoScale, &adjust); err != nil {
 			return nil, err
+		}
+		if adjust != "" {
+			var a ArtworkAdjust
+			if json.Unmarshal([]byte(adjust), &a) == nil {
+				t.Adjust = &a
+			}
 		}
 		out = append(out, t)
 	}
@@ -67,6 +79,30 @@ func (s *CardsStore) BackLogo(factionID int64, category string) (string, error) 
 
 func (s *CardsStore) SetBackLogo(factionID int64, category, path string) error {
 	result, err := s.db.Exec(`UPDATE assembly_templates SET logo_path=?,updated_at=datetime('now') WHERE faction_id=? AND category=? AND side='back'`, path, factionID, category)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// SetTemplateAdjust saves the correction of a chosen image; nil clears it. It does not choose an image.
+func (s *CardsStore) SetTemplateAdjust(factionID int64, category, side string, a *ArtworkAdjust) error {
+	if !validAdjust(a) {
+		return errors.New("adjustment values are out of range")
+	}
+	text := ""
+	if a != nil {
+		raw, err := json.Marshal(a)
+		if err != nil {
+			return err
+		}
+		text = string(raw)
+	}
+	result, err := s.db.Exec(`UPDATE assembly_templates SET adjust=?,updated_at=datetime('now') WHERE faction_id=? AND category=? AND side=?`, text, factionID, category, side)
 	if err != nil {
 		return err
 	}

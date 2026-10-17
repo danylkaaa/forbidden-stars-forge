@@ -3,6 +3,8 @@ import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { IconButton } from '../../components/IconButton'
+import { CheckIcon, CloseIcon, DownloadIcon, MirrorIcon, MoveIcon, ResetPositionIcon, RotateLeftIcon, RotateRightIcon, TrashIcon, UploadIcon } from '../../components/icons'
 import { Button } from '../../components/Button'
 import { SafeAreaLines } from '../../components/SafeArea'
 import { useCutMm } from '../print/layout'
@@ -21,8 +23,9 @@ import { emptyAssembly, layoutWithTitleScale, saveAssembly, uploadArtwork, useSh
 import { useFileDrag } from '../../lib/useFileDrag'
 import { DropImageIcon } from '../../components/icons'
 import { ArtworkAdjustPanel } from './ArtworkAdjustPanel'
+import { OverlayAdjustPanel } from './OverlayAdjustPanel'
 import { ArtworkExtend } from './ArtworkExtend'
-import { artworkRect, defaultArtwork, panArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
+import { artworkRect, defaultArtwork, flipArtwork, panArtwork, rotateArtwork, zoomArtwork, type ArtworkTransform } from './artwork'
 import { artWindow, downloadName, LAYER_LABELS, LIBRARY_TABS, libraryLink } from './model'
 import { pngBlob } from './render'
 import { useAssembly } from './state'
@@ -40,6 +43,16 @@ const NUMBER_FIELDS = [['resource_cost', 'Resource price', 'gear'], ['guns', 'Gu
 // The icons are dark, so they sit on a light chip to stay visible on the dark panel.
 const SHORT_LABELS: Record<string, string> = { resource_cost: 'Price', eagles: 'Morale' }
 const iconLabel = (label: string, icon: string, shown = label) => <span className="inline-flex items-center gap-1.5" title={label}><span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#ecdfcb]"><img src={BUNDLED_ICONS[icon]} alt="" className="h-3.5 w-3.5 object-contain" /></span>{shown}</span>
+
+// Saves the artwork as uploaded: not moved, scaled, mirrored or adjusted.
+async function downloadArtwork(url: string, name: string) {
+  const blob = await (await fetch(url)).blob()
+  const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' } as Record<string, string>)[blob.type] ?? 'png'
+  const link = document.createElement('a'), href = URL.createObjectURL(blob)
+  link.href = href; link.download = `${name} artwork.${ext}`.replace(/[\\/:*?"<>|]/g, '-')
+  document.body.append(link); link.click(); link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(href), 1000)
+}
 
 export default function CardEditorPage({ newFactionId, newCategory = 'combat', onCategoryChange }: { newFactionId?: string; newCategory?: Category; onCategoryChange?: (category: Category, factionId: string) => void } = {}) {
   const creating = newFactionId !== undefined
@@ -423,16 +436,20 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             className={`space-y-2 rounded-md border p-3 transition-colors ${artworkDrag === 'block' ? 'border-accent bg-accent/10' : fileDrag ? 'border-dashed border-accent/70' : 'border-divider'}`}>
             <h3 className="m-0 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-accent">Artwork{fileDrag && <DropImageIcon className="h-6 w-6" />}</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3.5 py-2 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${busy ? 'pointer-events-none opacity-45' : ''}`}>
-                {hasArtwork ? 'Replace artwork' : 'Add artwork'}
+              <label title={hasArtwork ? 'Replace artwork' : 'Add artwork'} className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-2.5 py-2 text-ink hover:border-accent/60 hover:text-accent-100 ${busy ? 'pointer-events-none opacity-45' : ''}`}>
+                <UploadIcon /><span className="sr-only">{hasArtwork ? 'Replace artwork' : 'Add artwork'}</span>
                 <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label="Artwork file (any image)" disabled={busy}
                   onChange={e => { const file = e.target.files?.[0]; if (file) artwork.mutate(file); e.target.value = '' }} />
               </label>
-              {hasArtwork && <Button disabled={busy} onClick={() => artwork.mutate(null)}>Remove artwork</Button>}
+              {hasArtwork && <IconButton label="Download artwork" icon={<DownloadIcon />} disabled={busy} onClick={() => downloadArtwork(assembly.data!.image_url, draft.name || 'card')} />}
+              {hasArtwork && <IconButton label="Remove artwork" icon={<TrashIcon />} disabled={busy} onClick={() => artwork.mutate(null)} />}
               {hasArtwork && (artSelected
-                ? <><Button variant="primary" onClick={confirmArtwork}>Apply (Enter)</Button><Button onClick={cancelArtwork}>Cancel (Esc)</Button></>
-                : <Button onClick={selectArtwork}>Move artwork</Button>)}
-              {hasArtwork && <Button disabled={transform.scale === 1 && transform.x === 0 && transform.y === 0} onClick={() => setTransform({ ...defaultArtwork(), adjust: transform.adjust })}>Reset position</Button>}
+                ? <><IconButton variant="primary" label="Apply (Enter)" icon={<CheckIcon />} onClick={confirmArtwork} /><IconButton label="Cancel (Esc)" icon={<CloseIcon />} onClick={cancelArtwork} /></>
+                : <IconButton label="Move artwork" icon={<MoveIcon />} onClick={selectArtwork} />)}
+              {hasArtwork && <IconButton label="Reset position" icon={<ResetPositionIcon />} disabled={transform.scale === 1 && transform.x === 0 && transform.y === 0} onClick={() => setTransform({ ...defaultArtwork(), adjust: transform.adjust, flip: transform.flip, rotate: transform.rotate })} />}
+              {hasArtwork && <IconButton label="Mirror" icon={<MirrorIcon />} aria-pressed={!!transform.flip} className={transform.flip ? 'border-accent! text-accent!' : ''} onClick={() => setTransform(flipArtwork(transform))} />}
+              {hasArtwork && <IconButton label="Rotate left" icon={<RotateLeftIcon />} onClick={() => setTransform(rotateArtwork(transform, -90))} />}
+              {hasArtwork && <IconButton label="Rotate right" icon={<RotateRightIcon />} onClick={() => setTransform(rotateArtwork(transform, 90))} />}
               {artwork.isPending && <span role="status" className="text-xs text-ink/60">Updating artwork…</span>}
             </div>
             <p className="m-0 text-xs text-ink/60">{artworkDrag === 'block' ? 'Drop the image here.' : hasArtwork ? 'Drop another image here to replace it. Click the artwork on the preview, then drag it to move and scroll to zoom.' : 'Drop an image here or use the button (PNG, JPEG, WebP, AVIF …; saved as PNG, up to 20 MiB). It is placed in the frame’s open art area.'}</p>
@@ -440,11 +457,12 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               onDone={saved => { queryClient.setQueryData(['card-assembly', id], saved); state.clearTransform(id) }} />}
             {hasArtwork && <ArtworkAdjustPanel adjust={transform.adjust} onChange={next => { record(400); setTransform({ ...transform, adjust: next }, false) }} />}
           </section>}
+          <OverlayAdjustPanel factionId={source.faction_id} category={source.category} />
           <div className="border-t border-divider pt-2">
             <ReferenceField category={source.category} side="front" />
             <details className="mt-1 text-sm"><summary className="cursor-pointer text-accent">All reference cards</summary><div className="mt-2"><ReferenceCards category={source.category} compact /></div></details>
           </div>
-          <p className="m-0 text-xs text-ink/60">Point at a text field to insert an icon at the cursor: (B), (S), (D) plain boltgun, shield, dice; [B], [S] boxed; (M) or [M] morale, always boxed. *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
+          <p className="m-0 text-xs text-ink/60">Point at a text field to insert an icon at the cursor: (B), (S), (D) plain boltgun, shield, dice; [B], [S] boxed; (M) or [M] morale in its box; {'{B}'}, {'{S}'}, {'{M}'} the same without the box. *Italic* (or **italic**) and __bold__ text are supported; combine them like *__this__*. {creating ? 'Artwork and position are saved when you create the card.' : 'Unsaved edits are kept in this browser.'}</p>
           {!!issues.length && <div role="alert" className="text-xs text-danger">{issues.map(i => <p key={i.field} className="m-0">{i.field}: {i.message}</p>)}</div>}
           {!creating && dirty && <details className="text-sm"><summary className="cursor-pointer text-accent">Show changes since save</summary><DiffPanel
             simpleRows={(schema ? ['subtype', 'action'] : upgrade ? ['upgrade_type', 'level', 'resource_cost'] : ['level', 'resource_cost', 'guns', 'shields', 'eagles']).filter(key => saved[key] !== draft[key]).map(key => ({ field: key, before: saved[key], after: draft[key] }))}

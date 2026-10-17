@@ -3,6 +3,7 @@ import { useCards } from '../cards/api'
 import { useCardAssembly, type EventElementSettings } from './api'
 import { useEventElementInput } from './eventElement'
 import { useTemplateLayout } from './library'
+import { useOverlayAdjust } from './overlays'
 import { useFactionLogos } from './logos'
 import type { Category } from '../cards/model'
 import { DEMO_COMBAT, DEMO_SCHEMA, type CombatCard, type FramedCard } from './model'
@@ -44,9 +45,10 @@ export function useAssembledPreview(imageUrl: string | null, factionId: number, 
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === factionId)?.url ?? null
   const eventElement = useEventElementInput(card.category === 'schema' ? factionId : null, eventElementDraft)
+  const overlayAdjust = useOverlayAdjust(factionId)
   const ready = template.ready && !logos.isPending && (!card.id || !assembly.isPending)
   const input = useMemo<RenderInput | null>(() => ready && imageUrl ? {
-    card, layout: template.layout, imageUrl, logoUrl, logoScale: assembly.data?.logo_scale ?? 1, artworkUrl: card.id ? assembly.data?.image_url || null : demoArtwork, artwork: assembly.data?.transform, eventElement,
-  } : null, [ready, card, template.layout, imageUrl, logoUrl, assembly.data, demoArtwork, eventElement])
+    card, layout: template.layout, imageUrl, logoUrl, logoScale: assembly.data?.logo_scale ?? 1, artworkUrl: card.id ? assembly.data?.image_url || null : demoArtwork, artwork: assembly.data?.transform, eventElement, overlayAdjust,
+  } : null, [ready, card, template.layout, imageUrl, logoUrl, assembly.data, demoArtwork, eventElement, overlayAdjust])
   return useRenderedCard(input)
 }

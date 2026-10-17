@@ -82,3 +82,15 @@ func TestValidateAssemblyArtworkAdjust(t *testing.T) {
 		t.Fatal("brightness out of range accepted")
 	}
 }
+
+func TestAssemblyArtworkRotationMustBeQuarterTurns(t *testing.T) {
+	ok := CardAssembly{OverlayID: "auto", Layout: json.RawMessage(`{}`), Transform: ArtworkTransform{Scale: 1, Flip: true, Rotate: 270}}
+	if err := ValidateAssembly(ok); err != nil {
+		t.Fatal(err)
+	}
+	bad := ok
+	bad.Transform.Rotate = 45
+	if ValidateAssembly(bad) == nil {
+		t.Fatal("accepted a 45 degree rotation")
+	}
+}

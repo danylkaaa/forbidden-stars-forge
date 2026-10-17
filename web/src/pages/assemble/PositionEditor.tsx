@@ -7,6 +7,7 @@ import { useCutMm } from '../print/layout'
 import { Field, selectClass } from '../../components/Field'
 import { StepperInput } from '../../components/StepperInput'
 import { usePreviewFaction } from './usePreviewFaction'
+import { useOverlayAdjust } from './overlays'
 import { ReferenceOverlay } from './ReferenceOverlay'
 import { ReferenceField } from './ReferenceCards'
 import { CardCanvas } from './CardCanvas'
@@ -69,9 +70,10 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
   const templateLayout = useTemplateLayout(category)
   const layout = useMemo(() => assemblyLayout(draft, category), [draft, category])
   const logoUrl = logos.data?.find(l => l.faction_id === previewFaction)?.url ?? null
+  const overlayAdjust = useOverlayAdjust(previewFaction)
   const input = useMemo<RenderInput | null>(() => !template.isPending && (templateLayout.ready || !template.image)
-    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level: shownLevel, starting: isStarting, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, logoUrl, artworkUrl: demoArtwork, outputSize: CARD_SIZE }
-    : null, [template.isPending, templateLayout.ready, template.image, layout, level, shownLevel, isStarting, price, order, upgrade, schema, action, kind, logoUrl, demoArtwork])
+    ? { card: schema ? { ...DEMO_SCHEMA, action, subtype: kind } : upgrade ? { ...DEMO_UPGRADE, level, resource_cost: price, upgrade_type: order } : { ...DEMO_COMBAT, level: shownLevel, starting: isStarting, resource_cost: price }, layout, imageUrl: template.image?.url ?? BLANK, logoUrl, artworkUrl: demoArtwork, overlayAdjust, outputSize: CARD_SIZE }
+    : null, [template.isPending, templateLayout.ready, template.image, layout, level, shownLevel, isStarting, price, order, upgrade, schema, action, kind, logoUrl, demoArtwork, overlayAdjust])
   const { result, error } = useRenderedCard(input)
   const save = useMutation({ mutationFn: () => onSave(draft) })
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)

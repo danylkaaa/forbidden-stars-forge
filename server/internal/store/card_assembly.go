@@ -13,19 +13,28 @@ import (
 // contrast, saturation and sharpness are 0 when neutral; levels are a black point, a white
 // point (0–255) and a gamma.
 type ArtworkAdjust struct {
-	Brightness float64 `json:"brightness"` // -100–100
-	Contrast   float64 `json:"contrast"`   // -100–100
-	Saturation float64 `json:"saturation"` // -100–100
-	Sharpness  float64 `json:"sharpness"`  // 0–100
-	Black      float64 `json:"black"`      // 0–254
-	White      float64 `json:"white"`      // 1–255, above black
-	Gamma      float64 `json:"gamma"`      // 0.2–5
+	Brightness  float64 `json:"brightness"`  // -100–100
+	Contrast    float64 `json:"contrast"`    // -100–100
+	Saturation  float64 `json:"saturation"`  // -100–100
+	Sharpness   float64 `json:"sharpness"`   // 0–100
+	Black       float64 `json:"black"`       // 0–254
+	White       float64 `json:"white"`       // 1–255, above black
+	Gamma       float64 `json:"gamma"`       // 0.2–5
+	Hue         float64 `json:"hue"`         // -180–180 degrees
+	Temperature float64 `json:"temperature"` // -100–100, cool to warm
+	Tint        float64 `json:"tint"`        // -100–100, green to magenta
+	Vibrance    float64 `json:"vibrance"`    // -100–100, saturation that spares saturated colours
+	Shadows     float64 `json:"shadows"`     // -100–100
+	Highlights  float64 `json:"highlights"`  // -100–100
+	Vignette    float64 `json:"vignette"`    // -100–100, dark to light edges
 }
 type ArtworkTransform struct {
 	Scale  float64        `json:"scale"`
 	X      float64        `json:"x"`
 	Y      float64        `json:"y"`
 	Adjust *ArtworkAdjust `json:"adjust,omitempty"`
+	Flip   bool           `json:"flip,omitempty"`   // mirrored left to right
+	Rotate int            `json:"rotate,omitempty"` // clockwise degrees: 0, 90, 180 or 270
 }
 
 func validAdjust(a *ArtworkAdjust) bool {
@@ -34,7 +43,9 @@ func validAdjust(a *ArtworkAdjust) bool {
 	}
 	in := func(v, lo, hi float64) bool { return !math.IsNaN(v) && v >= lo && v <= hi }
 	return in(a.Brightness, -100, 100) && in(a.Contrast, -100, 100) && in(a.Saturation, -100, 100) && in(a.Sharpness, 0, 100) &&
-		in(a.Black, 0, 254) && in(a.White, 1, 255) && a.White > a.Black && in(a.Gamma, 0.2, 5)
+		in(a.Black, 0, 254) && in(a.White, 1, 255) && a.White > a.Black && in(a.Gamma, 0.2, 5) &&
+		in(a.Hue, -180, 180) && in(a.Temperature, -100, 100) && in(a.Tint, -100, 100) && in(a.Vibrance, -100, 100) &&
+		in(a.Shadows, -100, 100) && in(a.Highlights, -100, 100) && in(a.Vignette, -100, 100)
 }
 
 type CardAssembly struct {
@@ -56,6 +67,9 @@ func ValidateAssembly(a CardAssembly) error {
 	t := a.Transform
 	if math.IsNaN(t.Scale) || math.IsInf(t.Scale, 0) || t.Scale < .1 || t.Scale > 5 || math.IsNaN(t.X) || math.IsInf(t.X, 0) || math.Abs(t.X) > 200 || math.IsNaN(t.Y) || math.IsInf(t.Y, 0) || math.Abs(t.Y) > 200 {
 		return errors.New("artwork scale must be 0.1–5 and position must be -200–200")
+	}
+	if t.Rotate != 0 && t.Rotate != 90 && t.Rotate != 180 && t.Rotate != 270 {
+		return errors.New("artwork rotation must be 0, 90, 180 or 270")
 	}
 	if !validAdjust(t.Adjust) {
 		return errors.New("artwork adjustments are out of range")

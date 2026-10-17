@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiSend, apiSendForm } from '../../lib/api'
-import { defaultArtwork, type ArtworkTransform } from './artwork'
+import { defaultArtwork, type ArtworkAdjust, type ArtworkTransform } from './artwork'
 import type { Layout } from './model'
 import type { Category } from '../cards/model'
 import { DEFAULT_NEBULA, NO_PLACEMENT, type NebulaPlacement, type NebulaSettings } from './backDecor'
@@ -53,10 +53,12 @@ export const saveCardTypeLayout = (category: Category, layout: CardTypeLayout['l
 
 // side: 'front' is the template cards are assembled on, 'back' the deck's card back.
 export type Side = 'front' | 'back'
-export type AssemblyTemplate = { faction_id: number; category: Category; side?: Side; image_key: string; logo_url?: string; logo_scale?: number }
+export type AssemblyTemplate = { faction_id: number; category: Category; side?: Side; image_key: string; logo_url?: string; logo_scale?: number; adjust?: ArtworkAdjust }
 export function useAssemblyTemplates() {
   return useQuery({ queryKey: ['assembly-templates'], queryFn: () => apiGet<AssemblyTemplate[]>('/api/assembly-templates') })
 }
+// Saves the tone and colour correction of a faction's chosen image (null removes it).
+export const saveTemplateAdjust = (factionId: number, category: Category, side: Side, adjust: ArtworkAdjust | null) => apiSend<ArtworkAdjust | null>('PUT', `/api/assembly-templates/${factionId}/${category}/${side}/adjust`, adjust)
 export const saveAssemblyTemplate = (t: AssemblyTemplate) => apiSend<AssemblyTemplate>('PUT', '/api/assembly-templates', t)
 
 // How a faction's event card back draws its nebula; saved per faction.

@@ -1,4 +1,5 @@
 import { IMAGE_ACCEPT } from '../../lib/imageUpload'
+import { ColorInput } from '../../components/ColorInput'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
@@ -41,7 +42,7 @@ export function ColorField({ factionId, color }: { factionId: number; color: str
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['faction-colors'] }); setDraft(null) },
   })
   return <div className="flex flex-wrap items-center gap-3">
-    <input type="color" aria-label="Faction colour" value={value || '#888888'} onChange={e => { save.reset(); setDraft(e.target.value) }} className="h-9 w-14 cursor-pointer" />
+    <ColorInput aria-label="Faction colour" value={value || '#888888'} onChange={hex => { save.reset(); setDraft(hex) }} />
     <span className="font-mono text-xs text-ink/60">{value || 'not set'}</span>
     <Button disabled={draft === null || draft === color || save.isPending} onClick={() => save.mutate(draft!)}>Save colour</Button>
     <Button disabled={(!color && draft === null) || save.isPending} onClick={() => color ? save.mutate('') : setDraft(null)}>{color ? 'Remove colour' : 'Discard'}</Button>

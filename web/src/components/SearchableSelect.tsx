@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type SelectHTMLAttributes } from 'r
 import { createPortal } from 'react-dom'
 import { inputClass } from './Field'
 
-type Option = { value: string; label: string; disabled: boolean }
+type Option = { value: string; label: string; disabled: boolean; color?: string }
 
 // Keep the native select's form semantics and change handlers, with a themed,
 // searchable popup instead of the operating system's option menu.
@@ -32,7 +32,7 @@ export function SearchableSelect({ children, onMouseDown, onKeyDown, onChange, '
 
   useEffect(() => {
     if (!open || !select.current) return
-    setOptions(Array.from(select.current.options, (o) => ({ value: o.value, label: o.text, disabled: o.disabled || (o.parentElement instanceof HTMLOptGroupElement && o.parentElement.disabled) })))
+    setOptions(Array.from(select.current.options, (o) => ({ value: o.value, label: o.text, disabled: o.disabled || (o.parentElement instanceof HTMLOptGroupElement && o.parentElement.disabled), color: o.dataset.color || undefined })))
     setLabel(ariaLabel || select.current.labels?.[0]?.textContent?.trim() || 'options')
   }, [open, children, ariaLabel])
   useEffect(() => {
@@ -91,7 +91,7 @@ export function SearchableSelect({ children, onMouseDown, onKeyDown, onChange, '
           aria-selected={o.value === String(props.value ?? select.current?.value ?? '')} disabled={o.disabled} tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => choose(o)}
           className={`flex w-full cursor-pointer items-center gap-2 rounded border-0 px-2.5 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-45 ${active === i ? 'bg-accent/15' : 'bg-transparent'} ${o.value === select.current?.value ? 'text-accent' : 'text-ink'}`}>
-          <span className="w-4 shrink-0" aria-hidden="true">{o.value === select.current?.value ? '✓' : ''}</span>{o.label}
+          <span className="w-4 shrink-0" aria-hidden="true">{o.value === select.current?.value ? '✓' : ''}</span>{o.color && <span aria-hidden="true" className="inline-block h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-white/25" style={{ background: o.color }} />}{o.label}
         </button>)}
         {!shown.length && <p role="status" className="m-0 px-2.5 py-3 text-sm text-ink/55">No matching options</p>}
       </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ColorInput } from '../../components/ColorInput'
 import { createPortal } from 'react-dom'
 import { MagnifierIcon } from '../../components/icons'
 import { Link } from 'react-router'
@@ -254,7 +255,8 @@ export default function PrintPage() {
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('click', click, true) }
   }, [magnify])
 
-  function download() {
+  // `split` saves the fronts and the backs as two files (two-sided sheets only); sheet N of one is the reverse of sheet N of the other.
+  function download(split = false) {
     setError(null)
     try {
       const pt = (v: number) => v * MM_PT, stroke = strokeFor(settings), g = grid
@@ -263,7 +265,7 @@ export default function PrintPage() {
         const r = slotRect(g, settings, slot)
         return { type: 'image', image: asset, x: pt(r.img.x), y: pt(r.img.y), w: pt(r.img.w), h: pt(r.img.h), clip: { x: pt(r.clip.x), y: pt(r.clip.y), w: pt(r.clip.w), h: pt(r.clip.h) } }
       }
-      const out: PdfOp[][] = []
+      const out: PdfOp[][] = [], fronts: PdfOp[][] = [], backs: PdfOp[][] = []
       for (const page of pages) {
         if (page.every(id => id === null)) continue
         const front: PdfOp[] = [], reverse: PdfOp[] = []
@@ -286,13 +288,21 @@ export default function PrintPage() {
         })
         if (settings.cutLines) front.push(...guides(page))
         if (reverseSheets && settings.cutLines && settings.cutLinesOnBacks) reverse.push(...guides(mirrorPage(page, g.cols, g.rows, settings.flip, settings.orientation)))
-        out.push(front); if (reverseSheets) out.push(reverse)
+        out.push(front); fronts.push(front)
+        if (reverseSheets) { out.push(reverse); backs.push(reverse) }
       }
-      const blob = buildPdf(pt(g.page.width), pt(g.page.height), out)
-      const url = URL.createObjectURL(blob), link = document.createElement('a')
-      link.href = url; link.download = `${placedFactions.length === 1 ? factionName(placedFactions[0]) : 'cards'} print.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-      document.body.append(link); link.click(); link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      const name = placedFactions.length === 1 ? factionName(placedFactions[0]) : 'cards'
+      const save = (sheets: PdfOp[][], file: string) => {
+        const url = URL.createObjectURL(buildPdf(pt(g.page.width), pt(g.page.height), sheets)), link = document.createElement('a')
+        link.href = url; link.download = `${name} ${file}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+        document.body.append(link); link.click(); link.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+      if (split && reverseSheets) {
+        save(fronts, 'fronts')
+        // Browsers want a moment between downloads started by one click.
+        window.setTimeout(() => save(backs, 'backs'), 300)
+      } else save(out, 'print')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create the PDF.') }
   }
 
@@ -311,7 +321,8 @@ export default function PrintPage() {
           className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-45 ${magnify ? 'border-accent bg-accent-900 text-accent' : 'border-divider bg-surface text-ink hover:bg-neutral-800'}`}>
           <MagnifierIcon />Magnifier
         </button>
-        <Button variant="primary" disabled={!ready} onClick={download}>{placed.length && !ready ? 'Rendering…' : 'Download PDF'}</Button>
+        <Button variant="primary" disabled={!ready} onClick={() => download()}>{placed.length && !ready ? 'Rendering…' : 'Download PDF'}</Button>
+        {reverseSheets && <Button disabled={!ready} onClick={() => download(true)} title="Two files, fronts and backs, to print one after the other. Backs sheet N goes on the back of fronts sheet N.">Download fronts and backs separately</Button>}
       </div>
     </div>
     {queryError && <div role="alert" className="text-danger">{queryError.message}</div>}
@@ -417,7 +428,7 @@ export default function PrintPage() {
           <p className="m-0 text-xs text-ink/50">Lines are drawn outside the card, {settings.cutTolerance}% of its size ({(settings.cardWidth * settings.cutTolerance / 100).toFixed(1)} mm across, {(settings.cardHeight * settings.cutTolerance / 100).toFixed(1)} mm down) away from the cut edge, so a cut that wanders a little still leaves the whole card. Keep it within the bleed.</p>
           <div className="grid grid-cols-3 gap-3">
             <NumberField label="Width (px)" value={settings.lineWidth} min={0.25} step={0.25} onChange={setNum('lineWidth')} />
-            <Field label="Color">{id => <input id={id} type="color" value={settings.lineColor} onChange={e => update({ lineColor: e.target.value })} className="h-9 w-full cursor-pointer rounded-md border border-divider bg-bg p-0.5" />}</Field>
+            <Field label="Color">{id => <ColorInput id={id} value={settings.lineColor} onChange={lineColor => update({ lineColor })} className="h-9 w-16 cursor-pointer rounded-md border border-divider bg-bg p-0.5" />}</Field>
             <Field label="Style">{id => <select id={id} className={selectClass} value={settings.lineStyle} onChange={e => update({ lineStyle: e.target.value as PrintSettings['lineStyle'] })}><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="solid">Solid</option></select>}</Field>
           </div>
           <Button onClick={reset}>Reset print settings</Button>

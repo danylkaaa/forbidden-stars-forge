@@ -72,6 +72,13 @@ test('short boxed and non-boxed notation maps each resource independently', () =
   expect(textRuns('(ordinary) [UNKNOWN]')).toEqual([{ text: '(ordinary) [UNKNOWN]', icon: false, italic: false }])
 })
 
+test('{B}, {S} and {M} are the boxed symbols with their box cropped away', () => {
+  expect(textRuns('Gain {M}.')).toEqual([
+    { text: 'Gain ', icon: false, italic: false }, { text: '<', icon: true, italic: false, unframed: true }, { text: '.', icon: false, italic: false },
+  ])
+  expect(textRuns('{B}{S}').map(r => [r.text, r.unframed])).toEqual([['}', true], ['{', true]])
+})
+
 test('double asterisks italicize text and icons without leaving visible markers', () => {
   expect(textRuns('Before **Warrior (B) [S]** after')).toEqual([
     { text: 'Before ', icon: false, italic: false },

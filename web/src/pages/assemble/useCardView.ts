@@ -9,6 +9,7 @@ import type { CombatCard, FramedCard } from './model'
 import { renderCard, type RenderInput } from './render'
 import { useAssembly } from './state'
 import { useFactionLogos } from './logos'
+import { useOverlayAdjust } from './overlays'
 import type { LibraryImage, useTemplateLayout } from './library'
 
 const NO_TRANSFORM = defaultArtwork()
@@ -103,9 +104,10 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
   const eventElement = useEventElementInput(card?.category === 'schema' ? card.faction_id : null)
+  const overlayAdjust = useOverlayAdjust(card?.faction_id)
   const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !logos.isPending
-    ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform, eventElement }
-    : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform, eventElement])
+    ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform, eventElement, overlayAdjust }
+    : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform, eventElement, overlayAdjust])
   return { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
 }
 

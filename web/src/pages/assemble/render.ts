@@ -1,7 +1,10 @@
 import { BUNDLED_ICONS } from '../faction-card/bundled'
 import { combatRibbon } from './ribbons'
-import { defaultArtwork, isNeutralAdjust, type ArtworkTransform } from './artwork'
+import { defaultArtwork, isNeutralAdjust, turnsSideways, type ArtworkTransform } from './artwork'
 import { adjustPixels } from './artworkAdjust'
+import { diagramFor, paintDiagram } from './cardDiagrams'
+import { resolveImageSrc, withAdjust } from './adjustedImage'
+import type { OverlayAdjustments } from './overlays'
 import backgroundSrc from '../../images/combat/background.png?url'
 import foregroundSrc from '../../images/combat/foreground.png?url'
 import bottomSrc from '../../images/combat/bottom.png?url'
@@ -67,7 +70,7 @@ export function loadImage(url: string) {
       const img = new Image()
       img.onload = () => resolve(img)
       img.onerror = () => { images.delete(url); reject(new Error('Could not load artwork or overlay. Choose another image or retry.')) }
-      img.src = url
+      resolveImageSrc(url).then(src => { img.src = src }, e => { images.delete(url); reject(e) })
     })
     images.set(url, pending)
   }
@@ -244,16 +247,24 @@ function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Plac
 // the window: it runs on under the template, showing wherever the template is transparent.
 function paintArtwork(ctx: CanvasRenderingContext2D, art: HTMLImageElement, win: { x: number; y: number; width: number; height: number }, w: number, h: number, artwork: ArtworkTransform) {
   const wx = win.x * w / 100, wy = win.y * h / 100, ww = win.width * w / 100, wh = win.height * h / 100
-  const scale = Math.max(ww / art.naturalWidth, wh / art.naturalHeight) * artwork.scale
+  // A quarter turn swaps the artwork's width and height as seen on the card.
+  const sideways = turnsSideways(artwork), seenWidth = sideways ? art.naturalHeight : art.naturalWidth, seenHeight = sideways ? art.naturalWidth : art.naturalHeight
+  const scale = Math.max(ww / seenWidth, wh / seenHeight) * artwork.scale
   const dw = art.naturalWidth * scale, dh = art.naturalHeight * scale
-  const dx = wx + (ww - dw) / 2 + artwork.x * w / 100, dy = wy + (wh - dh) / 2 + artwork.y * h / 100
+  const cx = wx + ww / 2 + artwork.x * w / 100, cy = wy + wh / 2 + artwork.y * h / 100
+  // Mirror first, then turn, about the artwork's centre.
+  const draw = (target: CanvasRenderingContext2D) => {
+    target.save(); target.translate(cx, cy); target.rotate((artwork.rotate ?? 0) * Math.PI / 180)
+    if (artwork.flip) target.scale(-1, 1)
+    target.drawImage(art, -dw / 2, -dh / 2, dw, dh); target.restore()
+  }
   const adjust = artwork.adjust
-  if (isNeutralAdjust(adjust)) { ctx.drawImage(art, dx, dy, dw, dh); return }
+  if (isNeutralAdjust(adjust)) { draw(ctx); return }
   // Correct only what is on the card, not the whole (possibly huge) scaled image.
   const part = document.createElement('canvas'); part.width = w; part.height = h
   const pctx = part.getContext('2d', { willReadFrequently: true })
-  if (!pctx) { ctx.drawImage(art, dx, dy, dw, dh); return }
-  pctx.drawImage(art, dx, dy, dw, dh)
+  if (!pctx) { draw(ctx); return }
+  draw(pctx)
   const pixels = pctx.getImageData(0, 0, w, h)
   adjustPixels(pixels.data, w, h, adjust!)
   pctx.putImageData(pixels, 0, 0)
@@ -262,17 +273,17 @@ function paintArtwork(ctx: CanvasRenderingContext2D, art: HTMLImageElement, win:
 // Layers, bottom first: the card's artwork (positioned by `artwork` inside
 // ART_WINDOW), the faction template (generated image), overlays, panels, text.
 // The artwork only shows where the template is transparent.
-export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; eventElement?: EventElementInput; outputSize?: { width: number; height: number } }
+export type RenderInput = { card: CombatCard | FramedCard; layout: Layout; imageUrl: string; logoUrl?: string | null; logoScale?: number; artworkUrl?: string | null; artwork?: ArtworkTransform; eventElement?: EventElementInput; overlayAdjust?: OverlayAdjustments; outputSize?: { width: number; height: number } }
 export type RenderOutput = { canvas: HTMLCanvasElement; warnings: string[]; textPositions: { upper_text: Placement; lower_text: Placement } }
 // Upgrade and event cards. Layers, bottom first: the card's artwork (events
 // only, inside its window), then for events the chains, the faction template
 // (generated or uploaded), for events the banners, then the icons and logo, and
 // the text on top. The frame supplies the panels.
-async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), eventElement, outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
+async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), eventElement, overlayAdjust, outputSize }: RenderInput & { card: FramedCard }): Promise<RenderOutput> {
   const iconUrl = card.category === 'upgrade' ? ORDER_ICONS[card.upgrade_type] : ACTION_ICONS[card.action]
   const upgrade = card.category === 'upgrade'
   const event = card.category === 'schema'
-  const [template, icon, logo, levelBadge, gear, art, chains, banners, element] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, event ? loadImage(eventChainsSrc) : null, event ? loadImage(eventBannersSrc) : null, event && eventElement ? keyedElement(eventElement.url) : null, loadFonts()])
+  const [template, icon, logo, levelBadge, gear, art, chains, banners, element] = await Promise.all([loadImage(imageUrl), iconUrl ? loadImage(iconUrl) : null, logoUrl ? loadImage(logoUrl) : null, upgrade ? loadImage(BUNDLED_ICONS.tech) : null, upgrade ? loadImage(BUNDLED_ICONS.gear) : null, card.category === 'schema' && artworkUrl ? loadImage(artworkUrl) : null, event ? loadImage(withAdjust(eventChainsSrc, overlayAdjust?.chains)) : null, event ? loadImage(withAdjust(eventBannersSrc, overlayAdjust?.banners)) : null, event && eventElement ? keyedElement(eventElement.url) : null, loadFonts()])
   const w = outputSize?.width ?? template.naturalWidth
   const h = outputSize?.height ?? template.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h
@@ -318,6 +329,13 @@ async function renderFramed({ card, layout, imageUrl, logoUrl, logoScale = 1, ar
     if (shadowed) { ctx.save(); setCardShadow(ctx, h) }
     const overflow = paintText(ctx, texts[layer] ?? '', p, event && layer === 'subtype' ? 'CardEvent' : layer === 'upper_text' || layer === 'limitation' ? 'CardRules' : 'CardHeadline', w, h, layer === 'subtype' || layer === 'limitation' || (layer === 'name' && card.category === 'upgrade') ? 'center' : layer === 'level' || layer === 'resource_cost' ? 'digit' : 'left')
     if (shadowed) ctx.restore()
+    // Some cards end their description with a picture.
+    const diagram = layer === 'upper_text' ? diagramFor(card) : undefined
+    if (diagram) {
+      const box = { x: p.x * w / 100, y: p.y * h / 100, width: p.width * w / 100, height: p.height * h / 100 }
+      const taken = paintDiagram(ctx, diagram, box, p.color)
+      if (measureBlock(ctx, texts.upper_text ?? '', p, 'CardRules', w, h).height > box.height - taken) warnings.push('The description runs into the picture below it. Make the description box taller or its text smaller.')
+    }
     if (overflow) warnings.push(`${layerLabel(layer, card.category)} extends beyond its box or the card. Move it, increase the box height, or reduce the font size.`)
   }
   return { canvas, warnings, textPositions: { upper_text: layout.upper_text, lower_text: layout.lower_text } }
@@ -326,9 +344,9 @@ export async function renderCard(input: RenderInput): Promise<RenderOutput> {
   if (input.card.category !== 'combat') return renderFramed({ ...input, card: input.card })
   return renderCombat({ ...input, card: input.card })
 }
-async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork() }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
+async function renderCombat({ card, layout, imageUrl, logoUrl, logoScale = 1, artworkUrl, artwork = defaultArtwork(), overlayAdjust }: RenderInput & { card: CombatCard }): Promise<RenderOutput> {
   // The ribbon for the card's type; its size is the finished card's.
-  const [template, ribbon, levelBadge, gear, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), loadImage(combatRibbon(card)), card.starting ? null : loadImage(BUNDLED_ICONS.tech), card.starting ? null : loadImage(BUNDLED_ICONS.gear), loadImage(backgroundSrc), lowerText(card).trim() ? loadImage(foregroundSrc) : null, loadImage(bottomSrc), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
+  const [template, ribbon, levelBadge, gear, background, foreground, bottom, art, logo] = await Promise.all([loadImage(imageUrl), loadImage(withAdjust(combatRibbon(card), overlayAdjust?.ribbon)), card.starting ? null : loadImage(BUNDLED_ICONS.tech), card.starting ? null : loadImage(BUNDLED_ICONS.gear), loadImage(withAdjust(backgroundSrc, overlayAdjust?.background)), lowerText(card).trim() ? loadImage(withAdjust(foregroundSrc, overlayAdjust?.foreground)) : null, loadImage(withAdjust(bottomSrc, overlayAdjust?.bottom)), artworkUrl ? loadImage(artworkUrl) : null, card.starting && logoUrl ? loadImage(logoUrl) : null, loadFonts()])
   const w = ribbon.naturalWidth
   const h = ribbon.naturalHeight
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h

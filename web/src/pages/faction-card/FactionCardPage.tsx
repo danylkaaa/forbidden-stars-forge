@@ -1,4 +1,5 @@
 import { IMAGE_ACCEPT } from '../../lib/imageUpload'
+import { ColorInput } from '../../components/ColorInput'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -204,7 +205,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
 
         {only !== 'back' && <Section title="Units" label="Units">
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Faction unit colour">{id => <input id={id} type="color" className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.color} onChange={e => { save.reset(); setDraft(d => d && { ...d, color: e.target.value }) }} />}</Field>
+            <Field label="Faction unit colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.color} onChange={color => { save.reset(); setDraft(d => d && { ...d, color }) }} />}</Field>
           </div>
           <p className="m-0 text-xs text-ink/55">Every model is painted in this colour. To change a unit's name, numbers or model, click it on the front preview; click the city or the factory to change its price. Model shadow and outline are shared by all factions: set them on <Link to="/card-templates" className="text-accent underline">Card Types → Faction card</Link>.</p>
         </Section>}

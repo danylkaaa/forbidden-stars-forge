@@ -1,7 +1,7 @@
 import { renderCard } from './render'
 import { defaultLayout, type CombatCard } from './model'
 
-const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), fillRect: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), stroke: vi.fn(), font: '', fillStyle: '' }
+const ctx = { drawImage: vi.fn(), fillText: vi.fn(), measureText: vi.fn((text: string) => ({ width: text.length * 10, actualBoundingBoxAscent: 20, actualBoundingBoxDescent: 5 })), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), rotate: vi.fn(), scale: vi.fn(), createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })), fillRect: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), stroke: vi.fn(), font: '', fillStyle: '' }
 const card: CombatCard = { id: 1, faction_id: 1, category: 'combat', name: 'Title', starting: true, level: 0, resource_cost: 2, guns: 0, shields: 0, eagles: 0, upper_text: 'upper (B)', units: [], unit_text: 'lower [M]', created_at: '', updated_at: '' }
 beforeEach(() => {
   vi.clearAllMocks()

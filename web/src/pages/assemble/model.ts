@@ -34,6 +34,10 @@ export const SYMBOL_CATALOG = [
   // Morale is always boxed, so (M) and [M] are the same icon.
   { token: '(M)', glyph: '<', label: 'Morale — always boxed', unframed: false },
   { token: '(D)', glyph: 'D', label: 'Dice', unframed: false },
+  // The boxed symbols with the box cropped away, as in the plain resource column.
+  { token: '{M}', glyph: '<', label: 'Morale — no box', unframed: true },
+  { token: '{S}', glyph: '{', label: 'Shield — no box', unframed: true },
+  { token: '{B}', glyph: '}', label: 'Boltgun — no box', unframed: true },
 ] as const
 // [M] is the same boxed morale icon as (M).
 const SHORT_SYMBOLS: Record<string, typeof SYMBOL_CATALOG[number]> = { ...Object.fromEntries(SYMBOL_CATALOG.map(s => [s.token, s])), '[M]': SYMBOL_CATALOG[4] }
@@ -53,7 +57,7 @@ export function resourceToken(layer: ResourceLayer, style: IconStyle | undefined
   return tokens[style ?? 'badge'] ?? (layer === 'guns' ? 'GUN' : layer === 'shields' ? 'SKULL' : 'MORALE')
 }
 export type Run = { text: string; icon: boolean; italic: boolean; bold?: boolean; unframed?: boolean; dice?: boolean }
-const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSMD]\\)|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*|__[^_\\n]+__)`, 'g')
+const TOKEN_PATTERN = new RegExp(`(\\[(?:${[...Object.keys(SYMBOLS), 'B', 'S', 'M'].join('|')})\\]|\\([BSMD]\\)|\\{[BSM]\\}|\\*\\*[^*\\n]+\\*\\*|\\*[^*\\n]+\\*|__[^_\\n]+__)`, 'g')
 export function textRuns(text: string): Run[] {
   return text.split(TOKEN_PATTERN).filter(Boolean).flatMap<Run>(part => {
     // __bold__; it can be nested with italics, e.g. *__both__* or __*both*__.
