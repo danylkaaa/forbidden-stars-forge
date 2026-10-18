@@ -69,11 +69,14 @@ test('level 0 cards draw the faction logo last, in place of the level number', a
 test('guns, shields and morale share one stacked column in that order', async () => {
   const layout = defaultLayout()
   await renderCard({ card: { ...card, guns: 2, shields: 1, eagles: 1 }, layout, imageUrl: 'art' })
-  const icons = ctx.fillText.mock.calls.filter(call => ['}', '{', '<'].includes(call[0] as string) && call[1] === layout.resources.x * 816 / 100)
+  const r = layout.resources, size = r.size * 1104 / 100
+  const icons = ctx.fillText.mock.calls.filter(call => ['}', '{', '<'].includes(call[0] as string) && Math.abs((call[1] as number) - ((r.x + r.width / 2) * 816 / 100 - size * .41 - size * .08)) < 1)
   expect(icons.map(call => call[0])).toEqual(['}', '}', '{', '<'])
-  const step = layout.resources.size * 1104 / 100 * layout.resources.lineHeight
+  const step = size * r.lineHeight
   const ys = icons.map(call => call[2] as number)
   for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeCloseTo(step)
+  // The first icon starts at the top of the box.
+  expect(ys[0] - size * .82).toBeCloseTo(r.y * 1104 / 100)
 })
 test('level 0 cards have no level or resource price, even without a logo', async () => {
   await renderCard({ card: { ...card, resource_cost: 7 }, layout: defaultLayout(), imageUrl: 'art' })

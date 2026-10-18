@@ -24,7 +24,6 @@ import { useDemoArtwork } from './demoArtwork'
 const BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const CARD_SIZE = { width: 816, height: 1104 }
 // Icons in the demo card's resource column.
-const stackCount = DEMO_COMBAT.guns + DEMO_COMBAT.shields + DEMO_COMBAT.eagles
 const round = (n: number) => Math.round(n * 10) / 10
 // The editor that last received a pointer or focus owns Cmd+Z, so several
 // open editors don't all undo at once.
@@ -108,7 +107,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
           : <div className="grid aspect-[3/4] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
         {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
         {result && <ReferenceOverlay category={category} side="front" />}
-        {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key], stackCount, CARD_SIZE) : shown(key), selected = key === layer
+        {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key]) : shown(key), selected = key === layer
           return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${layerLabel(key, category)}`} title={layerLabel(key, category)}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
             className={`absolute cursor-move touch-none border ${selected ? 'z-10 border-accent bg-accent/10' : 'border-dashed border-white/40 hover:border-accent/70'}`}

@@ -87,6 +87,9 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const descriptionScale = localDescriptionScale ?? assembly.data?.layout?.description_scale ?? 1
   const localLowerScale = useAssembly(s => s.lowerScales?.[id])
   const lowerScale = card?.category === 'combat' ? localLowerScale ?? assembly.data?.layout?.lower_scale ?? 1 : 1
+  // The size of this card's resource icons, for a card with more of them than the column fits.
+  const localResourcesScale = useAssembly(s => s.resourcesScales?.[id])
+  const resourcesScale = card?.category === 'combat' ? localResourcesScale ?? assembly.data?.layout?.resources_scale ?? 1 : 1
   const localPadding = useAssembly(s => s.textPaddings?.[id])
   const textPadding = localPadding ?? assembly.data?.layout?.text_padding
   const layout = useMemo(() => {
@@ -94,13 +97,14 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
     if (titleScale !== 1) base = { ...base, name: { ...base.name, size: base.name.size * titleScale } }
     if (descriptionScale !== 1) base = { ...base, upper_text: { ...base.upper_text, size: base.upper_text.size * descriptionScale } }
     if (lowerScale !== 1) base = { ...base, lower_text: { ...base.lower_text, size: base.lower_text.size * lowerScale } }
+    if (resourcesScale !== 1) base = { ...base, resources: { ...base.resources, size: base.resources.size * resourcesScale } }
     if (textPadding) base = {
       ...base,
       upper_text: { ...base.upper_text, ...(textPadding.upper_top !== undefined ? { paddingTop: textPadding.upper_top } : {}), ...(textPadding.upper_bottom !== undefined ? { paddingBottom: textPadding.upper_bottom } : {}) },
       lower_text: { ...base.lower_text, ...(textPadding.lower_top !== undefined ? { paddingTop: textPadding.lower_top } : {}), ...(textPadding.lower_bottom !== undefined ? { paddingBottom: textPadding.lower_bottom } : {}) },
     }
     return base
-  }, [template.layout, titleScale, descriptionScale, lowerScale, textPadding])
+  }, [template.layout, titleScale, descriptionScale, lowerScale, resourcesScale, textPadding])
   const logos = useFactionLogos()
   const logoUrl = logos.data?.find(l => l.faction_id === card?.faction_id)?.url ?? null
   const eventElement = useEventElementInput(card?.category === 'schema' ? card.faction_id : null)
@@ -108,7 +112,7 @@ export function useCardRenderInput(source: Card | undefined, image: LibraryImage
   const input = useMemo<RenderInput | null>(() => card && image && template.ready && assembly.data && !logos.isPending
     ? { card, layout, imageUrl: image.url, logoUrl, logoScale, artworkUrl, artwork: transform, eventElement, overlayAdjust }
     : null, [card, image, template.ready, assembly.data, logos.isPending, logoUrl, logoScale, layout, artworkUrl, transform, eventElement, overlayAdjust])
-  return { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
+  return { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, resourcesScale, textPadding: textPadding ?? {}, transform, layout, artworkUrl }
 }
 
 // True once the element has come near the viewport (and stays true). Without IntersectionObserver it is always true.

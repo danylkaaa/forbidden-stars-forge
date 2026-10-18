@@ -7,7 +7,7 @@ import type { TextPadding } from './api'
 // card id.
 type State = {
   factionId: number | null; category: Category
-  logoScales: Record<string, number>; titleScales: Record<string, number>; descriptionScales: Record<string, number>; lowerScales: Record<string, number>
+  logoScales: Record<string, number>; titleScales: Record<string, number>; descriptionScales: Record<string, number>; lowerScales: Record<string, number>; resourcesScales: Record<string, number>
   textPaddings: Record<string, TextPadding>
   textPadding: (id: string, value: TextPadding) => void
   clearTextPadding: (id: string) => void
@@ -17,6 +17,8 @@ type State = {
   clearDescriptionScale: (id: string) => void
   lowerScale: (id: string, value: number) => void
   clearLowerScale: (id: string) => void
+  resourcesScale: (id: string, value: number) => void
+  clearResourcesScale: (id: string) => void
   logoScale: (id: string, value: number) => void
   clearLogoScale: (id: string) => void
   edits: Record<string, CardDraft>; transforms: Record<string, ArtworkTransform>
@@ -28,7 +30,7 @@ type State = {
 }
 const without = <T,>(record: Record<string, T>, key: string) => { const next = { ...record }; delete next[key]; return next }
 export const useAssembly = create<State>()(persist((set) => ({
-  factionId: null, category: 'combat', logoScales: {}, titleScales: {}, descriptionScales: {}, lowerScales: {}, textPaddings: {}, edits: {}, transforms: {},
+  factionId: null, category: 'combat', logoScales: {}, titleScales: {}, descriptionScales: {}, lowerScales: {}, resourcesScales: {}, textPaddings: {}, edits: {}, transforms: {},
   logoScale: (id, value) => set(s => ({ logoScales: { ...s.logoScales, [id]: value } })),
   clearLogoScale: id => set(s => ({ logoScales: without(s.logoScales, id) })),
   textPadding: (id, value) => set(s => ({ textPaddings: { ...s.textPaddings, [id]: value } })),
@@ -39,6 +41,8 @@ export const useAssembly = create<State>()(persist((set) => ({
   clearDescriptionScale: id => set(s => ({ descriptionScales: without(s.descriptionScales ?? {}, id) })),
   lowerScale: (id, value) => set(s => ({ lowerScales: { ...s.lowerScales, [id]: value } })),
   clearLowerScale: id => set(s => ({ lowerScales: without(s.lowerScales ?? {}, id) })),
+  resourcesScale: (id, value) => set(s => ({ resourcesScales: { ...s.resourcesScales, [id]: value } })),
+  clearResourcesScale: id => set(s => ({ resourcesScales: without(s.resourcesScales ?? {}, id) })),
   select: selection => set(selection),
   edit: (id, field, value) => set(s => ({ edits: { ...s.edits, [id]: { ...s.edits[id], [field]: value } } })),
   clearEdits: id => set(s => ({ edits: without(s.edits, id) })),

@@ -67,13 +67,13 @@ test('boxes are dragged on the preview and Cmd+Z / Shift+Cmd+Z undo and redo', a
   await waitFor(() => expect(within(section).getByLabelText<HTMLInputElement>('Start X (%)').value).toBe(String(startX + 20)))
 })
 
-test('the resource column has no box to resize; its icon size is editable instead', async () => {
+test('the resource column has a box its icons are centred across, edited by number; its icon size is editable too', async () => {
   mount()
   const section = await front()
   await userEvent.selectOptions(await within(section).findByLabelText('Layer'), 'resources')
   await within(section).findByRole('button', { name: 'Drag Resource icons (guns, shields, morale)' })
   expect(within(section).queryByRole('button', { name: 'Resize Resource icons (guns, shields, morale)' })).not.toBeInTheDocument()
-  expect(within(section).queryByLabelText('Box width (%)')).not.toBeInTheDocument()
+  expect(within(section).getByLabelText('Box width (%)')).toBeInTheDocument()
   fireEvent.change(within(section).getByLabelText('Icon size (%)'), { target: { value: '8' } })
   await waitFor(() => expect(renderCard).toHaveBeenLastCalledWith(expect.objectContaining({ layout: expect.objectContaining({ resources: expect.objectContaining({ size: 8 }) }) })))
 })

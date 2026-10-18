@@ -66,8 +66,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const [artworkFile, setArtworkFile] = useState<File | null>(null)
   useEffect(() => {
     if (!creating) return
-    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id)
-    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id) }
+    useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id); useAssembly.getState().clearResourcesScale(id)
+    return () => { useAssembly.getState().clearEdits(id); useAssembly.getState().clearTransform(id); useAssembly.getState().clearLogoScale(id); useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id); useAssembly.getState().clearResourcesScale(id) }
   }, [creating, id])
   useEffect(() => {
     if (!creating) return
@@ -95,7 +95,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const template = useTemplate(factionId, category)
   const templateLayout = useTemplateLayout(category)
   const back = useTemplate(factionId, category, 'back')
-  const { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, textPadding, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
+  const { input, assembly, logoScale, titleScale, descriptionScale, lowerScale, resourcesScale, textPadding, transform } = useCardRenderInput(source, template.image, templateLayout, creating ? localAssembly : undefined)
   const { result, error: renderError, rendering, retry } = useRenderedCard(input)
   const [downloadError, setDownloadError] = useState('')
   const drag = useRef<{ x: number; y: number; transform: ArtworkTransform } | null>(null)
@@ -105,7 +105,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const [sharedLogoScale, setSharedLogoScale] = useSharedLogoScale(factionId, category)
   const logoScaleDirty = state.logoScales[id] !== undefined
   const titleScaleDirty = state.titleScales[id] !== undefined
-  const descriptionScaleDirty = state.descriptionScales?.[id] !== undefined || state.lowerScales?.[id] !== undefined
+  const descriptionScaleDirty = state.descriptionScales?.[id] !== undefined || state.lowerScales?.[id] !== undefined || state.resourcesScales?.[id] !== undefined
   const paddingDirty = state.textPaddings?.[id] !== undefined
   const transformDirty = !!state.transforms[id]
   const hasArtwork = !!assembly.data?.image_url
@@ -142,13 +142,13 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
         let artworkError = ''
         try {
           const uploaded = artworkFile ? await uploadArtwork(String(created.id), artworkFile) : emptyAssembly()
-          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale, textPadding, descriptionScale, lowerScale) })
+          const assembled = await saveAssembly(String(created.id), { ...uploaded, logo_scale: logoScale, transform, layout: layoutWithTitleScale(localAssembly.layout, titleScale, textPadding, descriptionScale, lowerScale, resourcesScale) })
           queryClient.setQueryData(['card-assembly', String(created.id)], assembled)
         } catch (e) {
           artworkError = e instanceof Error ? e.message : 'Artwork or position could not be saved.'
           // Keep the chosen position available for saving from the editor.
           useAssembly.getState().transform(String(created.id), transform)
-          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale); useAssembly.getState().descriptionScale(String(created.id), descriptionScale); useAssembly.getState().lowerScale(String(created.id), lowerScale); useAssembly.getState().textPadding(String(created.id), textPadding)
+          useAssembly.getState().logoScale(String(created.id), logoScale); useAssembly.getState().titleScale(String(created.id), titleScale); useAssembly.getState().descriptionScale(String(created.id), descriptionScale); useAssembly.getState().lowerScale(String(created.id), lowerScale); useAssembly.getState().resourcesScale(String(created.id), resourcesScale); useAssembly.getState().textPadding(String(created.id), textPadding)
         }
         queryClient.setQueryData(['cards', 'one', String(created.id)], created)
         useAssembly.getState().select({ factionId: created.faction_id, category: created.category })
@@ -162,10 +162,10 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
       }
       if ((transformDirty || logoScaleDirty || titleScaleDirty || descriptionScaleDirty || paddingDirty) && assembly.data) {
         const value = { ...assembly.data, transform, logo_scale: logoScale }
-        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale, textPadding, descriptionScale, lowerScale) }))
+        queryClient.setQueryData(['card-assembly', id], await saveAssembly(id, { ...value, layout: layoutWithTitleScale(assembly.data.layout, titleScale, textPadding, descriptionScale, lowerScale, resourcesScale) }))
         useAssembly.getState().clearTransform(id)
         useAssembly.getState().clearLogoScale(id)
-        useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id)
+        useAssembly.getState().clearTitleScale(id); useAssembly.getState().clearDescriptionScale(id); useAssembly.getState().clearLowerScale(id); useAssembly.getState().clearResourcesScale(id)
         useAssembly.getState().clearTextPadding(id)
       }
     },
@@ -273,7 +273,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
   const withSymbols = (field: ReactNode) => <div className="group/symbols relative">{field}
     <div className="absolute bottom-full right-0 z-[1] pb-1 opacity-0 transition-opacity focus-within:opacity-100 group-focus-within/symbols:opacity-100 group-hover/symbols:opacity-100"><SymbolButtons insert={insertSymbol} disabled={busy} /></div></div>
   function discard() {
-    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearDescriptionScale(id); state.clearLowerScale(id); state.clearTextPadding(id)
+    save.reset(); state.clearEdits(id); state.clearTransform(id); state.clearLogoScale(id); state.clearTitleScale(id); state.clearDescriptionScale(id); state.clearLowerScale(id); state.clearResourcesScale(id); state.clearTextPadding(id)
     if (creating) { setArtworkFile(null); setLocalAssembly(emptyAssembly()) }
   }
   async function download() {
@@ -408,6 +408,8 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
               onChange={e => { save.reset(); state.descriptionScale(id, Number(e.target.value)) }} />}</Field>
             <Field label={<span className="flex items-center justify-between gap-2">Unit text size <span className="font-mono text-ink/80">{Math.round(lowerScale * 100)}%{lowerScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.lowerScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={lowerScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
               onChange={e => { save.reset(); state.lowerScale(id, Number(e.target.value)) }} />}</Field>
+            <Field label={<span className="flex items-center justify-between gap-2">Resource icon size <span className="font-mono text-ink/80">{Math.round(resourcesScale * 100)}%{resourcesScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.resourcesScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={resourcesScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
+              onChange={e => { save.reset(); state.resourcesScale(id, Number(e.target.value)) }} />}</Field>
           </div>}
           {framed && <Field label={<span className="flex items-center justify-between gap-2">Description size <span className="font-mono text-ink/80">{Math.round(descriptionScale * 100)}%{descriptionScale !== 1 && <button type="button" disabled={busy} className="ml-2 cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline" onClick={() => { save.reset(); state.descriptionScale(id, 1) }}>reset</button>}</span></span>}>{fid => <input id={fid} type="range" min={0.3} max={2} step={0.01} value={descriptionScale} disabled={busy} className="h-9 w-full accent-[var(--color-accent)]"
             onChange={e => { save.reset(); state.descriptionScale(id, Number(e.target.value)) }} />}</Field>}

@@ -231,17 +231,21 @@ function setCardShadow(ctx: CanvasRenderingContext2D, height: number) {
   ctx.shadowOffsetX = scale
   ctx.shadowOffsetY = 2 * scale
 }
+// The icons start at the top of the layer's box and are centred across it, so they sit in the middle of the ribbon's strip.
+// Each icon's visible part is a square of .82 of the size, .08 in and .04 down from its cell.
 function paintResources(ctx: CanvasRenderingContext2D, glyphs: string[], p: Placement, w: number, h: number) {
-  const size = p.size * h / 100, count = glyphs.length
-  const x = p.x * w / 100, y = p.y * h / 100
+  const size = p.size * h / 100, count = glyphs.length, step = size * p.lineHeight
+  const boxX = p.x * w / 100, boxY = p.y * h / 100, boxW = p.width * w / 100
+  const inkHeight = Math.max(0, count - 1) * step + size * .82
+  const x = boxX + (boxW - size * .82) / 2 - size * .08, y = boxY
   ctx.font = `${size}px CardSymbols`; ctx.fillStyle = p.color
   for (const [i, glyph] of glyphs.entries()) {
-    const top = y + i * size * p.lineHeight
+    const top = y + i * step
     ctx.save(); ctx.beginPath(); ctx.rect(x + size * .08, top + size * .04, size * .82, size * .82); ctx.clip()
     ctx.fillText(glyph, x, top + size * .82); ctx.restore()
   }
-  // The column sizes itself from icon size and spacing; only the card edge limits it.
-  return count > 0 && (x < 0 || y < 0 || x + size > w || y + (count - 1) * size * p.lineHeight + size > h)
+  // Only the card edge limits the column.
+  return count > 0 && (x + size * .08 < 0 || y + size * .04 < 0 || x + size * .9 > w || y + size * .04 + inkHeight > h)
 }
 // The artwork scaled to cover its window and moved by the transform. It is the card's bottom layer and is not cut to
 // the window: it runs on under the template, showing wherever the template is transparent.

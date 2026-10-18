@@ -8,12 +8,12 @@ import { DEFAULT_NEBULA, NO_PLACEMENT, type NebulaPlacement, type NebulaSettings
 // A card's own tweaks: its title size as a multiple of the card type's size.
 // A card's own margins above and below its upper and lower text, in % of the card's width (the template's apply where unset).
 export type TextPadding = { upper_top?: number; upper_bottom?: number; lower_top?: number; lower_bottom?: number }
-export type AssemblyLayout = Partial<Layout> & { title_scale?: number; description_scale?: number; lower_scale?: number; text_padding?: TextPadding }
+export type AssemblyLayout = Partial<Layout> & { title_scale?: number; description_scale?: number; lower_scale?: number; resources_scale?: number; text_padding?: TextPadding }
 // The layout to save with a card: its title and description sizes and text margins are kept only when they differ from the template's.
-export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number, padding?: TextPadding, descriptionScale = 1, lowerScale = 1): AssemblyLayout => {
-  const { title_scale: _, text_padding: __, description_scale: ___, lower_scale: ____, ...rest } = layout
+export const layoutWithTitleScale = (layout: AssemblyLayout, scale: number, padding?: TextPadding, descriptionScale = 1, lowerScale = 1, resourcesScale = 1): AssemblyLayout => {
+  const { title_scale: _, text_padding: __, description_scale: ___, lower_scale: ____, resources_scale: _____, ...rest } = layout
   const set = Object.fromEntries(Object.entries(padding ?? {}).filter(([, v]) => typeof v === 'number')) as TextPadding
-  return { ...rest, ...(scale === 1 ? {} : { title_scale: scale }), ...(descriptionScale === 1 ? {} : { description_scale: descriptionScale }), ...(lowerScale === 1 ? {} : { lower_scale: lowerScale }), ...(Object.keys(set).length ? { text_padding: set } : {}) }
+  return { ...rest, ...(scale === 1 ? {} : { title_scale: scale }), ...(descriptionScale === 1 ? {} : { description_scale: descriptionScale }), ...(lowerScale === 1 ? {} : { lower_scale: lowerScale }), ...(resourcesScale === 1 ? {} : { resources_scale: resourcesScale }), ...(Object.keys(set).length ? { text_padding: set } : {}) }
 }
 export type Assembly = { image_key: string; image_url: string; overlay_id: string; logo_scale?: number; transform: ArtworkTransform; layout: AssemblyLayout; card_id?: number; updated_at?: string }
 export const emptyAssembly = (): Assembly => ({ image_key: '', image_url: '', overlay_id: 'auto', logo_scale: 1, transform: defaultArtwork(), layout: {} })

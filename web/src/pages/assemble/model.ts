@@ -145,9 +145,9 @@ export function downloadName(name: string): string { return `${name.trim().repla
 
 // The resource column's footprint in card %: it follows icon size and
 // spacing for `count` icons rather than an editable box.
-export function resourceBox(p: Placement, count: number, card = { width: 816, height: 1104 }) {
-  const n = Math.max(1, count)
-  return { x: p.x, y: p.y, width: p.size * .9 * card.height / card.width, height: p.size * ((n - 1) * p.lineHeight + 1) }
+export function resourceBox(p: Placement) {
+  // The icons start at the top of this box and are centred across it.
+  return { x: p.x, y: p.y, width: p.width, height: p.height }
 }
 
 // Layouts saved before the single resource stack kept the gun column's box.
