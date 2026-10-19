@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starting Forces PoC</title>
+<style>
+@font-face { font-family: "Headline"; src: url("../../src/fonts/Headline.woff2") format("woff2"); }
+
+:root { --pale: #fffef0;
+  --mid: #fff3a6; --outline: #e6d778; --hue: hue-rotate(0deg); --corner: #fff25a; --corner-glow: rgba(255,242,90,.7); --corner-edge: #8a7a2c;   /* set by the theme script from the primary colour */
+  --screen-grad: linear-gradient(180deg, var(--pale) 0%, var(--mid) 78%, var(--pale) 100%);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #0b0d0c; height: 100%; }
+body { overflow: auto; }
+
+/* design canvas 620 wide; the whole stage is scaled to the size picked in the control panel */
+#viewport { width: calc(620px * var(--s, 1)); height: calc(var(--H, 800) * 1px * var(--s, 1)); margin: 40px auto; }
+#stage { position: relative; width: 620px; height: calc(var(--H, 800) * 1px); transform: scale(var(--s, 1)); transform-origin: 0 0; font-family: "Headline", "Impact", sans-serif; }
+#layer { position: absolute; inset: 0; z-index: 1; }
+.abs { position: absolute; }
+
+/* frame */
+#frame { inset: 0; background: linear-gradient(145deg, #55523f, #39362a 50%, #4a4736); box-shadow: 0 6px 14px rgba(0,0,0,.6); }
+#space { inset: 14px; background:
+  radial-gradient(circle at 20% 15%, #fff 0 1px, transparent 1.5px) 0 0 / 190px 230px,
+  radial-gradient(circle at 70% 60%, #cfd 0 1px, transparent 1.5px) 0 0 / 260px 310px,
+  radial-gradient(ellipse at 50% 40%, #241d30, #0f0b14 75%); }
+
+/* the existing title-banner style: light gradient, outline, white squares on the side edges, ink splatters */
+.card.tab { background: var(--screen-grad); box-shadow: 0 0 0 5px var(--outline); }
+.card.tab::before { content: ""; position: absolute; inset: -5px -5px 0; pointer-events: none;
+  --v: repeating-linear-gradient(180deg, #fff 0 10px, transparent 10px 16px);
+  background: var(--v) 0 0 / 10px 100% no-repeat, var(--v) 100% 0 / 10px 100% no-repeat; }
+.card.tab::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--splat) -173px -61px / 600px 300px; opacity: .5; }
+
+/* row cells: the resource-banner style (floating outline with a gap, corner brackets, no white squares) */
+.card.res { background: var(--screen-grad); outline: 2px solid var(--outline); outline-offset: 4px; box-shadow: inset 0 0 0 2px var(--outline), 0 5px 8px rgba(0,0,0,.5); }
+.card.res::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--splat) -173px -61px / 600px 300px; opacity: .5; }
+.corners { /* reinforced L-brackets on the four card corners */
+  --c: var(--corner); --l: 12px; --t: 12px; /* covers the 5px outer rings (3px dark + 2px gold) */
+  position: absolute; inset: -6px; pointer-events: none; opacity: .4;
+  background:
+    linear-gradient(var(--c), var(--c)) 0 0 / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 0 0 / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 100% 0 / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 100% 0 / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 0 100% / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 0 100% / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 100% 100% / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 100% 100% / var(--t) var(--l);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 1px var(--corner-edge)) drop-shadow(0 0 4px var(--corner-glow)); /* slight glow */
+}
+/* light bars (same light.png art as the unit table) */
+.bars { z-index: -1; }
+.light { background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; filter: var(--hue); }
+.light.h { background: none; }
+.light.h > i { position: absolute; left: 0; top: 0; display: block; transform-origin: 0 0; background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; }
+
+/* cell content */
+.lbl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 16px; text-align: center; text-transform: uppercase; color: #1c1c1c; line-height: 1.02; letter-spacing: .5px; }
+.title { font-size: 50px; padding-top: 7px; } /* Headline caps sit high in the line box: nudge to the optical centre */
+.name { font-size: 42px; padding-top: 3px; }
+.lbl .nm { white-space: nowrap; }
+.count { position: absolute; left: 0; width: 82px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 76px; color: #1c1c1c; padding-top: 12px; } /* Headline digits sit high in the line box: nudge to the optical centre */
+.div { position: absolute; left: 82px; top: 8px; bottom: 8px; width: 2px; background: rgba(0,0,0,.14); }
+.ico { position: absolute; top: 50%; transform: translate(-50%, -50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 3px #fff) drop-shadow(0 8px 6px rgba(0,0,0,.6)); }
+.ico.gear { filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff); }
+
+/* control panel (outside the scaled stage) */
+#ctl { position: fixed; top: 10px; right: 10px; z-index: 99999; font: 13px/1.3 system-ui, sans-serif; color: #e8e8e0; }
+#ctl > button { display: block; margin-left: auto; padding: 6px 10px; border: 1px solid #55523f; border-radius: 6px; background: #1d1c14; color: #f3e48a; cursor: pointer; font: inherit; }
+#ctl .box { margin-top: 6px; width: 330px; max-height: calc(100vh - 70px); overflow: auto; padding: 12px; border: 1px solid #55523f; border-radius: 8px; background: rgba(20,19,14,.94); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+#ctl.closed .box { display: none; }
+#ctl h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #f3e48a; }
+#ctl h4.sub { margin-top: 14px; }
+#ctl label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+#ctl input[type=text], #ctl input[type=number], #ctl select { padding: 4px 6px; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; color: #fff; font: inherit; }
+#ctl input[type=color] { width: 38px; height: 28px; padding: 0; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; cursor: pointer; }
+#ctl .tc { display: flex; gap: 6px; align-items: center; }
+#ctl #thex { width: 86px; font: 12px ui-monospace, monospace; }
+#ctl .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#ctl .row button, #ctl .ln button { padding: 5px 8px; border: 1px solid #55523f; border-radius: 4px; background: #2a281c; color: #e8e8e0; cursor: pointer; font: inherit; }
+#ctl .row button { flex: 1 1 auto; }
+#ctl .row button:hover { background: #3a372a; }
+#ctl .sw { flex: 1 1 0; min-width: 0; height: 24px; padding: 0 !important; border: 2px solid #55523f !important; }
+#ctl .ln { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid #3a372a; }
+#ctl .ln .l1, #ctl .ln .l2 { display: flex; gap: 4px; margin-top: 5px; align-items: center; }
+#ctl .ln input[type=text] { flex: 1; min-width: 0; }
+#ctl .ln input.cnt { flex: 0 0 52px; }
+#ctl .ln select { flex: 0 0 96px; }
+#ctl .ln button { padding: 2px 7px; }
+#ctl .ln button:disabled { opacity: .3; cursor: default; }
+#ctl .info { margin-top: 8px; color: #a9a58a; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="ctl">
+  <button id="ctlToggle" type="button">Controls</button>
+  <div class="box">
+    <h4>Title</h4>
+    <input id="ttl" type="text" style="width:100%">
+    <h4 class="sub">Theme</h4>
+    <label>Primary colour <span class="tc"><input id="tcol" type="color"><input id="thex" type="text" maxlength="7" spellcheck="false"></span></label>
+    <div class="row" id="tpre"></div>
+    <h4 class="sub">Size</h4>
+    <label>Width (px) <input id="cw" type="number" min="100" max="4000" step="10" style="width:92px"></label>
+    <label>Scale (%) <input id="cs" type="number" min="5" max="500" step="5" style="width:92px"></label>
+    <div class="row"><button type="button" data-fit="screen">Fit screen</button><button type="button" data-fit="orig">620 px</button><button type="button" data-fit="x2">2×</button></div>
+    <div class="info" id="cinfo"></div>
+    <h4 class="sub">Starting items</h4>
+    <div id="lines"></div>
+    <div class="row"><button type="button" id="addRow">Add item</button><button type="button" id="resetRows">Reset</button></div>
+    <div class="info">Quick add:</div>
+    <div class="row" id="quick"></div>
+  </div>
+</div>
+<div id="viewport"><div id="stage">
+  <div id="frame" class="abs"></div>
+  <div id="space" class="abs"></div>
+  <div id="layer"></div>
+</div></div>
+
+<script>
+const BASE_W = 620, IMG = "../../src/images/base/";
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const layer = $("layer");
+
+/* ---------- data ---------- */
+const ICONS = { none: ["None", 0], gear: ["Materiel (gear)", 84], factory: ["Factory", 80], city: ["City", 72], bastion: ["Bastion", 66], forge: ["Forge", 96] };
+const defaultRows = () => [
+  { name: "Fire Warriors",          count: "3", icon: "none" },
+  { name: "XV8 Crisis Battlesuits", count: "2", icon: "none" },
+  { name: "Factory",                count: "1", icon: "factory" },
+  { name: "Materiel",               count: "6", icon: "gear" },
+];
+let title = "Starting Forces", rows = defaultRows();
+try {
+  const sv = JSON.parse(localStorage.getItem("startingForces") || "null");
+  if (sv && Array.isArray(sv.rows) && sv.rows.length) { title = sv.title || title; rows = sv.rows; }
+} catch (e) {}
+const save = () => { try { localStorage.setItem("startingForces", JSON.stringify({ title, rows })); } catch (e) {} };
+
+/* ---------- helpers ---------- */
+const el = (cls, css, html = "", parent = layer) => {
+  const d = document.createElement("div");
+  d.className = "abs " + cls;
+  Object.assign(d.style, Object.fromEntries(Object.entries(css).map(([k, v]) => [k, typeof v === "number" ? v + "px" : v])));
+  d.innerHTML = html; parent.appendChild(d); return d;
+};
+function light(x1, y1, x2, y2, t, parent = layer) { // horizontal light stripe from light.png
+  const L = x2 - x1, d = el("light h", { left: x1, top: y1 - t / 2, width: L, height: t }, "", parent), i = document.createElement("i");
+  Object.assign(i.style, { width: t + "px", height: L + "px", transform: `translate(0, ${t}px) rotate(-90deg)` });
+  const nat = 518 * t / 33; // light.png is 33x518: keep its proportions, crop the end when the bar is shorter than this
+  if (L < nat) i.style.backgroundSize = `${t}px ${nat}px`;
+  d.appendChild(i);
+}
+function connector(x1, x2, cy) { // three light bars joining two elements, drawn behind them
+  const b = el("bars", { left: x1, top: cy - 24, width: x2 - x1, height: 48 });
+  [9, 24, 39].forEach(y => light(0, y, x2 - x1, y, 10, b));
+}
+function splatTile() {
+  const W = 600, H = 300, r = (a, b) => a + Math.random() * (b - a), out = [];
+  const drop = (x, y, rad) => out.push(`<ellipse cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' rx='${(rad * r(.8, 1.25)).toFixed(2)}' ry='${(rad * r(.8, 1.25)).toFixed(2)}' transform='rotate(${Math.floor(r(0, 180))} ${x.toFixed(1)} ${y.toFixed(1)})'/>`);
+  for (let i = 0; i < 34; i++) {
+    const x = r(0, W), y = r(0, H), rad = [1.6, 2, 2.4, 2.9, 3.4][Math.floor(r(0, 5))], ang = r(0, 2 * Math.PI);
+    drop(x, y, rad);
+    for (let k = Math.floor(r(3, 10)); k--;) { // spray of tiny satellites flung one way
+      const d = r(rad * 2.2, rad * 9), a = ang + (Math.random() + Math.random() + Math.random() - 1.5) * .7;
+      drop(x + Math.cos(a) * d, y + Math.sin(a) * d, r(.35, 1.1) * Math.max(.5, rad / 2.2));
+    }
+  }
+  for (let i = 0; i < 160; i++) drop(r(0, W), r(0, H), r(.4, 1)); // fine specks
+  return `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'><g fill='%23463a26'>${out.join("")}</g></svg>")`;
+}
+const splats = new Map();
+
+/* ---------- render ---------- */
+const ROW_H = 116, GAP = 22, TOP = 134, X1 = 40, W1 = 190, X2 = 262, W2 = 318;
+function render() {
+  layer.innerHTML = "";
+  const n = rows.length, H = TOP + n * ROW_H + (n - 1) * GAP + 40;
+  document.documentElement.style.setProperty("--H", H);
+
+  // title banner
+  const t = el("card res", { left: X1, top: 36, width: X1 + W2 + (X2 - X1 - W1) + W1 - X1 + 0, height: 72 }, `<div class="lbl title"><span class="nm">${esc(title)}</span></div><div class="corners"></div>`);
+  t.style.width = X2 + W2 - X1 + "px"; t.dataset.k = "title";
+  connector(14, X1 + 8, 72); connector(X2 + W2 - 8, 606, 72);
+
+  rows.forEach((r, i) => {
+    const y = TOP + i * (ROW_H + GAP), cy = y + ROW_H / 2;
+    connector(14, X1 + 8, cy); connector(X1 + W1 - 8, X2 + 8, cy); connector(X2 + W2 - 8, 606, cy);
+    const l = el("card res", { left: X1, top: y, width: W1, height: ROW_H },
+      `<div class="count">${esc(r.count)}</div><div class="div"></div>`);
+    const [, w] = ICONS[r.icon] || ICONS.none;
+    if (w) l.insertAdjacentHTML("beforeend", `<img class="ico ${r.icon}" src="${IMG}${r.icon}.png" style="left:136px;width:${w}px">`);
+    l.insertAdjacentHTML("beforeend", '<div class="corners"></div>');
+    l.dataset.k = i + "l";
+    const rr = el("card res", { left: X2, top: y, width: W2, height: ROW_H }, `<div class="lbl name"><span class="nm">${esc(r.name)}</span></div><div class="corners"></div>`);
+    rr.dataset.k = i + "r";
+  });
+  fitText();
+  layer.querySelectorAll("[data-k]").forEach(e => {
+    let s = splats.get(e.dataset.k);
+    if (!s) splats.set(e.dataset.k, s = splatTile());
+    e.style.setProperty("--splat", s);
+  });
+  applySize();
+}
+
+/* ---------- auto-size text: shrink the font until the name fits its bar on one line ---------- */
+function fitText() {
+  layer.querySelectorAll(".lbl").forEach(l => {
+    const nm = l.querySelector(".nm"), max = l.classList.contains("title") ? 50 : 42, room = l.clientWidth - 40;
+    let size = max; l.style.fontSize = size + "px";
+    while (nm.offsetWidth > room && size > 14) l.style.fontSize = (size -= 1) + "px";
+  });
+}
+if (document.fonts) document.fonts.ready.then(fitText);
+
+/* ---------- size ---------- */
+let sc = Math.min(1, (innerWidth - 40) / BASE_W);
+try { const v = +localStorage.getItem("startingForcesScale"); if (v > 0) sc = v; } catch (e) {}
+function applySize(from) {
+  sc = Math.min(6, Math.max(.05, sc || 1));
+  document.documentElement.style.setProperty("--s", sc);
+  if (from !== "w") $("cw").value = Math.round(BASE_W * sc);
+  if (from !== "s") $("cs").value = Math.round(sc * 100);
+  const H = +getComputedStyle(document.documentElement).getPropertyValue("--H") || 0;
+  $("cinfo").textContent = `${Math.round(BASE_W * sc)} × ${Math.round(H * sc)} px · design ${BASE_W} × ${H}`;
+  try { localStorage.setItem("startingForcesScale", sc); } catch (e) {}
+}
+$("cw").addEventListener("input", e => { sc = +e.target.value / BASE_W; applySize("w"); });
+$("cs").addEventListener("input", e => { sc = (+e.target.value || 100) / 100; applySize("s"); });
+document.querySelectorAll("#ctl [data-fit]").forEach(b => b.addEventListener("click", () => {
+  const f = b.dataset.fit, H = +getComputedStyle(document.documentElement).getPropertyValue("--H");
+  sc = f === "screen" ? Math.min((innerWidth - 40) / BASE_W, (innerHeight - 100) / H) : f === "x2" ? 2 : 1; applySize();
+}));
+$("ctlToggle").addEventListener("click", () => $("ctl").classList.toggle("closed"));
+
+/* ---------- theme (same derivation as the unit table) ---------- */
+const THEMES = { Gold: "#f3df5e", Green: "#62d06f", Red: "#e8625c", Blue: "#62a4ec", Purple: "#ac7ee6", Orange: "#f29d3e", Teal: "#4fcdc3" };
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; }
+  return [h, s * 100, l * 100];
+}
+function applyTheme(hex, from) {
+  const [h, s] = hexToHsl(hex), root = document.documentElement.style, clamp = v => Math.round(Math.min(100, Math.max(0, v)));
+  root.setProperty("--mid", `hsl(${Math.round(h)} ${clamp(s + 14)}% 83%)`);
+  root.setProperty("--pale", `hsl(${Math.round(h)} ${clamp(s * .55 + 22)}% 96%)`);
+  root.setProperty("--outline", `hsl(${Math.round(h)} ${clamp(s * .8)}% 69%)`);
+  root.setProperty("--corner", `hsl(${Math.round(h)} ${clamp(s + 14)}% 67%)`);
+  root.setProperty("--corner-glow", `hsl(${Math.round(h)} ${clamp(s + 14)}% 67% / .7)`);
+  root.setProperty("--corner-edge", `hsl(${Math.round(h)} ${clamp(s * .6)}% 32%)`);
+  root.setProperty("--hue", `hue-rotate(${(h - 52).toFixed(1)}deg)`);
+  if (from !== "col") $("tcol").value = hex;
+  if (from !== "hex") $("thex").value = hex;
+  try { localStorage.setItem("startingForcesTheme", hex); } catch (e) {}
+}
+$("tpre").innerHTML = Object.entries(THEMES).map(([n, c]) => `<button type="button" class="sw" data-c="${c}" title="${n}" style="background:${c}"></button>`).join("");
+$("tpre").addEventListener("click", e => { if (e.target.dataset.c) applyTheme(e.target.dataset.c); });
+$("tcol").addEventListener("input", e => applyTheme(e.target.value, "col"));
+$("thex").addEventListener("input", e => { let v = e.target.value.trim(); if (v[0] !== "#") v = "#" + v; if (/^#[0-9a-f]{6}$/i.test(v)) applyTheme(v.toLowerCase(), "hex"); });
+let th = THEMES.Gold;
+try { const v = localStorage.getItem("startingForcesTheme"); if (/^#[0-9a-f]{6}$/i.test(v || "")) th = v; } catch (e) {}
+applyTheme(th);
+
+/* ---------- rows editor ---------- */
+function buildList() {
+  $("ttl").value = title;
+  $("lines").innerHTML = rows.map((r, i) => `<div class="ln" data-i="${i}">
+    <div class="l1"><input type="text" class="cnt" data-f="count" value="${esc(r.count)}" title="Number shown on the left">
+      <input type="text" data-f="name" value="${esc(r.name)}">
+      <button type="button" data-a="up" ${i === 0 ? "disabled" : ""}>▲</button><button type="button" data-a="dn" ${i === rows.length - 1 ? "disabled" : ""}>▼</button><button type="button" data-a="rm" ${rows.length < 2 ? "disabled" : ""}>✕</button></div>
+    <div class="l2"><span class="info" style="margin:0">Icon</span><select data-f="icon">${Object.entries(ICONS).map(([k, [n]]) => `<option value="${k}" ${r.icon === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+  </div>`).join("");
+}
+function refresh(rebuild) { save(); if (rebuild) buildList(); render(); }
+$("ttl").addEventListener("input", e => { title = e.target.value; refresh(false); });
+$("lines").addEventListener("input", e => { const f = e.target.dataset.f; if (!f) return; rows[+e.target.closest(".ln").dataset.i][f] = e.target.value; refresh(false); });
+$("lines").addEventListener("click", e => {
+  const a = e.target.dataset.a; if (!a) return;
+  const i = +e.target.closest(".ln").dataset.i;
+  if (a === "rm" && rows.length > 1) rows.splice(i, 1);
+  if (a === "up" && i > 0) [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+  if (a === "dn" && i < rows.length - 1) [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]];
+  refresh(true);
+});
+$("addRow").addEventListener("click", () => { rows.push({ name: "New item", count: "1", icon: "none" }); refresh(true); });
+const QUICK = [["Unit", "New unit", "none"], ["Factory", "Factory", "factory"], ["City", "City", "city"], ["Bastion", "Bastion", "bastion"], ["Materiel", "Materiel", "gear"], ["Forge", "Forge token", "forge"]];
+$("quick").innerHTML = QUICK.map(([b], i) => `<button type="button" data-q="${i}">+ ${b}</button>`).join("");
+$("quick").addEventListener("click", e => { const q = QUICK[e.target.dataset.q]; if (!q) return; rows.push({ name: q[1], count: "1", icon: q[2] }); refresh(true); });
+$("resetRows").addEventListener("click", () => { title = "Starting Forces"; rows = defaultRows(); refresh(true); });
+
+buildList();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faction Sheet PoC</title>
+<style>
+@font-face { font-family: "Headline"; src: url("../../src/fonts/Headline.woff2") format("woff2"); }
+@font-face { font-family: "EventFont"; src: url("../../src/fonts/EventFont.woff2") format("woff2"); }
+:root { --pale: #fffef0;
+  --parch: #c9e65a; --mid: #eef7a8; --outline: #cfe07a; --corner: #e6ff5a; --corner-glow: rgba(230,255,90,.7); --corner-edge: #6a7a2c; --hue: hue-rotate(0deg);
+  --screen-grad: linear-gradient(180deg, var(--pale) 0%, var(--mid) 78%, var(--pale) 100%);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #060a06; height: 100%; }
+body { overflow: auto; }
+#viewport { width: calc(2000px * var(--s, 1)); height: calc(var(--H, 1160) * 1px * var(--s, 1)); margin: 20px auto; }
+#stage { position: relative; width: 2000px; height: calc(var(--H, 1160) * 1px); transform: scale(var(--s, 1)); transform-origin: 0 0; font-family: "Headline", "Impact", sans-serif; overflow: hidden;
+  background: radial-gradient(ellipse at 30% 20%, #1c3a1a, #0d1f0d 55%, #060d06); }
+#layer { position: absolute; inset: 0; }
+.abs { position: absolute; }
+
+/* metal panels */
+.panel { background: linear-gradient(145deg, #4c4f3e, #2f3226 50%, #43463a); box-shadow: 0 8px 18px rgba(0,0,0,.65), inset 0 0 0 3px #1a1c14, inset 0 0 0 5px #7b7f66; }
+.panel::after { content: ""; position: absolute; inset: 16px; background: radial-gradient(ellipse at 50% 30%, #11200f, #070d07 80%); box-shadow: inset 0 0 0 2px #1a1c14; }
+.panel > * { z-index: 1; }
+
+/* THE base rect: own border, transparent space, outer border, corner squares, gradient, ink splatters */
+.rect { background: var(--screen-grad); outline: 2px solid var(--outline); outline-offset: 4px; box-shadow: 0 5px 8px rgba(0,0,0,.5); z-index: 2; }
+.rect::before { content: ""; position: absolute; inset: 0; border: 2px solid var(--outline); pointer-events: none; z-index: 3; }
+.rect::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--splat) -173px -61px / 600px 300px; opacity: .5; z-index: 1; }
+.rect.photo::after { display: none; }
+.rect .pimg { position: absolute; inset: 0; background: #1b1d18 var(--img) center / cover no-repeat; z-index: 0; } /* cover = crop, never squash */
+.corners { --c: var(--corner); --l: 12px; --t: 12px; position: absolute; inset: -6px; pointer-events: none; opacity: .4; z-index: 4;
+  background: linear-gradient(var(--c), var(--c)) 0 0 / var(--l) var(--t), linear-gradient(var(--c), var(--c)) 100% 0 / var(--l) var(--t), linear-gradient(var(--c), var(--c)) 0 100% / var(--l) var(--t), linear-gradient(var(--c), var(--c)) 100% 100% / var(--l) var(--t);
+  background-repeat: no-repeat; filter: drop-shadow(0 0 1px var(--corner-edge)) drop-shadow(0 0 4px var(--corner-glow)); }
+
+/* rect content */
+.lbl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 3px 14px 0; text-align: center; text-transform: uppercase; color: #1c1c1c; line-height: 1.02; letter-spacing: .5px; z-index: 1; }
+.lbl .nm { white-space: nowrap; }
+.count { position: absolute; left: 0; width: 66px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding-top: 10px; font-size: 64px; color: #1c1c1c; z-index: 1; }
+.div { position: absolute; left: 66px; top: 8px; bottom: 8px; width: 2px; background: rgba(0,0,0,.14); z-index: 1; }
+.ico { position: absolute; top: 50%; transform: translate(-50%, -50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 6px 5px rgba(0,0,0,.55)); z-index: 1; }
+.letter { position: absolute; inset: 0; padding: 26px 34px; font-family: "EventFont", Georgia, serif; font-style: italic; color: #1c1c1c; z-index: 1; overflow: hidden; }
+.letter p { margin: 0 0 .5em; text-indent: 1.4em; }
+.sign { position: absolute; right: 34px; bottom: 20px; text-align: right; font-family: "EventFont", Georgia, serif; font-style: italic; line-height: 1.05; z-index: 1; }
+.sign .s1 { font-size: 46px; } .sign .s2 { font-size: 34px; }
+.otxt { position: absolute; inset: 0; display: flex; align-items: center; padding: 6px 20px 6px 40px; font-family: "EventFont", Georgia, serif; line-height: 1.08; color: #1c1c1c; z-index: 1; }
+.otxt b { font-weight: 700; letter-spacing: .5px; } .otxt i { font-style: italic; }
+
+/* objective picture frames (acute tips), as on the Objectives page */
+/* picture frame: chamfered rectangle with an acute (87°) pointed tip; the body is as tall as the text card plus 4px on each side (176); body 230 x 184 = 2.5:2, as tall as the text card with its 8px outline on each side; border = 1/15 of the body height (12.3px); the pointed tips stick out 13px above and below top and bottom centre (box 205 x 202; the tips of neighbouring rows touch) */
+.pic { filter: drop-shadow(0 5px 6px rgba(0,0,0,.6)); --outer: polygon(12px 13px, 103px 13px, 115px 0, 127px 13px, 218px 13px, 230px 25px, 230px 185px, 218px 197px, 127px 197px, 115px 210px, 103px 197px, 12px 197px, 0 185px, 0 25px);
+  --inner: polygon(19.3px 25.3px, 106px 25.3px, 115px 15.8px, 124px 25.3px, 210.7px 25.3px, 217.7px 32.3px, 217.7px 177.7px, 210.7px 184.7px, 124px 184.7px, 115px 194.2px, 106px 184.7px, 19.3px 184.7px, 12.3px 177.7px, 12.3px 32.3px);
+  --ring: path(evenodd, "M12 13 L103 13 L115 0 L127 13 L218 13 L230 25 L230 185 L218 197 L127 197 L115 210 L103 197 L12 197 L0 185 L0 25 Z M19.3 25.3 L106 25.3 L115 15.8 L124 25.3 L210.7 25.3 L217.7 32.3 L217.7 177.7 L210.7 184.7 L124 184.7 L115 194.2 L106 184.7 L19.3 184.7 L12.3 177.7 L12.3 32.3 Z"); }
+.pic .in { position: absolute; inset: 0; clip-path: var(--outer); background: #20202a var(--img) center / cover no-repeat; } /* cover = auto crop; the picture runs under the border */
+.pic .rw { position: absolute; inset: 0; filter: drop-shadow(0 0 7px rgba(0,0,0,.75)); } /* the border casts a shadow onto the picture */
+.pic .o { position: absolute; inset: 0; clip-path: var(--ring); background: linear-gradient(180deg, color-mix(in srgb, var(--outline) 55%, #fff), var(--outline) 60%, color-mix(in srgb, var(--outline) 80%, #000)); }
+
+
+.pic { z-index: 6; } /* the picture frame overlaps its text card and must sit above it (rects are z-index 2) */
+
+/* light bars (light.png): scaled by one factor, cropped when short, never squashed */
+.bars { z-index: 0; }
+.light { background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; filter: var(--hue); }
+.light.h { background: none; }
+.light.h > i { position: absolute; left: 0; top: 0; display: block; transform-origin: 0 0; background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; }
+
+/* control panel */
+#ctl { position: fixed; top: 10px; right: 10px; z-index: 99999; font: 13px/1.3 system-ui, sans-serif; color: #e8e8e0; }
+#ctl > button { display: block; margin-left: auto; padding: 6px 10px; border: 1px solid #55523f; border-radius: 6px; background: #1d1c14; color: #f3e48a; cursor: pointer; font: inherit; }
+#ctl .box { margin-top: 6px; width: 350px; max-height: calc(100vh - 70px); overflow: auto; padding: 12px; border: 1px solid #55523f; border-radius: 8px; background: rgba(20,19,14,.95); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+#ctl.closed .box { display: none; }
+#ctl h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #f3e48a; }
+#ctl h4.sub { margin-top: 14px; }
+#ctl label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+#ctl input[type=text], #ctl input[type=number], #ctl select, #ctl textarea { padding: 4px 6px; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; color: #fff; font: inherit; }
+#ctl textarea { width: 100%; height: 90px; resize: vertical; margin-top: 4px; }
+#ctl input[type=color] { width: 38px; height: 28px; padding: 0; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; cursor: pointer; }
+#ctl .tc { display: flex; gap: 6px; align-items: center; }
+#ctl #thex { width: 86px; font: 12px ui-monospace, monospace; }
+#ctl .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#ctl button { padding: 5px 8px; border: 1px solid #55523f; border-radius: 4px; background: #2a281c; color: #e8e8e0; cursor: pointer; font: inherit; }
+#ctl .row button { flex: 1 1 auto; }
+#ctl button:disabled { opacity: .3; cursor: default; }
+#ctl .sw { flex: 1 1 0; min-width: 0; height: 24px; padding: 0 !important; border: 2px solid #55523f !important; }
+#ctl .ln { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid #3a372a; }
+#ctl .ln .l1, #ctl .ln .l2 { display: flex; gap: 4px; margin-top: 5px; align-items: center; }
+#ctl .ln input[type=text] { flex: 1; min-width: 0; }
+#ctl .ln input.cnt { flex: 0 0 48px; }
+#ctl .ln select { flex: 0 0 130px; }
+#ctl .ln input[type=file], #ctl input[type=file] { width: 100%; margin-top: 4px; font: 11px system-ui; color: #a9a58a; }
+#ctl .info { margin-top: 8px; color: #a9a58a; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="ctl">
+  <button id="ctlToggle" type="button">Controls</button>
+  <div class="box">
+    <h4>Theme</h4>
+    <label>Primary colour <span class="tc"><input id="tcol" type="color"><input id="thex" type="text" maxlength="7" spellcheck="false"></span></label>
+    <div class="row" id="tpre"></div>
+    <h4 class="sub">Size</h4>
+    <label>Width (px) <input id="cw" type="number" min="100" max="8000" step="10" style="width:92px"></label>
+    <label>Scale (%) <input id="cs" type="number" min="5" max="500" step="5" style="width:92px"></label>
+    <div class="row"><button type="button" data-fit="screen">Fit screen</button><button type="button" data-fit="width">Fit width</button><button type="button" data-fit="orig">2000 px</button></div>
+    <div class="info" id="cinfo"></div>
+    <h4 class="sub">Starting forces</h4>
+    <input id="ttl" type="text" style="width:100%">
+    <div id="lines"></div>
+    <div class="row"><button type="button" id="addRow">Add item</button><button type="button" id="resetAll">Reset all</button></div>
+    <div class="row" id="quick"></div>
+    <h4 class="sub">Letter</h4>
+    <textarea id="ltr"></textarea>
+    <label>Signature <input id="sg1" type="text" style="width:200px"></label>
+    <label>Title <input id="sg2" type="text" style="width:200px"></label>
+    <h4 class="sub">Portrait</h4>
+    <input id="pfile" type="file" accept="image/*">
+    <h4 class="sub">Objectives</h4>
+    <div class="info">Left column first, then right. No file = drawn cat; every image is cropped, not squashed.</div>
+    <div id="objs"></div>
+  </div>
+</div>
+<div id="viewport"><div id="stage"><div id="layer"></div></div></div>
+
+<script>
+const BASE_W = 2000, IMG = "../../src/images/base/";
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const layer = $("layer");
+
+/* ---------- data ---------- */
+const ICONS = { none: ["None", "", 0], gear: ["Materiel (gear)", "gear.png", 66], factory: ["Factory", "factory.png", 74], city: ["City", "city.png", 64], bastion: ["Bastion", "bastion.png", 60], forge: ["Forge token", "forge token.png", 66], reinforce: ["Reinforcement token", "reinforce.png", 66] };
+const defaults = () => ({
+  title: "Starting Forces",
+  items: [
+    { name: "Warriors", count: "4", icon: "none" }, { name: "Immortal", count: "1", icon: "none" },
+    { name: "Factory", count: "1", icon: "factory" }, { name: "Forge Token", count: "1", icon: "forge" },
+    { name: "Reinforcement Token", count: "1", icon: "reinforce" }, { name: "Materiel", count: "6", icon: "gear" },
+  ],
+  letter: "You have ruled this galaxy for ten thousand of your years, and yet have so little to account to show for your efforts. Such failure must be as depressing to bear as it is shameful to behold!\nWith a dozen legions of Immortals at my command, I could humble the stars themselves. One will be more than sufficient to crush your pathetic worlds.\nOrder. Unity. Obedience. We taught the galaxy these things long ago, and we will do so again.",
+  sg1: "Imotekh the Storm Lord", sg2: "Phaeron of the Sautekh Dynasty",
+  objs: [
+    { title: "Former Glory:", text: "It is time to make the jewel of our ancient rule over this sector shine like its former magnificence once again." },
+    { title: "Inactive Tomb World:", text: "With the support of the sleeping legions on this world we will destroy our mortal foes." },
+    { title: "Touch Of The C'tan:", text: "A mighty C'tan Star God once escaped from his eternal prison on this world. A large portion of it's essence is still located on this world." },
+    { title: "Ripe For Harvest:", text: "This former core world is ripe for a harvest. It will be ours again soon!" },
+    { title: "Ancient Weapon:", text: "There is an ancient Gauss Annihilator cannon buried on this world, we should retrieve it for our purposes." },
+    { title: "Arcane Knowledge:", text: "The knowledge kept on this world may not fall into the hands of the mortals. Protect it at all costs." },
+  ],
+});
+let D = defaults();
+try { const sv = JSON.parse(localStorage.getItem("factionSheet") || "null"); if (sv && Array.isArray(sv.items) && sv.objs && sv.objs.length === 6) D = Object.assign(D, sv); } catch (e) {}
+const upl = {};                          // uploaded images (data URLs, memory only)
+const save = () => { try { localStorage.setItem("factionSheet", JSON.stringify(D)); } catch (e) {} };
+
+/* ---------- helpers ---------- */
+const el = (cls, css, html = "", parent = layer) => {
+  const d = document.createElement("div");
+  d.className = "abs " + cls;
+  Object.assign(d.style, Object.fromEntries(Object.entries(css).map(([k, v]) => [k, typeof v === "number" ? v + "px" : v])));
+  d.innerHTML = html; parent.appendChild(d); return d;
+};
+let keyN = 0;
+/* the one base rect every card is made of */
+function rect(x, y, w, h, html = "", cls = "", parent = layer, key) {
+  const r = el("rect " + cls, { left: x, top: y, width: w, height: h }, html + '<div class="corners"></div>', parent);
+  r.dataset.k = key || ("r" + keyN++);
+  return r;
+}
+function light(x1, y, x2, t, parent) { // horizontal light stripe made from light.png (scaled uniformly, cropped when short)
+  const L = x2 - x1, d = el("light h", { left: x1, top: y - t / 2, width: L, height: t }, "", parent), i = document.createElement("i");
+  Object.assign(i.style, { width: t + "px", height: L + "px", transform: `translate(0, ${t}px) rotate(-90deg)` });
+  const nat = 518 * t / 33; if (L < nat) i.style.backgroundSize = `${t}px ${nat}px`;
+  d.appendChild(i);
+}
+function connector(x1, x2, cy) { const b = el("bars", { left: x1, top: cy - 22, width: x2 - x1, height: 44 }); [8, 22, 36].forEach(y => light(0, y, x2 - x1, 9, b)); }
+function splatTile() {
+  const W = 600, H = 300, r = (a, b) => a + Math.random() * (b - a), out = [];
+  const drop = (x, y, rad) => out.push(`<ellipse cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' rx='${(rad * r(.8, 1.25)).toFixed(2)}' ry='${(rad * r(.8, 1.25)).toFixed(2)}' transform='rotate(${Math.floor(r(0, 180))} ${x.toFixed(1)} ${y.toFixed(1)})'/>`);
+  for (let i = 0; i < 34; i++) {
+    const x = r(0, W), y = r(0, H), rad = [1.6, 2, 2.4, 2.9, 3.4][Math.floor(r(0, 5))], ang = r(0, 2 * Math.PI);
+    drop(x, y, rad);
+    for (let k = Math.floor(r(3, 10)); k--;) { // spray of tiny satellites flung one way
+      const d = r(rad * 2.2, rad * 9), a = ang + (Math.random() + Math.random() + Math.random() - 1.5) * .7;
+      drop(x + Math.cos(a) * d, y + Math.sin(a) * d, r(.35, 1.1) * Math.max(.5, rad / 2.2));
+    }
+  }
+  for (let i = 0; i < 160; i++) drop(r(0, W), r(0, H), r(.4, 1)); // fine specks
+  return `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'><g fill='%23463a26'>${out.join("")}</g></svg>")`;
+}
+function cat(n) {
+  const fur = ["#e9a24a", "#9aa3ad", "#2b2b33", "#f1e4cf", "#c9783a", "#6f6a62"][n % 6], dark = ["#b8742a", "#6c747e", "#101015", "#c9b69a", "#8f4f20", "#4a463f"][n % 6];
+  const sky = [["#f4b8c9", "#7fa7d9"], ["#9ed1f2", "#f7e3a6"], ["#f6c177", "#7a5aa6"], ["#a8e0c2", "#4f8fb5"], ["#f2a1a1", "#ffd9a0"], ["#b9a7f0", "#f2b8d0"]][n % 6];
+  const eye = n % 3 === 2 ? "#ffd34a" : "#6bd06f";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 240' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='${sky[0]}'/><stop offset='1' stop-color='${sky[1]}'/></linearGradient></defs>
+    <rect width='300' height='240' fill='url(#g)'/>
+    <ellipse cx='150' cy='250' rx='170' ry='60' fill='#5d7a3a' opacity='.8'/>
+    <path d='M80 240 Q86 170 150 165 Q214 170 220 240 Z' fill='${fur}'/>
+    <path d='M92 100 L102 40 L140 78 Z M208 100 L198 40 L160 78 Z' fill='${fur}'/>
+    <path d='M104 88 L108 56 L132 80 Z M196 88 L192 56 L168 80 Z' fill='#f2a7b3'/>
+    <ellipse cx='150' cy='125' rx='66' ry='56' fill='${fur}'/>
+    <path d='M150 70 L146 92 M150 70 L154 92 M130 76 L134 90 M170 76 L166 90' stroke='${dark}' stroke-width='4' stroke-linecap='round'/>
+    <ellipse cx='126' cy='118' rx='13' ry='15' fill='${eye}'/><ellipse cx='174' cy='118' rx='13' ry='15' fill='${eye}'/>
+    <ellipse cx='126' cy='118' rx='4.5' ry='12' fill='#111'/><ellipse cx='174' cy='118' rx='4.5' ry='12' fill='#111'/>
+    <circle cx='121' cy='111' r='3.5' fill='#fff'/><circle cx='169' cy='111' r='3.5' fill='#fff'/>
+    <path d='M143 138 L157 138 L150 147 Z' fill='#f2a7b3'/>
+    <path d='M150 147 Q150 158 138 158 M150 147 Q150 158 162 158' stroke='#222' stroke-width='3' fill='none' stroke-linecap='round'/>
+    <path d='M108 142 L66 134 M108 150 L64 156 M192 142 L234 134 M192 150 L236 156' stroke='#fff' stroke-width='2.5' stroke-linecap='round' opacity='.9'/>
+  </svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+const splats = new Map();
+const catArt = Array.from({ length: 7 }, (_, n) => cat(n));
+
+/* ---------- render ---------- */
+let H = 1160;
+function render() {
+  layer.innerHTML = ""; keyN = 0;
+
+  /* left panel: starting forces */
+  const LX = 20, LY = 215, LW = 540, ROW = 112, GAP = 14, n = D.items.length;
+  const lh = 28 + 70 + 24 + n * ROW + (n - 1) * GAP + 36;
+  el("panel", { left: LX, top: LY, width: LW, height: lh });
+  const bx = LX + 28, tw = LW - 56;
+  connector(LX + 8, bx + 8, LY + 28 + 35); connector(bx + tw - 8, LX + LW - 8, LY + 28 + 35);
+  rect(bx, LY + 28, tw, 70, `<div class="lbl" data-max="48"><span class="nm">${esc(D.title)}</span></div>`, "", layer, "title");
+  const CW = 176, NX = bx + CW + 18, NW = tw - CW - 18;
+  D.items.forEach((it, i) => {
+    const y = LY + 28 + 70 + 24 + i * (ROW + GAP), cy = y + ROW / 2;
+    connector(LX + 8, bx + 8, cy); connector(bx + CW - 8, NX + 8, cy); connector(NX + NW - 8, LX + LW - 8, cy);
+    const ic = ICONS[it.icon] || ICONS.none;
+    rect(bx, y, CW, ROW, `<div class="count">${esc(it.count)}</div><div class="div"></div>` + (ic[2] ? `<img class="ico" src="${IMG}${encodeURI(ic[1])}" style="left:121px;width:${ic[2]}px">` : ""), "", layer, "c" + i);
+    rect(NX, y, NW, ROW, `<div class="lbl" data-max="40"><span class="nm">${esc(it.name)}</span></div>`, "", layer, "n" + i);
+  });
+
+  /* right panel */
+  const RX = 775, RY = 78, RW = 1190;
+  const K = .74, BLOCK_Y = 625, blockH = 630 * K, rh = BLOCK_Y + blockH + 30 - RY;
+  el("panel", { left: RX, top: RY, width: RW, height: rh });
+  const lx = RX + 30, ly = RY + 72, lw = 738, lhh = 448;
+  rect(lx, ly, lw, lhh, `<div class="letter"><div class="ltxt">${D.letter.split("\n").map(p => `<p>${esc(p)}</p>`).join("")}</div></div><div class="sign"><div class="s1">${esc(D.sg1)}</div><div class="s2">${esc(D.sg2)}</div></div>`, "", layer, "letter");
+  const px = lx + lw + 30, pw = RX + RW - 30 - px;
+  connector(lx + lw - 8, px + 8, ly + lhh / 2);
+  const p = rect(px, ly, pw, lhh, `<div class="pimg"></div>`, "photo", layer, "portrait");
+  p.querySelector(".pimg").style.setProperty("--img", `url("${upl.portrait || catArt[6]}")`);
+
+  /* objectives: the Objectives page layout, scaled down; rects are the same base rect */
+  const blk = el("", { left: lx, top: BLOCK_Y, width: 1503, height: 630, transform: `scale(${K})`, transformOrigin: "0 0" });
+  const TXT_X = 210, TXT_W = 535, ROW_H = 168, PIC_W = 230, STEP = 210;
+  D.objs.forEach((c, i) => {
+    const colx = i < 3 ? 0 : 778, top = 21 + (i % 3) * STEP;
+    const t = rect(colx + TXT_X, top, TXT_W, ROW_H, `<div class="otxt" data-fit="1"><div><b>${esc(c.title)}</b> <i>${esc(c.text)}</i></div></div>`, "", blk, "o" + i);
+    const pic = el("pic", { left: colx + PIC_W * 0.02, top: top - 21, width: PIC_W, height: 210 }, `<div class="in"><div class="rw"><div class="o"></div></div></div>`, blk);
+    pic.style.setProperty("--img", `url("${upl["o" + i] || catArt[i]}")`);
+  });
+
+  H = Math.max(RY + rh, LY + lh) + 40;
+  document.documentElement.style.setProperty("--H", H);
+  layer.querySelectorAll("[data-k]").forEach(e => { let s = splats.get(e.dataset.k); if (!s) splats.set(e.dataset.k, s = splatTile()); e.style.setProperty("--splat", s); });
+  fitText();
+  applySize();
+}
+
+/* ---------- auto size text so it fits its rect ---------- */
+function fitText() {
+  layer.querySelectorAll(".lbl").forEach(l => {
+    const nm = l.querySelector(".nm"), max = +l.dataset.max || 40, room = l.clientWidth - 28;
+    let size = max; l.style.fontSize = size + "px";
+    while (nm.offsetWidth > room && size > 12) l.style.fontSize = (size -= 1) + "px";
+  });
+  layer.querySelectorAll(".otxt").forEach(o => {
+    let size = 30; o.style.fontSize = size + "px";
+    while (o.scrollHeight > o.clientHeight + 1 && size > 12) o.style.fontSize = (size -= 1) + "px";
+  });
+  layer.querySelectorAll(".letter").forEach(o => {
+    const sign = o.parentElement.querySelector(".sign"), txt = o.querySelector(".ltxt"), avail = o.clientHeight - 52 - sign.offsetHeight - 6; // 52 = vertical padding
+    let size = 36; o.style.fontSize = size + "px";
+    while (txt.offsetHeight > avail && size > 12) o.style.fontSize = (size -= 1) + "px";
+  });
+}
+if (document.fonts) document.fonts.ready.then(fitText);
+
+/* ---------- size ---------- */
+let sc = Math.min(1, (innerWidth - 40) / BASE_W);
+try { const v = +localStorage.getItem("factionSheetScale"); if (v > 0) sc = v; } catch (e) {}
+function applySize(from) {
+  sc = Math.min(6, Math.max(.05, sc || 1));
+  document.documentElement.style.setProperty("--s", sc);
+  if (from !== "w") $("cw").value = Math.round(BASE_W * sc);
+  if (from !== "s") $("cs").value = Math.round(sc * 100);
+  $("cinfo").textContent = `${Math.round(BASE_W * sc)} × ${Math.round(H * sc)} px · design ${BASE_W} × ${H}`;
+  try { localStorage.setItem("factionSheetScale", sc); } catch (e) {}
+}
+$("cw").addEventListener("input", e => { sc = +e.target.value / BASE_W; applySize("w"); });
+$("cs").addEventListener("input", e => { sc = (+e.target.value || 100) / 100; applySize("s"); });
+document.querySelectorAll("#ctl [data-fit]").forEach(b => b.addEventListener("click", () => {
+  const f = b.dataset.fit; sc = f === "screen" ? Math.min((innerWidth - 40) / BASE_W, (innerHeight - 60) / H) : f === "width" ? (innerWidth - 40) / BASE_W : 1; applySize();
+}));
+$("ctlToggle").addEventListener("click", () => $("ctl").classList.toggle("closed"));
+
+/* ---------- theme: one primary colour, everything else derived ---------- */
+const THEMES = { Lime: "#c9e65a", Gold: "#f3df5e", Green: "#62d06f", Red: "#e8625c", Blue: "#62a4ec", Purple: "#ac7ee6", Orange: "#f29d3e", Teal: "#4fcdc3" };
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; }
+  return [h, s * 100, l * 100];
+}
+function applyTheme(hex, from) {
+  const [h, s] = hexToHsl(hex), root = document.documentElement.style, c = v => Math.round(Math.min(100, Math.max(0, v))), H0 = Math.round(h);
+  root.setProperty("--parch", hex);
+  root.setProperty("--mid", `hsl(${H0} ${c(s + 14)}% 83%)`);
+  root.setProperty("--pale", `hsl(${H0} ${c(s * .55 + 22)}% 96%)`);
+  root.setProperty("--outline", `hsl(${H0} ${c(s * .8)}% 69%)`);
+  root.setProperty("--corner", `hsl(${H0} ${c(s + 14)}% 67%)`);
+  root.setProperty("--corner-glow", `hsl(${H0} ${c(s + 14)}% 67% / .7)`);
+  root.setProperty("--corner-edge", `hsl(${H0} ${c(s * .6)}% 32%)`);
+  root.setProperty("--hue", `hue-rotate(${(h - 52).toFixed(1)}deg)`);
+  if (from !== "col") $("tcol").value = hex;
+  if (from !== "hex") $("thex").value = hex;
+  try { localStorage.setItem("factionSheetTheme", hex); } catch (e) {}
+}
+$("tpre").innerHTML = Object.entries(THEMES).map(([n, c]) => `<button type="button" class="sw" data-c="${c}" title="${n}" style="background:${c}"></button>`).join("");
+$("tpre").addEventListener("click", e => { if (e.target.dataset.c) applyTheme(e.target.dataset.c); });
+$("tcol").addEventListener("input", e => applyTheme(e.target.value, "col"));
+$("thex").addEventListener("input", e => { let v = e.target.value.trim(); if (v[0] !== "#") v = "#" + v; if (/^#[0-9a-f]{6}$/i.test(v)) applyTheme(v.toLowerCase(), "hex"); });
+let th = THEMES.Lime;
+try { const v = localStorage.getItem("factionSheetTheme"); if (/^#[0-9a-f]{6}$/i.test(v || "")) th = v; } catch (e) {}
+applyTheme(th);
+
+/* ---------- editors ---------- */
+function buildLists() {
+  $("ttl").value = D.title; $("ltr").value = D.letter; $("sg1").value = D.sg1; $("sg2").value = D.sg2;
+  $("lines").innerHTML = D.items.map((r, i) => `<div class="ln" data-i="${i}">
+    <div class="l1"><input type="text" class="cnt" data-f="count" value="${esc(r.count)}" title="Number on the left"><input type="text" data-f="name" value="${esc(r.name)}">
+      <button type="button" data-a="up" ${i === 0 ? "disabled" : ""}>▲</button><button type="button" data-a="dn" ${i === D.items.length - 1 ? "disabled" : ""}>▼</button><button type="button" data-a="rm" ${D.items.length < 2 ? "disabled" : ""}>✕</button></div>
+    <div class="l2"><span class="info" style="margin:0">Icon</span><select data-f="icon">${Object.entries(ICONS).map(([k, [nme]]) => `<option value="${k}" ${r.icon === k ? "selected" : ""}>${nme}</option>`).join("")}</select></div></div>`).join("");
+  $("objs").innerHTML = D.objs.map((c, i) => `<div class="ln" data-i="${i}"><div class="l1"><span class="info" style="margin:0;width:30px">${i < 3 ? "L" : "R"}${i % 3 + 1}</span><input type="text" data-f="title" value="${esc(c.title)}"></div>
+    <textarea data-f="text" style="height:54px">${esc(c.text)}</textarea><input type="file" accept="image/*" data-img="o${i}"></div>`).join("");
+}
+function refresh(rebuild) { save(); if (rebuild) buildLists(); render(); }
+$("ttl").addEventListener("input", e => { D.title = e.target.value; refresh(false); });
+$("ltr").addEventListener("input", e => { D.letter = e.target.value; refresh(false); });
+$("sg1").addEventListener("input", e => { D.sg1 = e.target.value; refresh(false); });
+$("sg2").addEventListener("input", e => { D.sg2 = e.target.value; refresh(false); });
+$("lines").addEventListener("input", e => { const f = e.target.dataset.f; if (f) { D.items[+e.target.closest(".ln").dataset.i][f] = e.target.value; refresh(false); } });
+$("lines").addEventListener("click", e => {
+  const a = e.target.dataset.a; if (!a) return; const i = +e.target.closest(".ln").dataset.i, it = D.items;
+  if (a === "rm" && it.length > 1) it.splice(i, 1);
+  if (a === "up" && i > 0) [it[i - 1], it[i]] = [it[i], it[i - 1]];
+  if (a === "dn" && i < it.length - 1) [it[i + 1], it[i]] = [it[i], it[i + 1]];
+  refresh(true);
+});
+$("objs").addEventListener("input", e => { const f = e.target.dataset.f; if (f) { D.objs[+e.target.closest(".ln").dataset.i][f] = e.target.value; refresh(false); } });
+function readFile(input, key) { const f = input.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { upl[key] = fr.result; render(); }; fr.readAsDataURL(f); }
+$("objs").addEventListener("change", e => { if (e.target.dataset.img) readFile(e.target, e.target.dataset.img); });
+$("pfile").addEventListener("change", e => readFile(e.target, "portrait"));
+$("addRow").addEventListener("click", () => { D.items.push({ name: "New item", count: "1", icon: "none" }); refresh(true); });
+const QUICK = [["Unit", "New unit", "none"], ["Factory", "Factory", "factory"], ["City", "City", "city"], ["Bastion", "Bastion", "bastion"], ["Materiel", "Materiel", "gear"], ["Forge token", "Forge Token", "forge"], ["Reinforce", "Reinforcement Token", "reinforce"]];
+$("quick").innerHTML = QUICK.map(([b], i) => `<button type="button" data-q="${i}">+ ${b}</button>`).join("");
+$("quick").addEventListener("click", e => { const q = QUICK[e.target.dataset.q]; if (!q) return; D.items.push({ name: q[1], count: "1", icon: q[2] }); refresh(true); });
+$("resetAll").addEventListener("click", () => { D = defaults(); Object.keys(upl).forEach(k => delete upl[k]); refresh(true); });
+
+buildLists();
+render();
+</script>
+</body>
+</html>
