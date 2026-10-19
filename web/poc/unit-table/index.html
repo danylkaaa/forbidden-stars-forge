@@ -11,7 +11,7 @@
   --parch: #f3d65e;
   --parch-dark: #e6d98a;
   --edge: #cfc27a;
-  --green: #55b94f;
+  --green: #18bf48;
   --blue: #1b2a6b;
   --red: #7d1414;
   --orange: #d9601a;
@@ -21,17 +21,31 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #0b0d0c; height: 100%; }
-body { display: flex; justify-content: center; overflow: auto; }
+body { overflow: auto; }
 
-/* Fixed design canvas 1290 x 2000 (coordinates match the reference), scaled to fit width */
+/* Fixed design canvas 1290 x 2000 (coordinates match the reference); the whole stage is scaled to the size picked in the control panel */
 #layer { position: absolute; inset: 0; z-index: 1; }
-#viewport { width: calc(1290px * var(--s, 1)); height: calc(2000px * var(--s, 1)); }
+#viewport { width: calc(1290px * var(--sx, 1)); height: calc(2000px * var(--sy, 1)); margin: 0 auto; }
 #stage {
   position: relative; width: 1290px; height: 2000px; overflow: hidden;
-  transform: scale(var(--s, 1)); transform-origin: 0 0;
+  transform: scale(var(--sx, 1), var(--sy, 1)); transform-origin: 0 0;
   font-family: "Headline", "Impact", sans-serif;
 }
 .abs { position: absolute; }
+
+
+/* ---------- canvas size controls (outside the scaled stage) ---------- */
+#ctl { position: fixed; top: 10px; right: 10px; z-index: 99999; font: 13px/1.3 system-ui, sans-serif; color: #e8e8e0; }
+#ctl > button { display: block; margin-left: auto; padding: 6px 10px; border: 1px solid #55523f; border-radius: 6px; background: #1d1c14; color: #f3e48a; cursor: pointer; font: inherit; }
+#ctl .box { margin-top: 6px; width: 250px; padding: 12px; border: 1px solid #55523f; border-radius: 8px; background: rgba(20,19,14,.94); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+#ctl.closed .box { display: none; }
+#ctl h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #f3e48a; }
+#ctl label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+#ctl input[type=number] { width: 92px; padding: 4px 6px; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; color: #fff; font: inherit; }
+#ctl .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#ctl .row button { flex: 1 1 auto; padding: 5px 8px; border: 1px solid #55523f; border-radius: 4px; background: #2a281c; color: #e8e8e0; cursor: pointer; font: inherit; }
+#ctl .row button:hover { background: #3a372a; }
+#ctl .info { margin-top: 8px; color: #a9a58a; font-size: 12px; }
 
 /* ---------- Frame ---------- */
 #stone { display: none;
@@ -244,7 +258,7 @@ body { display: flex; justify-content: center; overflow: auto; }
 .num.orange { color: var(--orange); }
 
 #forgeLabel { position: absolute; }
-.forgeSlot { height: 50px; width: 150px; }
+.forgeSlot { height: 50px; width: 104px; }
 .card.tab.forgeSlot { box-shadow: 0 0 0 5px #e6d778; } /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
 .card.tab.forgeSlot::before { /* 10px white squares (6px gap) centred on the left and right edges: 5px on the outline, 5px on the slot */
   display: block; inset: -5px; border-radius: 0; mix-blend-mode: normal; filter: none; opacity: 1;
@@ -253,10 +267,27 @@ body { display: flex; justify-content: center; overflow: auto; }
     var(--v) 0 0 / 10px 100% no-repeat,
     var(--v) 100% 0 / 10px 100% no-repeat;
 }
-.forgeSlot .icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 110px; height: 38px; filter: hue-rotate(-5deg) saturate(1.8) brightness(.95); }
+.forgeSlot .icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 96px; height: 46px; filter: hue-rotate(-5deg) saturate(1.8) brightness(.95); }
 </style>
 </head>
 <body>
+<div id="ctl">
+  <button id="ctlToggle" type="button">Canvas size</button>
+  <div class="box">
+    <h4>Canvas size</h4>
+    <label>Width (px) <input id="cw" type="number" min="100" max="8000" step="10"></label>
+    <label>Height (px) <input id="ch" type="number" min="100" max="12000" step="10"></label>
+    <label>Scale (%) <input id="cs" type="number" min="5" max="500" step="5"></label>
+    <label><span>Keep proportions</span> <input id="lock" type="checkbox" checked></label>
+    <div class="row">
+      <button type="button" data-fit="width">Fit width</button>
+      <button type="button" data-fit="screen">Fit screen</button>
+      <button type="button" data-fit="orig">1290 × 2000</button>
+      <button type="button" data-fit="x2">2×</button>
+    </div>
+    <div class="info" id="cinfo"></div>
+  </div>
+</div>
 <div id="viewport"><div id="stage">
   <div id="stone" class="abs"></div>
   <div id="rightStrip" class="abs"></div>
@@ -349,7 +380,7 @@ function costCard(top, cost, withForge) {
   el("cost", { left: 472, top: top + 37 }, cost);
   el("gear", { left: 512, top: top + 12 });
   if (withForge) {
-    const f = el("card tab forgeSlot", { left: 466, top: top + 124, width: 150, height: 50 });
+    const f = el("card tab forgeSlot", { left: 489, top: top + 124, width: 104, height: 50 });
     f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
   }
 }
@@ -377,7 +408,7 @@ ROWS.forEach((r, k) => {
   el("cost", { left: 472, top: top + 38 }, r.cost);
   el("gear", { left: 512, top: top + 14 });
   if (r.forge) {
-    const f = el("card tab forgeSlot", { left: 466, top: top + 124, width: 150, height: 44 });
+    const f = el("card tab forgeSlot", { left: 489, top: top + 124, width: 104, height: 50 });
     f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
   }
   // stats screen in two layers: frame (border + rings) sits under the light bars, the fill sits over them
@@ -411,12 +442,35 @@ function splatTile() {
 }
 document.querySelectorAll(".card.screen, .card.tab").forEach(e => e.style.setProperty("--splat", splatTile()));
 
-/* ---------- fit to window ---------- */
-function fit() {
-  const s = Math.min(1, innerWidth / 1290);
-  document.documentElement.style.setProperty("--s", s);
+/* ---------- canvas size: everything scales with the stage ---------- */
+const BASE_W = 1290, BASE_H = 2000;
+const size = { w: Math.round(BASE_W * Math.min(1, innerWidth / BASE_W)), lock: true };
+size.h = Math.round(size.w * BASE_H / BASE_W);
+try { Object.assign(size, JSON.parse(localStorage.getItem("unitTableSize") || "{}")); } catch (e) {}
+const $ = id => document.getElementById(id);
+function applySize(from) {
+  size.w = Math.min(8000, Math.max(100, Math.round(size.w) || BASE_W));
+  size.h = Math.min(12000, Math.max(100, Math.round(size.h) || BASE_H));
+  const root = document.documentElement.style;
+  root.setProperty("--sx", size.w / BASE_W);
+  root.setProperty("--sy", size.h / BASE_H);
+  if (from !== "w") $("cw").value = size.w;
+  if (from !== "h") $("ch").value = size.h;
+  if (from !== "s") $("cs").value = Math.round(size.w / BASE_W * 100);
+  $("lock").checked = size.lock;
+  $("cinfo").textContent = `${size.w} × ${size.h} px · x${(size.w / BASE_W).toFixed(2)} / y${(size.h / BASE_H).toFixed(2)}` + (Math.abs(size.w / BASE_W - size.h / BASE_H) > .005 ? " (stretched)" : "");
+  try { localStorage.setItem("unitTableSize", JSON.stringify(size)); } catch (e) {}
 }
-addEventListener("resize", fit); fit();
+$("cw").addEventListener("input", e => { size.w = +e.target.value; if (size.lock) size.h = size.w * BASE_H / BASE_W; applySize("w"); });
+$("ch").addEventListener("input", e => { size.h = +e.target.value; if (size.lock) size.w = size.h * BASE_W / BASE_H; applySize("h"); });
+$("cs").addEventListener("input", e => { const k = (+e.target.value || 100) / 100; size.w = BASE_W * k; size.h = BASE_H * k; applySize("s"); });
+$("lock").addEventListener("change", e => { size.lock = e.target.checked; if (size.lock) { size.h = size.w * BASE_H / BASE_W; applySize(); } });
+document.querySelectorAll("#ctl [data-fit]").forEach(b => b.addEventListener("click", () => {
+  const f = b.dataset.fit, k = f === "width" ? (innerWidth - 20) / BASE_W : f === "screen" ? Math.min((innerWidth - 20) / BASE_W, (innerHeight - 20) / BASE_H) : f === "x2" ? 2 : 1;
+  size.lock = true; size.w = BASE_W * k; size.h = BASE_H * k; applySize();
+}));
+$("ctlToggle").addEventListener("click", () => $("ctl").classList.toggle("closed"));
+applySize();
 </script>
 </body>
 </html>
