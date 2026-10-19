@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SlotKey } from './model'
-import { renderFactionCard, unitRowBox, type FactionCardInput } from './render'
+import { renderFactionCard, unitPreviewBox, type FactionCardInput } from './render'
 
 // How the unit looks on the faction card: its row cut out of the real front render.
 export function CardRowPreview({ input, slot }: { input: FactionCardInput; slot: SlotKey }) {
@@ -11,7 +11,7 @@ export function CardRowPreview({ input, slot }: { input: FactionCardInput; slot:
     const timer = window.setTimeout(() => renderFactionCard({ ...input, side: 'front' }).then(({ canvas: card }) => {
       const target = canvas.current
       if (cancelled || !target) return
-      const b = unitRowBox(slot, input.layout)
+      const b = unitPreviewBox(slot, input.layout, input.data)
       target.width = Math.round(b.w); target.height = Math.round(b.h)
       target.getContext('2d')?.drawImage(card, b.x, b.y, b.w, b.h, 0, 0, target.width, target.height)
       setError('')

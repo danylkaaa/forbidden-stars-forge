@@ -4,6 +4,9 @@ export const FACTION_CARD_CUT_MM = { width: 258, height: 170 } as const
 export const FACTION_CARD_BLEED_MM = 5
 export const CARD_SIZE = { width: 3165, height: 2126 } as const
 
+// A unit icon is rendered with a field of view this many times wider than the model needs, and drawn this much bigger.
+export const MODEL_FIELD = 1.7
+
 // Every faction has the same seven unit rows; only names, stats and models differ.
 export const UNIT_SLOTS = [
   { key: 'bastion', label: 'Bastion', structure: true },
@@ -40,6 +43,10 @@ export type Objective = { name: string; text: string }
 export type FactionCardData = {
   title: string; subtitle: string; text: string
   back_text: string; signature: string; signature_title: string
+  // The card's primary colour (#rrggbb); every panel colour is derived from it. Empty = the faction's unit colour.
+  theme: string
+  // Optional overrides of two derived colours (#rrggbb, empty = derived from the theme): the light panels' colour and the objective picture frames' solid border.
+  panel_color: string; frame_color: string; light_color: string // light_color turns the light bars' hue
   city_cost: number; factory_cost: number
   units: Record<SlotKey, UnitStats>
   models: Partial<Record<SlotKey, Partial<Orientation>>>
@@ -51,7 +58,7 @@ const unit = (name: string, cost: number, dice: number, health: number, morale: 
 export function defaultData(factionName = ''): FactionCardData {
   return {
     title: factionName.toUpperCase(), subtitle: '', text: '',
-    back_text: '', signature: '', signature_title: '',
+    back_text: '', signature: '', signature_title: '', theme: '', panel_color: '', frame_color: '', light_color: '',
     city_cost: 3, factory_cost: 2,
     units: {
       bastion: unit('Bastion', 2, 2, 3, 2, null), infantry: unit('Infantry', 2, 2, 2, 1, 0), ships: unit('Light ships', 2, 2, 2, 2, 0),
@@ -75,6 +82,8 @@ export function normalizeData(raw: unknown, factionName = ''): FactionCardData {
   return {
     ...base, ...r, units,
     models: r.models ?? {},
+    theme: typeof r.theme === 'string' ? r.theme : '',
+    panel_color: typeof r.panel_color === 'string' ? r.panel_color : '', frame_color: typeof r.frame_color === 'string' ? r.frame_color : '', light_color: typeof r.light_color === 'string' ? r.light_color : '',
     // Cache tokens were removed from the initial forces.
     initial: Array.isArray(r.initial) ? r.initial.filter(row => (row.icon as string) !== 'cache') : base.initial,
     objectives: base.objectives.map((o, i) => ({ ...o, ...r.objectives?.[i] })),

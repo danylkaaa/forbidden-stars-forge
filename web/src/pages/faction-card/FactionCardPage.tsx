@@ -16,13 +16,14 @@ import { ReferenceOverlay } from '../assemble/ReferenceOverlay'
 import { ReferenceField } from '../assemble/ReferenceCards'
 import { ImagePickerField } from '../assemble/ImagePicker'
 import { useFactions } from '../factions/api'
-import { elementBox, useFactionCardLayout, type FactionCardLayout } from './layout'
+import { useFactionCardLayout, type FactionCardLayout } from './layout'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
 import { useCardImages } from './useCardImages'
 import { deleteAsset, saveFactionCard, uploadAsset, useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
 import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, downloadName, initialCardIds, normalizeData, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
-import { pngBlob, renderFactionCard, unitRowBox, type FactionCardResult, type Side } from './render'
+import { pngBlob, renderFactionCard, structurePriceBox, unitRowBox, type FactionCardResult, type Side } from './render'
 import { BUNDLED_ICONS } from './bundled'
+import { THEME_PRESETS, themeColor } from './design/theme'
 import { StructureDialog, UnitModelDialog } from './UnitModelDialog'
 
 const panel = 'space-y-3 rounded-lg border border-divider bg-surface p-4'
@@ -165,15 +166,15 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
                 {side === 'back' && !only && <Link to={`/assemble/faction-card/back?faction=${factionId}`} aria-label="Edit card back" title="Edit card back" className="absolute inset-0 rounded border border-transparent hover:border-accent hover:bg-accent/10" />}
                 <SafeAreaLines px={CARD_SIZE} cutMm={FACTION_CARD_CUT_MM} />
                 <ReferenceOverlay category="faction" side={side} />
-                {side === 'front' && UNIT_SLOTS.map(({ key, label }) => { const r = unitRowBox(key, layout)
+                {side === 'front' && UNIT_SLOTS.map(({ key, label }) => { const r = unitRowBox(key, layout, draft.data)
                   return <button key={key} type="button" aria-label={`Edit ${draft.data.units[key].name || label}`} title={`Edit ${draft.data.units[key].name || label}`} onClick={() => setOpenSlot(key)}
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
                     style={{ left: `${r.x / CARD_SIZE.width * 100}%`, top: `${r.y / CARD_SIZE.height * 100}%`, width: `${r.w / CARD_SIZE.width * 100}%`, height: `${r.h / CARD_SIZE.height * 100}%` }} />
                 })}
-                {side === 'front' && (['city', 'factory'] as const).map(key => { const b = elementBox(key, layout)
+                {side === 'front' && (['city', 'factory'] as const).map(key => { const b = structurePriceBox(key, layout, draft.data)
                   return <button key={key} type="button" aria-label={`Edit ${key}`} title={`Edit the ${key} price`} onClick={() => setOpenSlot(key)}
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
-                    style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` }} />
+                    style={{ left: `${b.x / CARD_SIZE.width * 100}%`, top: `${b.y / CARD_SIZE.height * 100}%`, width: `${b.w / CARD_SIZE.width * 100}%`, height: `${b.h / CARD_SIZE.height * 100}%` }} />
                 })}
               </> : <p role="status" className="absolute inset-0 grid place-items-center text-sm text-ink/60">{faces.error || 'Rendering card…'}</p>}
             </div>
@@ -193,6 +194,28 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
             selectedKey={s === 'front' ? draft.front : draft.back} onSelect={key => { save.reset(); setDraft(d => d && { ...d, [s]: key }) }}
             upload={{ url: assets[`${s}-image`], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: `${s}-image`, file }) }} />)}
           {!options.length && <p className="m-0 text-xs text-ink/60">No generated images for this faction yet. Generate the front with the “faction card” type and the back with “faction card back” in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">AI Lab</Link>, or upload your own.</p>}
+        </Section>
+
+        <Section title="Card colour" label="Card colour" open>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Theme colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={themeColor(draft.data.theme, draft.color)} onChange={theme => edit({ theme })} />}</Field>
+            <Button disabled={!draft.data.theme} onClick={() => edit({ theme: '' })}>Use the unit colour</Button>
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Theme presets">{THEME_PRESETS.map(p => <button key={p.name} type="button" aria-label={`${p.name} theme`} title={p.name} onClick={() => edit({ theme: p.color })}
+            className="h-7 w-10 cursor-pointer rounded border-2 border-divider p-0 hover:border-accent" style={{ background: p.color }} />)}</div>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Panel colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.data.panel_color || '#efe4d8'} onChange={panel_color => edit({ panel_color })} />}</Field>
+            <Button disabled={!draft.data.panel_color} onClick={() => edit({ panel_color: '' })}>Use the theme for panels</Button>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Picture frame colour (objectives)">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.data.frame_color || '#b9a99a'} onChange={frame_color => edit({ frame_color })} />}</Field>
+            <Button disabled={!draft.data.frame_color} onClick={() => edit({ frame_color: '' })}>Use the theme for frames</Button>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Light bar colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.data.light_color || themeColor(draft.data.theme, draft.color)} onChange={light_color => edit({ light_color })} />}</Field>
+            <Button disabled={!draft.data.light_color} onClick={() => edit({ light_color: '' })}>Use the theme for light bars</Button>
+          </div>
+          <p className="m-0 text-xs text-ink/55">Panels, outlines, corner squares and light bars on both sides take their colour from this one colour. Until you pick one the faction's unit colour is used.</p>
         </Section>
 
         {only !== 'back' && <Section title="Front text" label="Faction text" open>
