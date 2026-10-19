@@ -8,7 +8,9 @@
 @font-face { font-family: "Headline"; src: url("../../src/fonts/Headline.woff2") format("woff2"); }
 
 :root {
-  --parch: #f3d65e;
+  --parch: #f3df5e;      /* primary colour: everything below is derived from it by the theme script */
+  --mid: #fff3a6; --outline: #e6d778; --corner: #fff25a; --corner-glow: rgba(255,242,90,.7);
+  --corner-edge: #8a7a2c; --fill-shadow: rgba(120,90,10,.55); --hue: hue-rotate(0deg);
   --parch-dark: #e6d98a;
   --edge: #cfc27a;
   --green: #18bf48;
@@ -17,7 +19,7 @@
   --orange: #d9601a;
   --yellow: #e9d83a;
   --yellow-dark: #8d8420;
-  --screen-grad: linear-gradient(180deg, #ffffff 0%, #fff3a6 78%, #ffffff 100%); /* white edges, yellow peak shifted down to 78% */
+  --screen-grad: linear-gradient(180deg, #ffffff 0%, var(--mid) 78%, #ffffff 100%); /* white edges, yellow peak shifted down to 78% */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #0b0d0c; height: 100%; }
@@ -25,9 +27,9 @@ body { overflow: auto; }
 
 /* Fixed design canvas 1290 x 2000 (coordinates match the reference); the whole stage is scaled to the size picked in the control panel */
 #layer { position: absolute; inset: 0; z-index: 1; }
-#viewport { width: calc(1290px * var(--sx, 1)); height: calc(2000px * var(--sy, 1)); margin: 0 auto; }
+#viewport { width: calc(1290px * var(--sx, 1)); height: calc(var(--H, 2000) * 1px * var(--sy, 1)); margin: 0 auto; }
 #stage {
-  position: relative; width: 1290px; height: 2000px; overflow: hidden;
+  position: relative; width: 1290px; height: calc(var(--H, 2000) * 1px); overflow: hidden;
   transform: scale(var(--sx, 1), var(--sy, 1)); transform-origin: 0 0;
   font-family: "Headline", "Impact", sans-serif;
 }
@@ -37,7 +39,7 @@ body { overflow: auto; }
 /* ---------- canvas size controls (outside the scaled stage) ---------- */
 #ctl { position: fixed; top: 10px; right: 10px; z-index: 99999; font: 13px/1.3 system-ui, sans-serif; color: #e8e8e0; }
 #ctl > button { display: block; margin-left: auto; padding: 6px 10px; border: 1px solid #55523f; border-radius: 6px; background: #1d1c14; color: #f3e48a; cursor: pointer; font: inherit; }
-#ctl .box { margin-top: 6px; width: 250px; padding: 12px; border: 1px solid #55523f; border-radius: 8px; background: rgba(20,19,14,.94); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+#ctl .box { margin-top: 6px; width: 330px; max-height: calc(100vh - 70px); overflow: auto; padding: 12px; border: 1px solid #55523f; border-radius: 8px; background: rgba(20,19,14,.94); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
 #ctl.closed .box { display: none; }
 #ctl h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #f3e48a; }
 #ctl label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
@@ -45,6 +47,20 @@ body { overflow: auto; }
 #ctl .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 #ctl .row button { flex: 1 1 auto; padding: 5px 8px; border: 1px solid #55523f; border-radius: 4px; background: #2a281c; color: #e8e8e0; cursor: pointer; font: inherit; }
 #ctl .row button:hover { background: #3a372a; }
+#ctl h4.sub { margin-top: 14px; }
+#ctl .ln { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid #3a372a; }
+#ctl .ln .l1 { display: flex; gap: 4px; }
+#ctl .ln .l2 { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; align-items: center; }
+#ctl .ln input[type=text] { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; color: #fff; font: inherit; }
+#ctl .ln input[type=number] { width: 44px; padding: 3px 4px; }
+#ctl .ln label { margin: 0; gap: 3px; font-size: 11px; color: #a9a58a; }
+#ctl .ln button { padding: 2px 7px; border: 1px solid #55523f; border-radius: 4px; background: #2a281c; color: #e8e8e0; cursor: pointer; font: inherit; }
+#ctl .ln button:disabled { opacity: .3; cursor: default; }
+#ctl .tc { display: flex; gap: 6px; align-items: center; }
+#ctl input[type=color] { width: 38px; height: 28px; padding: 0; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; cursor: pointer; }
+#ctl #thex { width: 86px; padding: 4px 6px; border: 1px solid #55523f; border-radius: 4px; background: #0d0c08; color: #fff; font: 12px ui-monospace, monospace; }
+#ctl .sw { flex: 1 1 0; min-width: 0; height: 24px; padding: 0; border: 2px solid #55523f; border-radius: 4px; cursor: pointer; }
+#ctl .sw:hover { border-color: #fff; }
 #ctl .info { margin-top: 8px; color: #a9a58a; font-size: 12px; }
 
 /* ---------- Frame ---------- */
@@ -94,7 +110,7 @@ body { overflow: auto; }
 .bars { height: 44px; z-index: -5; } /* lowest layer: behind the screen frame (-4), pipes (-3), torch (-2) and every card */
 .bars.tall { height: 46px; }
 /* every light stripe is ../../src/images/base/light.png (vertical art); horizontal ones turn it a quarter */
-.light { background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; } /* no glow */
+.light { background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; filter: var(--hue); } /* no glow; hue follows the theme */
 .light.h { background: none; }
 .light.h > i { position: absolute; left: 0; top: 0; display: block; transform-origin: 0 0; background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; }
 .socket { /* CL-torch joint: spike points left, cage faces the unit circle */
@@ -157,7 +173,7 @@ body { overflow: auto; }
 .circle .fill {
   position: absolute; left: 21px; top: 21px; right: 21px; bottom: 21px; border-radius: 50%;
   background: var(--parch);
-  box-shadow: inset 0 0 14px rgba(120,90,10,.55);
+  box-shadow: inset 0 0 14px var(--fill-shadow);
 }
 .circle .ring { position: absolute; inset: -4px; background: url("../../src/images/base/unit-border.png") center / 100% 100% no-repeat; }
 .circle .mini {
@@ -169,7 +185,7 @@ body { overflow: auto; }
 .card {
   background: var(--parch);
   /* tiny gold line floating 4px off the rectangle, transparent gap in between */
-  outline: 4px solid #e6d778; outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
+  outline: 4px solid var(--outline); outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
   box-shadow: 0 5px 8px rgba(0,0,0,.5);
 }
 .card::before, .circle .fill::before { /* softened paper texture */
@@ -185,7 +201,7 @@ body { overflow: auto; }
   mix-blend-mode: multiply; opacity: .18;
 }
 .corners { /* reinforced L-brackets on the four card corners */
-  --c: #fff25a; --l: 24px; --t: 8px; /* covers the 5px outer rings (3px dark + 2px gold) */
+  --c: var(--corner); --l: 24px; --t: 8px; /* covers the 5px outer rings (3px dark + 2px gold) */
   position: absolute; inset: -8px; pointer-events: none; opacity: .7;
   background:
     linear-gradient(var(--c), var(--c)) 0 0 / var(--l) var(--t),
@@ -197,13 +213,13 @@ body { overflow: auto; }
     linear-gradient(var(--c), var(--c)) 100% 100% / var(--l) var(--t),
     linear-gradient(var(--c), var(--c)) 100% 100% / var(--t) var(--l);
   background-repeat: no-repeat;
-  filter: drop-shadow(0 0 1px #8a7a2c) drop-shadow(0 0 4px rgba(255,242,90,.7)); /* slight glow */
+  filter: drop-shadow(0 0 1px var(--corner-edge)) drop-shadow(0 0 4px var(--corner-glow)); /* slight glow */
 }
 .card.tab { /* no border: soft glow instead */
   border: 0; outline: 0;
   background: var(--screen-grad); /* same gradient as the stats screen */
   /* thin light-yellow outline drawn outside the bar */
-  box-shadow: 0 0 0 5px #e6d778; /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
+  box-shadow: 0 0 0 5px var(--outline); /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
 }
 .card.tab::after { /* same tiny ink splatters as the stats screens, tile shifted so the pattern differs */
   background: var(--splat) -173px -61px / 600px 300px;
@@ -226,7 +242,7 @@ body { overflow: auto; }
   mix-blend-mode: normal; opacity: .5;
 }
 .screenFrame { /* floating gold line + shadow of the stats screen */
-  outline: 4px solid #e6d778; outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
+  outline: 4px solid var(--outline); outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
   /* normal stacking: after the title tab in the DOM, so its rings draw over the tab */
   box-shadow: 0 5px 8px rgba(0,0,0,.5);
 }
@@ -259,7 +275,7 @@ body { overflow: auto; }
 
 #forgeLabel { position: absolute; }
 .forgeSlot { height: 50px; width: 104px; }
-.card.tab.forgeSlot { box-shadow: 0 0 0 5px #e6d778; } /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
+.card.tab.forgeSlot { box-shadow: 0 0 0 5px var(--outline); } /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
 .card.tab.forgeSlot::before { /* 10px white squares (6px gap) centred on the left and right edges: 5px on the outline, 5px on the slot */
   display: block; inset: -5px; border-radius: 0; mix-blend-mode: normal; filter: none; opacity: 1;
   --v: repeating-linear-gradient(180deg, #fff 0 10px, transparent 10px 16px);
@@ -286,6 +302,18 @@ body { overflow: auto; }
       <button type="button" data-fit="x2">2×</button>
     </div>
     <div class="info" id="cinfo"></div>
+    <h4 class="sub">Theme</h4>
+    <label>Primary colour <span class="tc"><input id="tcol" type="color"><input id="thex" type="text" maxlength="7" spellcheck="false"></span></label>
+    <div class="row" id="tpre"></div>
+    <div class="info">Panels, title bars, outlines, corner brackets and light bars are recalculated from it. Level banners stay yellow.</div>
+    <h4 class="sub">Lines</h4>
+    <div class="info">City / Factory and Bastion are always present. Rows with the same level share one pipe and banner.</div>
+    <div id="lines"></div>
+    <div class="row">
+      <button type="button" id="addLine">Add line</button>
+      <button type="button" id="addLevel">Add line + new level</button>
+      <button type="button" id="resetLines">Reset</button>
+    </div>
   </div>
 </div>
 <div id="viewport"><div id="stage">
@@ -297,24 +325,36 @@ body { overflow: auto; }
 </div></div>
 
 <script>
-/* ---------- data ---------- */
-const ROWS = [
-  { name: "Bastion",                 img: "bastion", cost: 2, power: 2, health: 3, morale: 2 },
-  { name: "Guardsmen",               ph: [60, 100],  cost: 2, power: 1, health: 1, morale: 2 },
-  { name: "Lunar-Class Cruisers",    ph: [170, 60],  cost: 2, power: 2, health: 2, morale: 2 },
-  { name: "Ogryns",                  ph: [80, 150],  cost: 3, power: 2, health: 4, morale: 2 },
-  { name: "Leman Russ Battle Tanks", ph: [140, 70],  cost: 4, power: 3, health: 4, morale: 3 },
-  { name: "Emperor-Class Battleships", ph: [250, 70], cost: 5, power: 4, health: 6, morale: 3, forge: true },
-  { name: "Warhound Titans",         ph: [90, 140],  cost: 5, power: 3, health: 5, morale: 4, forge: true },
-];
-// reference-pixel coordinates (1290 x 2000 design space)
+/* ---------- constants (reference px, design width 1290) ---------- */
+const BASE_W = 1290;
+const CITY_TOP = 185, UNIT_TOP = 408, STEP = 222, FORGE_EXTRA = 25, CARD_H = 122;
+const PX = 109, PIPE_T = 16;        // pipe / banner centre x, pipe thickness
+const IMG = "../../src/images/base/";
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const layer = $("layer");
 
-const CARD = [185, 408, 628, 848, 1072, 1295, 1517, 1764]; // card tops (last row pushed 24px down so the Emperor forge slot clears the Warhound title bar)
-// row centres = centre of the cost card / stats screen (same top, 122 tall); circles, torches, pipes and light bars all share it
-const CY   = CARD.map(t => t + 61);
-const BADGES = [ { n: 0, y: (408 + 61 + 5 + 628 + 61 + 5) / 2 } /* midway between the row 1 and row 2 torch axes */, { n: 1, y: 1072 + 61 + 5 } /* on the row 4 torch axis */, { n: 2, y: (1295 + 61 + 5 + 1517 + 61 + 5) / 2 } /* midway between the row 5 and row 6 torch axes */, { n: 3, y: 1764 + 61 + 5 } /* on the row 7 torch axis */ ];
+/* ---------- data: unit lines (City/Factory is custom and always drawn; Bastion is a fixed first line) ---------- */
+let nextId = 1;
+const mk = o => ({ id: nextId++, name: "New unit", cost: 2, power: 2, health: 2, morale: 2, forge: false, level: 0, ...o });
+const defaultRows = () => { nextId = 1; return [
+  mk({ name: "Bastion", img: "bastion", cost: 2, power: 2, health: 3, morale: 2, level: 0, fixed: true }),
+  mk({ name: "Guardsmen",                  cost: 2, power: 1, health: 1, morale: 2, level: 0 }),
+  mk({ name: "Lunar-Class Cruisers",       cost: 2, power: 2, health: 2, morale: 2, level: 0 }),
+  mk({ name: "Ogryns",                     cost: 3, power: 2, health: 4, morale: 2, level: 1 }),
+  mk({ name: "Leman Russ Battle Tanks",    cost: 4, power: 3, health: 4, morale: 3, level: 2 }),
+  mk({ name: "Emperor-Class Battleships",  cost: 5, power: 4, health: 6, morale: 3, level: 2, forge: true }),
+  mk({ name: "Warhound Titans",            cost: 5, power: 3, health: 5, morale: 4, level: 3, forge: true }),
+]; };
+let rows = null;
+try {
+  const saved = JSON.parse(localStorage.getItem("unitTableRows") || "null");
+  if (Array.isArray(saved) && saved.length && saved[0].fixed) { rows = saved; nextId = Math.max(...rows.map(r => r.id)) + 1; }
+} catch (e) {}
+rows = rows || defaultRows();
+const saveRows = () => { try { localStorage.setItem("unitTableRows", JSON.stringify(rows)); } catch (e) {} };
 
-const layer = document.getElementById("layer");
+/* ---------- element helpers ---------- */
 const el = (cls, css, html = "", parent = layer) => {
   const d = document.createElement("div");
   d.className = "abs " + cls;
@@ -325,10 +365,8 @@ const el = (cls, css, html = "", parent = layer) => {
   if (/\bscreenFrame\b/.test(cls) || (/\bcard\b/.test(cls) && !/\b(tab|forgeSlot|screen)\b/.test(cls))) d.insertAdjacentHTML("beforeend", '<div class="halo"></div>');
   return d;
 };
+const keyed = (d, k) => { d.dataset.k = k; return d; };
 
-/* ---------- frame decoration ---------- */
-
-/* ---------- left pipes + badges ---------- */
 // light stripe from (x1,y1) to (x2,y2), t thick, axis-aligned, drawn from light.png
 function light(x1, y1, x2, y2, t, parent = layer) {
   if (y1 === y2) { // horizontal: the vertical art turned a quarter
@@ -338,94 +376,27 @@ function light(x1, y1, x2, y2, t, parent = layer) {
     d.appendChild(i);
   } else el("light", { left: x1 - t / 2, top: y1, width: t, height: y2 - y1 }, "", parent);
 }
-// pipes run behind the torch and into its cage, where the three bars take over
-const PIPE_T = 16, TORCH_IN = 185;
-const pipeLayer = el("", { left: 0, top: 0, width: 0, height: 0, zIndex: "-3" });
-const PX = 109; // pipe / banner centre x (moved right from 85)
-light(PX, CY[0] + 3.6, PX, CY[3] + 3.6, PIPE_T); // pipe ends at the stub centre so the rounded corners stay clean // vertical pipes sit over the torch
-const B2 = (CY[5] + CY[6]) / 2 + 5; // badge 2 centre
-light(PX, CY[5] + 3.6, PX, B2 - 30, PIPE_T); light(PX, B2 + 80, PX, CY[6] + 3.6, PIPE_T);
-
-// junctions where a branch leaves the vertical pipe; the torch cage centre sits 5px below the row centre, so branches centre on CY + 5 (measured: torch axis at 38.7px of 69, torch top = CY-34)
-[[0, "L-dr"], [1, "T"], [2, "T"], [3, "L-ur"], [5, "L-dr"], [6, "L-ur"]].forEach(([r, k]) => { { const w = k === "T" ? 139 - PX : 147 - PX, st = el("stub " + k, { left: k === "T" ? PX : PX - 8, top: CY[r] - 4.4, width: w }); light(0, 8, w, 8, 16, st); } el("joint " + k, { left: PX - 30, top: CY[r] - 56.4 }); });
-
-CY.forEach((y, i) => {
-  el("socket", { left: 42, top: y - 34 });
-  const bars = el("bars", { left: 150, top: y - 22, width: 980 }); // starts right where the stub ends, so the three cage bars continue it
-  [6.5, 21.5, 35.5].forEach(o => /* bar centres (o+6) measured on the three torch cage openings: CY-9.5, CY+5.5, CY+19.5 */ light(0, o + 6, 980, o + 6, 12, bars));
-});
-// bonus spikes on tank/ship rows reference
-BADGES.forEach(b => {
-  const d = el("badge", { left: PX - 50, top: b.y - 70, width: 100, height: 140 });
-  d.innerHTML = `<div class="banner"></div><div class="bg"></div><span>${b.n}</span>`;
-});
-
-/* ---------- row 0 : City / Factory ---------- */
-const card = (x, y, w, h) => el("card", { left: x, top: y, width: w, height: h });
-function tab(x, y, w, h, text) {
+function tab(x, y, w, h, text, key) {
   const t = el("card tab", { left: x, top: y, width: w, height: h + 6, borderBottom: "none" });
-  t.innerHTML = `<div class="t" style="top:${h - 40}px">${text}</div>`;
+  t.innerHTML = `<div class="t" style="top:${h - 40}px">${esc(text)}</div>`;
+  return keyed(t, key);
 }
 function circle(cx, cy, row) {
   const c = el("circle", { left: cx - 96, top: cy - 96 });
   c.innerHTML = `<div class="fill"></div>`;
   if (row.img) {
-    const w = { city: 92, bastion: 80, factory: 90 }[row.img];
-    c.innerHTML += `<img class="mini" src="../../src/images/base/${row.img}.png" style="width:${w}px;">`;
-  } // rows without an image (miniatures) show an empty circle
+    const w = { city: 92, bastion: 80, factory: 90 }[row.img] || 90;
+    c.innerHTML += `<img class="mini" src="${IMG}${row.img}.png" style="width:${w}px;">`;
+  } // lines without an image show an empty circle
   c.innerHTML += `<div class="ring"></div>`;
 }
-function costCard(top, cost, withForge) {
-  card(457, top, 168, 122);
-  el("cost", { left: 472, top: top + 37 }, cost);
-  el("gear", { left: 512, top: top + 12 });
-  if (withForge) {
-    const f = el("card tab forgeSlot", { left: 489, top: top + 124, width: 104, height: 50 });
-    f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
-  }
+function forgeSlot(top, key) {
+  const f = el("card tab forgeSlot", { left: 489, top: top + 124, width: 104, height: 50 });
+  f.innerHTML = `<div class="icon" style="background-image:url(${IMG}forge.png)"></div>`;
+  keyed(f, key);
 }
-// connector stripes right of cost / stats
-function stripes() {} // bars are drawn once per row, full width, behind everything
 
-// City
-tab(470, 185 - 43, 138, 44, "City");
-costCard(185, 3);
-circle(335, CY[0], { img: "city" });
-// Factory
-circle(818, CY[0], { img: "factory" });
-tab(945, 185 - 43, 140, 44, "Factory");
-card(930, 185, 168, 125);
-el("cost", { left: 945, top: 222 }, 2);
-el("gear", { left: 985, top: 197 });
-stripes(625, 245, 105); stripes(905, 245, 30); stripes(1098, 245, 32); stripes(430, 245, 30);
-
-/* ---------- unit rows ---------- */
-ROWS.forEach((r, k) => {
-  const i = k + 1, top = CARD[i], cy = CY[i];
-  tab(500, top - 43, 556, 44, r.name);
-  circle(335, cy, r);
-  card(457, top, 168, 122);
-  el("cost", { left: 472, top: top + 38 }, r.cost);
-  el("gear", { left: 512, top: top + 14 });
-  if (r.forge) {
-    const f = el("card tab forgeSlot", { left: 489, top: top + 124, width: 104, height: 50 });
-    f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
-  }
-  // stats screen in two layers: frame (border + rings) sits under the light bars, the fill sits over them
-  el("screenFrame", { left: 655, top, width: 443, height: 122 });
-  el("card screen", { left: 655, top, width: 443, height: 122 });
-  // icons
-  el("icon", { left: 678, top: top + 10, width: 102, height: 108, backgroundImage: "url(../../src/images/base/power.png)" });
-  el("icon", { left: 820, top: top + 8, width: 100, height: 106, backgroundImage: "url(../../src/images/base/health.png)" });
-  el("icon", { left: 962, top: top + 78, width: 98, height: 38, backgroundImage: "url(../../src/images/base/morale.png)" });
-  el("num white", { left: 728, top: top + 22 }, r.power);
-  el("num white", { left: 870, top: top + 22 }, r.health);
-  el("num orange", { left: 1010, top: top + 22 }, r.morale);
-  stripes(625, cy, 30); stripes(430, cy, 30); stripes(1098, cy, 32);
-});
-
-
-/* ---------- random ink splatters: every screen and title bar gets its own tile ---------- */
+/* ---------- random ink splatters: every screen and title bar keeps its own tile ---------- */
 function splatTile() {
   const W = 600, H = 300, r = (a, b) => a + Math.random() * (b - a), out = [];
   const drop = (x, y, rad) => out.push(`<ellipse cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' rx='${(rad * r(.8, 1.25)).toFixed(2)}' ry='${(rad * r(.8, 1.25)).toFixed(2)}' transform='rotate(${Math.floor(r(0, 180))} ${x.toFixed(1)} ${y.toFixed(1)})'/>`);
@@ -440,37 +411,197 @@ function splatTile() {
   for (let i = 0; i < 160; i++) drop(r(0, W), r(0, H), r(.4, 1)); // fine specks
   return `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'><g fill='%23463a26'>${out.join("")}</g></svg>")`;
 }
-document.querySelectorAll(".card.screen, .card.tab").forEach(e => e.style.setProperty("--splat", splatTile()));
+const splats = new Map();
+
+/* ---------- render: redraws every line, join and level banner from `rows` ---------- */
+let baseH = 2000;
+function render() {
+  layer.innerHTML = "";
+
+  // 1. vertical layout: each line sits STEP below the previous one; a forge slot pushes the next line down
+  const tops = [];
+  rows.forEach((r, i) => tops.push(i === 0 ? UNIT_TOP : tops[i - 1] + STEP + (rows[i - 1].forge ? FORGE_EXTRA : 0)));
+  const last = rows.length - 1;
+  baseH = Math.round(tops[last] + (rows[last].forge ? 174 : CARD_H) + 62);
+  document.documentElement.style.setProperty("--H", baseH);
+  $("plate").style.height = baseH - 135 + "px";
+  $("space").style.height = baseH - 195 + "px";
+  $("rightStrip").style.height = baseH - 100 + "px";
+
+  // 2. items on the left rail: the City/Factory line first (custom), then every unit line
+  const items = [{ cy: CITY_TOP + 61, level: rows[0].level }, ...rows.map((r, i) => ({ cy: tops[i] + 61, level: r.level }))];
+
+  // 3. level groups = consecutive items with the same level
+  const groups = [];
+  items.forEach((it, i) => {
+    const g = groups[groups.length - 1];
+    if (g && g.level === it.level) g.idx.push(i); else groups.push({ level: it.level, idx: [i] });
+  });
+
+  // 4. pipes and joins: a group with several items gets one pipe, an L at each end and a T for every middle item
+  groups.forEach(g => {
+    if (g.idx.length < 2) return;
+    const a = items[g.idx[0]].cy, b = items[g.idx[g.idx.length - 1]].cy;
+    light(PX, a + 3.6, PX, b + 3.6, PIPE_T); // pipe ends at the stub centre so the rounded corners stay clean
+    g.idx.forEach((idx, n) => {
+      const k = n === 0 ? "L-dr" : n === g.idx.length - 1 ? "L-ur" : "T", cy = items[idx].cy;
+      const w = k === "T" ? 139 - PX : 147 - PX, st = el("stub " + k, { left: k === "T" ? PX : PX - 8, top: cy - 4.4, width: w });
+      light(0, 8, w, 8, 16, st);
+      el("joint " + k, { left: PX - 30, top: cy - 56.4 });
+    });
+  });
+
+  // 5. torch + three cage light bars for every item
+  items.forEach(it => {
+    el("socket", { left: 42, top: it.cy - 34 });
+    const bars = el("bars", { left: 150, top: it.cy - 22, width: 980 });
+    [6.5, 21.5, 35.5].forEach(o => light(0, o + 6, 980, o + 6, 12, bars)); // centres measured on the torch cage openings
+  });
+
+  // 6. level banners: anchored to the torch slots of their group
+  groups.forEach(g => {
+    // centred by torch slot, not by pixels: on the middle torch of an odd group, midway between the middle pair of an even one.
+    // Forge slots only change the gaps between rows, so they never relocate the banner relative to its torch.
+    const n = g.idx.length, c = items[g.idx[n >> 1]].cy;
+    const y = (n % 2 ? c : (items[g.idx[(n >> 1) - 1]].cy + c) / 2) + 5;
+    el("badge", { left: PX - 50, top: y - 70, width: 100, height: 140 }, `<div class="banner"></div><div class="bg"></div><span>${esc(g.level)}</span>`);
+  });
+
+  // 7. City / Factory line (custom, always present)
+  tab(470, CITY_TOP - 43, 138, 44, "City", "c-t");
+  el("card", { left: 457, top: CITY_TOP, width: 168, height: 122 });
+  el("cost", { left: 472, top: CITY_TOP + 37 }, 3);
+  el("gear", { left: 512, top: CITY_TOP + 12 });
+  circle(335, CITY_TOP + 61, { img: "city" });
+  circle(818, CITY_TOP + 61, { img: "factory" });
+  tab(945, CITY_TOP - 43, 140, 44, "Factory", "f-t");
+  el("card", { left: 930, top: CITY_TOP, width: 168, height: 125 });
+  el("cost", { left: 945, top: 222 }, 2);
+  el("gear", { left: 985, top: 197 });
+
+  // 8. unit lines (Bastion goes through exactly the same code)
+  rows.forEach((r, i) => {
+    const top = tops[i], cy = top + 61;
+    tab(500, top - 43, 556, 44, r.name, r.id + "t");
+    circle(335, cy, r);
+    el("card", { left: 457, top, width: 168, height: 122 });
+    el("cost", { left: 472, top: top + 38 }, esc(r.cost));
+    el("gear", { left: 512, top: top + 14 });
+    if (r.forge) forgeSlot(top, r.id + "f");
+    // stats screen in two layers: frame (border + rings) sits under the light bars, the fill sits over them
+    el("screenFrame", { left: 655, top, width: 443, height: 122 });
+    keyed(el("card screen", { left: 655, top, width: 443, height: 122 }), r.id + "s");
+    el("icon", { left: 678, top: top + 10, width: 102, height: 108, backgroundImage: `url(${IMG}power.png)` });
+    el("icon", { left: 820, top: top + 8, width: 100, height: 106, backgroundImage: `url(${IMG}health.png)` });
+    el("icon", { left: 962, top: top + 78, width: 98, height: 38, backgroundImage: `url(${IMG}morale.png)` });
+    el("num white", { left: 728, top: top + 22 }, esc(r.power));
+    el("num white", { left: 870, top: top + 22 }, esc(r.health));
+    el("num orange", { left: 1010, top: top + 22 }, esc(r.morale));
+  });
+
+  // 9. splatter tiles (cached per element so editing a line does not reshuffle the others)
+  layer.querySelectorAll("[data-k]").forEach(e => {
+    let t = splats.get(e.dataset.k);
+    if (!t) splats.set(e.dataset.k, t = splatTile());
+    e.style.setProperty("--splat", t);
+  });
+  applySize();
+}
 
 /* ---------- canvas size: everything scales with the stage ---------- */
-const BASE_W = 1290, BASE_H = 2000;
-const size = { w: Math.round(BASE_W * Math.min(1, innerWidth / BASE_W)), lock: true };
-size.h = Math.round(size.w * BASE_H / BASE_W);
-try { Object.assign(size, JSON.parse(localStorage.getItem("unitTableSize") || "{}")); } catch (e) {}
-const $ = id => document.getElementById(id);
+const size = { sx: Math.min(1, innerWidth / BASE_W), sy: 0, lock: true };
+size.sy = size.sx;
+try { Object.assign(size, JSON.parse(localStorage.getItem("unitTableScale") || "{}")); } catch (e) {}
 function applySize(from) {
-  size.w = Math.min(8000, Math.max(100, Math.round(size.w) || BASE_W));
-  size.h = Math.min(12000, Math.max(100, Math.round(size.h) || BASE_H));
-  const root = document.documentElement.style;
-  root.setProperty("--sx", size.w / BASE_W);
-  root.setProperty("--sy", size.h / BASE_H);
-  if (from !== "w") $("cw").value = size.w;
-  if (from !== "h") $("ch").value = size.h;
-  if (from !== "s") $("cs").value = Math.round(size.w / BASE_W * 100);
+  size.sx = Math.min(6, Math.max(.05, size.sx || 1));
+  size.sy = Math.min(6, Math.max(.05, size.sy || 1));
+  const root = document.documentElement.style, w = Math.round(BASE_W * size.sx), h = Math.round(baseH * size.sy);
+  root.setProperty("--sx", size.sx);
+  root.setProperty("--sy", size.sy);
+  if (from !== "w") $("cw").value = w;
+  if (from !== "h") $("ch").value = h;
+  if (from !== "s") $("cs").value = Math.round(size.sx * 100);
   $("lock").checked = size.lock;
-  $("cinfo").textContent = `${size.w} × ${size.h} px · x${(size.w / BASE_W).toFixed(2)} / y${(size.h / BASE_H).toFixed(2)}` + (Math.abs(size.w / BASE_W - size.h / BASE_H) > .005 ? " (stretched)" : "");
-  try { localStorage.setItem("unitTableSize", JSON.stringify(size)); } catch (e) {}
+  $("cinfo").textContent = `${w} × ${h} px · x${size.sx.toFixed(2)} / y${size.sy.toFixed(2)} · design ${BASE_W} × ${baseH}` + (Math.abs(size.sx - size.sy) > .005 ? " (stretched)" : "");
+  try { localStorage.setItem("unitTableScale", JSON.stringify(size)); } catch (e) {}
 }
-$("cw").addEventListener("input", e => { size.w = +e.target.value; if (size.lock) size.h = size.w * BASE_H / BASE_W; applySize("w"); });
-$("ch").addEventListener("input", e => { size.h = +e.target.value; if (size.lock) size.w = size.h * BASE_W / BASE_H; applySize("h"); });
-$("cs").addEventListener("input", e => { const k = (+e.target.value || 100) / 100; size.w = BASE_W * k; size.h = BASE_H * k; applySize("s"); });
-$("lock").addEventListener("change", e => { size.lock = e.target.checked; if (size.lock) { size.h = size.w * BASE_H / BASE_W; applySize(); } });
+$("cw").addEventListener("input", e => { size.sx = +e.target.value / BASE_W; if (size.lock) size.sy = size.sx; applySize("w"); });
+$("ch").addEventListener("input", e => { size.sy = +e.target.value / baseH; if (size.lock) size.sx = size.sy; applySize("h"); });
+$("cs").addEventListener("input", e => { size.sx = size.sy = (+e.target.value || 100) / 100; applySize("s"); });
+$("lock").addEventListener("change", e => { size.lock = e.target.checked; if (size.lock) { size.sy = size.sx; applySize(); } });
 document.querySelectorAll("#ctl [data-fit]").forEach(b => b.addEventListener("click", () => {
-  const f = b.dataset.fit, k = f === "width" ? (innerWidth - 20) / BASE_W : f === "screen" ? Math.min((innerWidth - 20) / BASE_W, (innerHeight - 20) / BASE_H) : f === "x2" ? 2 : 1;
-  size.lock = true; size.w = BASE_W * k; size.h = BASE_H * k; applySize();
+  const f = b.dataset.fit, kw = (innerWidth - 20) / BASE_W, kh = (innerHeight - 20) / baseH;
+  size.lock = true; size.sx = size.sy = f === "width" ? kw : f === "screen" ? Math.min(kw, kh) : f === "x2" ? 2 : 1; applySize();
 }));
 $("ctlToggle").addEventListener("click", () => $("ctl").classList.toggle("closed"));
-applySize();
+
+/* ---------- lines editor ---------- */
+function buildList() {
+  $("lines").innerHTML = rows.map((r, i) => `<div class="ln" data-i="${i}">
+    <div class="l1">
+      <input type="text" data-f="name" value="${esc(r.name)}">
+      <button type="button" data-a="up" title="Move up" ${i < 2 ? "disabled" : ""}>▲</button>
+      <button type="button" data-a="dn" title="Move down" ${i === 0 || i === rows.length - 1 ? "disabled" : ""}>▼</button>
+      <button type="button" data-a="rm" title="${r.fixed ? "Bastion is always present" : "Remove line"}" ${r.fixed ? "disabled" : ""}>✕</button>
+    </div>
+    <div class="l2">
+      ${[["cost", "Cost"], ["power", "Pow"], ["health", "HP"], ["morale", "Mor"], ["level", "Level"]].map(([f, t]) => `<label>${t}<input type="number" data-f="${f}" value="${r[f]}" ${f === "level" ? "" : 'min="0"'}></label>`).join("")}
+      <label><input type="checkbox" data-f="forge" ${r.forge ? "checked" : ""}>Forge</label>
+    </div>
+  </div>`).join("");
+}
+function refresh(rebuild) { saveRows(); if (rebuild) buildList(); render(); }
+$("lines").addEventListener("input", e => {
+  const f = e.target.dataset.f, i = +e.target.closest(".ln").dataset.i;
+  rows[i][f] = f === "name" ? e.target.value : f === "forge" ? e.target.checked : (e.target.value === "" ? 0 : +e.target.value);
+  refresh(false);
+});
+$("lines").addEventListener("click", e => {
+  const a = e.target.dataset.a; if (!a) return;
+  const i = +e.target.closest(".ln").dataset.i;
+  if (a === "rm" && !rows[i].fixed) rows.splice(i, 1);
+  if (a === "up" && i >= 2) [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+  if (a === "dn" && i >= 1 && i < rows.length - 1) [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]];
+  refresh(true);
+});
+$("addLine").addEventListener("click", () => { rows.push(mk({ level: rows[rows.length - 1].level })); refresh(true); });
+$("addLevel").addEventListener("click", () => { rows.push(mk({ level: rows[rows.length - 1].level + 1 })); refresh(true); });
+$("resetLines").addEventListener("click", () => { rows = defaultRows(); refresh(true); });
+
+/* ---------- theme: one primary colour, everything else derived from it ---------- */
+const THEMES = { Gold: "#f3df5e", Green: "#62d06f", Red: "#e8625c", Blue: "#62a4ec", Purple: "#ac7ee6", Orange: "#f29d3e", Teal: "#4fcdc3" };
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; }
+  return [h, s * 100, l * 100];
+}
+function applyTheme(hex, from) {
+  const [h, s] = hexToHsl(hex), root = document.documentElement.style, clamp = v => Math.round(Math.min(100, Math.max(0, v)));
+  const hs = (sat, light, a) => `hsl(${Math.round(h)} ${clamp(sat)}% ${light}%${a != null ? ` / ${a}` : ""})`;
+  root.setProperty("--parch", hex);                          // card / circle base
+  root.setProperty("--mid", hs(s + 14, 83));                 // peak of the screen / banner gradient
+  root.setProperty("--outline", hs(s * .8, 69));             // outer borders
+  root.setProperty("--corner", hs(s + 14, 67));              // corner brackets
+  root.setProperty("--corner-glow", hs(s + 14, 67, .7));
+  root.setProperty("--corner-edge", hs(s * .6, 32));
+  root.setProperty("--fill-shadow", hs(Math.max(s, 50), 24, .55));
+  root.setProperty("--hue", `hue-rotate(${(h - 52).toFixed(1)}deg)`); // yellow light bars follow the hue; level banners keep their yellow
+  if (from !== "col") $("tcol").value = hex;
+  if (from !== "hex") $("thex").value = hex;
+  try { localStorage.setItem("unitTableTheme", hex); } catch (e) {}
+}
+$("tpre").innerHTML = Object.entries(THEMES).map(([n, c]) => `<button type="button" class="sw" data-c="${c}" title="${n}" style="background:${c}"></button>`).join("");
+$("tpre").addEventListener("click", e => { if (e.target.dataset.c) applyTheme(e.target.dataset.c); });
+$("tcol").addEventListener("input", e => applyTheme(e.target.value, "col"));
+$("thex").addEventListener("input", e => { let v = e.target.value.trim(); if (v[0] !== "#") v = "#" + v; if (/^#[0-9a-f]{6}$/i.test(v)) applyTheme(v.toLowerCase(), "hex"); });
+let savedTheme = THEMES.Gold;
+try { const t = localStorage.getItem("unitTableTheme"); if (/^#[0-9a-f]{6}$/i.test(t || "")) savedTheme = t; } catch (e) {}
+applyTheme(savedTheme);
+
+buildList();
+render();
 </script>
 </body>
 </html>
