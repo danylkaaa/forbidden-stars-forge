@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit Table PoC</title>
+<style>
+@font-face { font-family: "Headline"; src: url("../../src/fonts/Headline.woff2") format("woff2"); }
+
+:root {
+  --parch: #f3d65e;
+  --parch-dark: #e6d98a;
+  --edge: #cfc27a;
+  --green: #55b94f;
+  --blue: #1b2a6b;
+  --red: #7d1414;
+  --orange: #d9601a;
+  --yellow: #e9d83a;
+  --yellow-dark: #8d8420;
+  --screen-grad: linear-gradient(180deg, #ffffff 0%, #fff3a6 78%, #ffffff 100%); /* white edges, yellow peak shifted down to 78% */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #0b0d0c; height: 100%; }
+body { display: flex; justify-content: center; overflow: auto; }
+
+/* Fixed design canvas 1290 x 2000 (coordinates match the reference), scaled to fit width */
+#layer { position: absolute; inset: 0; z-index: 1; }
+#viewport { width: calc(1290px * var(--s, 1)); height: calc(2000px * var(--s, 1)); }
+#stage {
+  position: relative; width: 1290px; height: 2000px; overflow: hidden;
+  transform: scale(var(--s, 1)); transform-origin: 0 0;
+  font-family: "Headline", "Impact", sans-serif;
+}
+.abs { position: absolute; }
+
+/* ---------- Frame ---------- */
+#stone { display: none;
+  left: 0; top: 80px; width: 1212px; height: 1920px;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/><feColorMatrix values='0 0 0 0 .3  0 0 0 0 .28  0 0 0 0 .22  0 0 0 .35 0'/></filter><rect width='300' height='300' filter='url(%23n)'/></svg>"),
+    linear-gradient(90deg, #a49b86, #c7bfab 40%, #bdb49e);
+  box-shadow: inset 0 0 40px rgba(0,0,0,.35);
+}
+#rightStrip {
+  left: 1212px; top: 100px; width: 50px; height: 1900px;
+  background: linear-gradient(90deg, #1c211f, #2d3330 50%, #181c1a);
+  border-left: 3px solid #0a0c0b;
+}
+#plate {
+  left: 155px; top: 98px; width: 1008px; height: 1865px;
+  background: linear-gradient(145deg, #55523f, #39362a 50%, #4a4736);
+}
+#plate::after { /* second thin inner border */
+  content: ""; position: absolute; inset: 14px; background: #17131c;
+}
+#space {
+  left: 185px; top: 128px; width: 948px; height: 1805px;
+  background:
+    radial-gradient(circle at 20% 15%, #fff 0 1px, transparent 1.5px) 0 0 / 190px 230px,
+    radial-gradient(circle at 70% 60%, #cfd 0 1px, transparent 1.5px) 0 0 / 260px 310px,
+    radial-gradient(ellipse at 50% 40%, #241d30, #0f0b14 75%);
+}
+.rivet {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #d8d2c0, #8b8571 55%, #4a4639);
+  box-shadow: 0 2px 3px rgba(0,0,0,.6);
+}
+.spike {
+  width: 34px; height: 85px;
+  background: linear-gradient(90deg, #17160f, #77715a 45%, #1d1c14);
+  clip-path: polygon(50% 0, 78% 70%, 100% 100%, 0 100%, 22% 70%);
+}
+.spike::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 0; height: 22px; background: #3a382b; }
+.sidespike {
+  width: 55px; height: 26px; background: linear-gradient(180deg, #55513f, #15140d);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+
+/* ---------- Connectors (yellow striped bars) ---------- */
+.bars { height: 44px; z-index: -5; } /* lowest layer: behind the screen frame (-4), pipes (-3), torch (-2) and every card */
+.bars.tall { height: 46px; }
+/* every light stripe is ../../src/images/base/light.png (vertical art); horizontal ones turn it a quarter */
+.light { background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; } /* no glow */
+.light.h { background: none; }
+.light.h > i { position: absolute; left: 0; top: 0; display: block; transform-origin: 0 0; background: url("../../src/images/base/light.png") 0 0 / 100% 100% no-repeat; }
+.socket { /* CL-torch joint: spike points left, cage faces the unit circle */
+  width: 200px; height: 69px; /* native 2129:738 */
+  background: url("../../src/images/base/CL-torch.png") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 4px 3px rgba(0,0,0,.6));
+  z-index: -2; /* above the horizontal pipes and light bars (-3); vertical pipes are above it */
+}
+.joint { /* L / T pipe junctions: white centre with an exponential falloff; box 160x120, junction centre at (30,60) */
+  --v: linear-gradient(90deg, rgba(255,255,255,0), #fff 50%, rgba(255,255,255,0));  /* vertical arm cross-fade */
+  width: 160px; height: 120px;
+  background: var(--v) var(--vp) / var(--vs) no-repeat; /* vertical glow */
+  -webkit-mask-image: radial-gradient(circle 75px at 30px 60px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.74) 10%, rgba(0,0,0,0.55) 20%, rgba(0,0,0,0.41) 30%, rgba(0,0,0,0.3) 40%, rgba(0,0,0,0.22) 50%, rgba(0,0,0,0.165) 60%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.09) 80%, rgba(0,0,0,0.06) 90%, rgba(0,0,0,0) 100%);
+          mask-image: radial-gradient(circle 75px at 30px 60px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.74) 10%, rgba(0,0,0,0.55) 20%, rgba(0,0,0,0.41) 30%, rgba(0,0,0,0.3) 40%, rgba(0,0,0,0.22) 50%, rgba(0,0,0,0.165) 60%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.09) 80%, rgba(0,0,0,0.06) 90%, rgba(0,0,0,0) 100%);
+}
+.joint::before { /* corner patch: clipped to the L/T outline, same exponential falloff; drawn over the pipe and the stub to hide the seam */
+  content: ""; position: absolute; inset: 0; clip-path: var(--clip);
+  background: radial-gradient(circle 55px at 30px 60px, rgba(255,255,255,1) 0%, rgba(255,255,255,0.74) 10%, rgba(255,255,255,0.55) 20%, rgba(255,255,255,0.41) 30%, rgba(255,255,255,0.3) 40%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.165) 60%, rgba(255,255,255,0.12) 70%, rgba(255,255,255,0.09) 80%, rgba(255,255,255,0.06) 90%, rgba(255,255,255,0) 100%);
+}
+.joint.L-dr { --vp: 22px 52px; --vs: 16px 68px; --clip: path("M30 52 H70 V68 H38 V84 H22 V60 Q22 52 30 52 Z"); } /* down + right */
+.joint.L-ur { --vp: 22px 0;    --vs: 16px 68px; --clip: path("M22 36 H38 V52 H70 V68 H30 Q22 68 22 60 Z"); } /* up + right */
+.joint.T    { --vp: 22px 0;    --vs: 16px 120px; --clip: path("M22 36 H38 V52 H70 V68 H38 V84 H22 Z"); } /* only the crossing, soft */
+.joint.T::before, .joint.L-dr::before, .joint.L-ur::before { background: radial-gradient(circle 26px at 30px 60px, rgba(255,255,255,.55) 0%, rgba(255,255,255,.3) 40%, rgba(255,255,255,0) 100%); } /* up + down + right */
+.stub { /* branch from the corner to the torch cage ring: same 16px thickness as the pipe, flat end, fading to black into the ring */
+  height: 16px; border-radius: 0 8px 8px 0; /* round end, stops short of the cage ring */
+  background: linear-gradient(180deg, #d4c43c 0%, #fff7a0 28%, #fff 50%, #fff29a 76%, #d4c43c 100%);
+}
+.stub.T, .stub.L-dr, .stub.L-ur { /* branch drawn from the same light.png art as the pipe; lighten = union of both tubes, no seam */
+  background: none; overflow: hidden; mix-blend-mode: lighten; border-radius: 0 8px 8px 0;
+}
+.stub.L-dr { border-radius: 8px 8px 8px 0; } /* rounded outer corner of the L */
+.stub.L-ur { border-radius: 0 8px 8px 8px; }
+.stub::after { display: none; } /* bar stays fully opaque all the way to its round end */
+.pipe { border-radius: 5px; box-shadow: 0 0 7px 2px rgba(255,245,170,.55), 0 0 0 1px #1c1a10; }
+.pipe.h { background: linear-gradient(180deg, #8a8468 0, #fffdf0 30%, #fff 50%, #d9d2a8 75%, #7a745a 100%); }
+.pipe.v { background: linear-gradient(90deg, #8a8468 0, #fffdf0 30%, #fff 50%, #d9d2a8 75%, #7a745a 100%); }
+
+/* ---------- Level badge ---------- */
+.badge { width: 100px; height: 140px; }
+.badge .bg {
+  position: absolute; left: 0; top: 19px; width: 100px; height: 102px; background: url("../../src/images/base/level.png") center / 100% 100% no-repeat; /* native 208:213 */
+  filter: drop-shadow(0 0 3px #000) drop-shadow(0 0 0 #000);
+}
+.badge .banner { /* CL-banner plate (1024x1536, 2:3) the badge sits on */
+  position: absolute; left: -10px; top: -20px; width: 120px; height: 180px;
+  background: url("../../src/images/base/CL-banner.png") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 4px 4px rgba(0,0,0,.6));
+}
+.badge span {
+  position: absolute; left: 0; right: 0; top: 30px; text-align: center;
+  font-size: 50px; line-height: 1; color: #2b2410;
+}
+
+/* ---------- Unit circle ---------- */
+.circle { width: 192px; height: 192px; }
+.circle::before { /* dark shadow behind the ring, above the light bars (-5), below pipes/torch */
+  content: ""; position: absolute; inset: 14px; border-radius: 50%; z-index: -4; pointer-events: none;
+  box-shadow: 0 0 22px 14px rgba(0,0,0,.8);
+}
+.circle .fill {
+  position: absolute; left: 21px; top: 21px; right: 21px; bottom: 21px; border-radius: 50%;
+  background: var(--parch);
+  box-shadow: inset 0 0 14px rgba(120,90,10,.55);
+}
+.circle .ring { position: absolute; inset: -4px; background: url("../../src/images/base/unit-border.png") center / 100% 100% no-repeat; }
+.circle .mini {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 3px #fff) drop-shadow(0 8px 6px rgba(0,0,0,.75)) drop-shadow(0 16px 14px rgba(0,0,0,.5));
+}
+
+/* ---------- Parchment cards ---------- */
+.card {
+  background: var(--parch);
+  /* tiny gold line floating 4px off the rectangle, transparent gap in between */
+  outline: 4px solid #e6d778; outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
+  box-shadow: 0 5px 8px rgba(0,0,0,.5);
+}
+.card::before, .circle .fill::before { /* softened paper texture */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: url("../../src/images/base/texture.png") 0 0 / 187px 187px; /* 280 / 1.5 */
+  /* crisp stripes: black parts keep the yellow base, white parts turn white */
+  mix-blend-mode: screen; opacity: .75;
+  filter: brightness(.571) contrast(5); /* stretch the grey texture to clear black/white stripes; "screen" then gives yellow + white */
+}
+.card::after { /* fine grain noise */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .35  0 0 0 0 .3  0 0 0 0 .1  0 0 0 .9 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  mix-blend-mode: multiply; opacity: .18;
+}
+.corners { /* reinforced L-brackets on the four card corners */
+  --c: #fff25a; --l: 24px; --t: 8px; /* covers the 5px outer rings (3px dark + 2px gold) */
+  position: absolute; inset: -8px; pointer-events: none; opacity: .7;
+  background:
+    linear-gradient(var(--c), var(--c)) 0 0 / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 0 0 / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 100% 0 / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 100% 0 / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 0 100% / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 0 100% / var(--t) var(--l),
+    linear-gradient(var(--c), var(--c)) 100% 100% / var(--l) var(--t),
+    linear-gradient(var(--c), var(--c)) 100% 100% / var(--t) var(--l);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 1px #8a7a2c) drop-shadow(0 0 4px rgba(255,242,90,.7)); /* slight glow */
+}
+.card.tab { /* no border: soft glow instead */
+  border: 0; outline: 0;
+  background: var(--screen-grad); /* same gradient as the stats screen */
+  /* thin light-yellow outline drawn outside the bar */
+  box-shadow: 0 0 0 5px #e6d778; /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
+}
+.card.tab::after { /* same tiny ink splatters as the stats screens, tile shifted so the pattern differs */
+  background: var(--splat) -173px -61px / 600px 300px;
+  mix-blend-mode: normal; opacity: .5;
+}
+.card.tab::before { /* 10px white squares (6px gap) centred on the left and right edges: 5px on the outline, 5px on the bar */
+  display: block; inset: -5px -5px 0; border-radius: 0; mix-blend-mode: normal; filter: none; opacity: 1; /* box starts at the outline's outer top corner */
+  --v: repeating-linear-gradient(180deg, #fff 0 10px, transparent 10px 16px);
+  background:
+    var(--v) 0 0 / 10px 100% no-repeat,       /* first square is centred on the corner */
+    var(--v) 100% 0 / 10px 100% no-repeat;
+}
+.card.screen { /* bright, backlit screen */
+  border: 0; outline: 0;
+  background: var(--screen-grad);
+}
+.card.screen::before { display: none; } /* stats screens: no paper texture */
+.card.screen::after { /* tiny dark ink splatters, a different random tile per element (--splat is set in JS) */
+  background: var(--splat) 0 0 / 600px 300px;
+  mix-blend-mode: normal; opacity: .5;
+}
+.screenFrame { /* floating gold line + shadow of the stats screen */
+  outline: 4px solid #e6d778; outline-offset: 4px; /* 4px = 50% of the 8px corner brackets */
+  /* normal stacking: after the title tab in the DOM, so its rings draw over the tab */
+  box-shadow: 0 5px 8px rgba(0,0,0,.5);
+}
+.shade { /* wide dark shadow on its own layer: above the light bars (-5), below every tab and card, so it never darkens a title bar */
+  position: absolute; inset: 0; z-index: -4; pointer-events: none;
+  box-shadow: 0 0 16px 8px rgba(0,0,0,.75);
+}
+.halo { /* soft glow around the rings */
+  position: absolute; inset: -8px; pointer-events: none; /* the ring edge itself: no second line, glow only */
+  display: none; /* no glow */
+}
+.tab { /* title plate above the card */ }
+.tab .t {
+  position: absolute; left: 0; right: 0; top: 0; text-align: center;
+  font-size: 35px; letter-spacing: .5px; color: #1c1c1c; text-transform: uppercase;
+  white-space: nowrap; transform: scaleX(.95);
+}
+
+.cost {
+  position: absolute; font-size: 66px; color: var(--green); line-height: 1;
+}
+.gear { width: 92px; height: 92px; filter: hue-rotate(12deg) saturate(1.25) brightness(1.02) drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff); background: url("../../src/images/base/gear.png") center / contain no-repeat; }
+.icon { background: center / contain no-repeat; }
+.num {
+  position: absolute; text-align: center; line-height: 1; font-size: 58px;
+  width: 80px; margin-left: -40px;
+}
+.num.white { color: #fff; }
+.num.orange { color: var(--orange); }
+
+#forgeLabel { position: absolute; }
+.forgeSlot { height: 50px; width: 150px; }
+.card.tab.forgeSlot { box-shadow: 0 0 0 5px #e6d778; } /* 5px outline = half the 10px squares; same colour as the outer border of the gear and stats rectangles */
+.card.tab.forgeSlot::before { /* 10px white squares (6px gap) centred on the left and right edges: 5px on the outline, 5px on the slot */
+  display: block; inset: -5px; border-radius: 0; mix-blend-mode: normal; filter: none; opacity: 1;
+  --v: repeating-linear-gradient(180deg, #fff 0 10px, transparent 10px 16px);
+  background:
+    var(--v) 0 0 / 10px 100% no-repeat,
+    var(--v) 100% 0 / 10px 100% no-repeat;
+}
+.forgeSlot .icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 110px; height: 38px; filter: hue-rotate(-5deg) saturate(1.8) brightness(.95); }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+  <div id="stone" class="abs"></div>
+  <div id="rightStrip" class="abs"></div>
+  <div id="plate" class="abs"></div>
+  <div id="space" class="abs"></div>
+  <div id="layer"></div>
+</div></div>
+
+<script>
+/* ---------- data ---------- */
+const ROWS = [
+  { name: "Bastion",                 img: "bastion", cost: 2, power: 2, health: 3, morale: 2 },
+  { name: "Guardsmen",               ph: [60, 100],  cost: 2, power: 1, health: 1, morale: 2 },
+  { name: "Lunar-Class Cruisers",    ph: [170, 60],  cost: 2, power: 2, health: 2, morale: 2 },
+  { name: "Ogryns",                  ph: [80, 150],  cost: 3, power: 2, health: 4, morale: 2 },
+  { name: "Leman Russ Battle Tanks", ph: [140, 70],  cost: 4, power: 3, health: 4, morale: 3 },
+  { name: "Emperor-Class Battleships", ph: [250, 70], cost: 5, power: 4, health: 6, morale: 3, forge: true },
+  { name: "Warhound Titans",         ph: [90, 140],  cost: 5, power: 3, health: 5, morale: 4, forge: true },
+];
+// reference-pixel coordinates (1290 x 2000 design space)
+
+const CARD = [185, 408, 628, 848, 1072, 1295, 1517, 1764]; // card tops (last row pushed 24px down so the Emperor forge slot clears the Warhound title bar)
+// row centres = centre of the cost card / stats screen (same top, 122 tall); circles, torches, pipes and light bars all share it
+const CY   = CARD.map(t => t + 61);
+const BADGES = [ { n: 0, y: (408 + 61 + 5 + 628 + 61 + 5) / 2 } /* midway between the row 1 and row 2 torch axes */, { n: 1, y: 1072 + 61 + 5 } /* on the row 4 torch axis */, { n: 2, y: (1295 + 61 + 5 + 1517 + 61 + 5) / 2 } /* midway between the row 5 and row 6 torch axes */, { n: 3, y: 1764 + 61 + 5 } /* on the row 7 torch axis */ ];
+
+const layer = document.getElementById("layer");
+const el = (cls, css, html = "", parent = layer) => {
+  const d = document.createElement("div");
+  d.className = "abs " + cls;
+  Object.assign(d.style, Object.fromEntries(Object.entries(css).map(([k, v]) => [k, typeof v === "number" ? v + "px" : v])));
+  d.innerHTML = html; parent.appendChild(d);
+  if (/\bcard\b/.test(cls) && !/\b(tab|forgeSlot)\b/.test(cls)) d.insertAdjacentHTML("beforeend", '<div class="corners"></div>');
+  if (/\bscreenFrame\b/.test(cls) || (/\bcard\b/.test(cls) && !/\bscreen\b/.test(cls))) d.insertAdjacentHTML("beforeend", '<div class="shade"></div>');
+  if (/\bscreenFrame\b/.test(cls) || (/\bcard\b/.test(cls) && !/\b(tab|forgeSlot|screen)\b/.test(cls))) d.insertAdjacentHTML("beforeend", '<div class="halo"></div>');
+  return d;
+};
+
+/* ---------- frame decoration ---------- */
+
+/* ---------- left pipes + badges ---------- */
+// light stripe from (x1,y1) to (x2,y2), t thick, axis-aligned, drawn from light.png
+function light(x1, y1, x2, y2, t, parent = layer) {
+  if (y1 === y2) { // horizontal: the vertical art turned a quarter
+    const L = x2 - x1, d = el("light h", { left: x1, top: y1 - t / 2, width: L, height: t }, "", parent);
+    const i = document.createElement("i");
+    Object.assign(i.style, { width: t + "px", height: L + "px", transform: `translate(0, ${t}px) rotate(-90deg)` });
+    d.appendChild(i);
+  } else el("light", { left: x1 - t / 2, top: y1, width: t, height: y2 - y1 }, "", parent);
+}
+// pipes run behind the torch and into its cage, where the three bars take over
+const PIPE_T = 16, TORCH_IN = 185;
+const pipeLayer = el("", { left: 0, top: 0, width: 0, height: 0, zIndex: "-3" });
+const PX = 109; // pipe / banner centre x (moved right from 85)
+light(PX, CY[0] + 3.6, PX, CY[3] + 3.6, PIPE_T); // pipe ends at the stub centre so the rounded corners stay clean // vertical pipes sit over the torch
+const B2 = (CY[5] + CY[6]) / 2 + 5; // badge 2 centre
+light(PX, CY[5] + 3.6, PX, B2 - 30, PIPE_T); light(PX, B2 + 80, PX, CY[6] + 3.6, PIPE_T);
+
+// junctions where a branch leaves the vertical pipe; the torch cage centre sits 5px below the row centre, so branches centre on CY + 5 (measured: torch axis at 38.7px of 69, torch top = CY-34)
+[[0, "L-dr"], [1, "T"], [2, "T"], [3, "L-ur"], [5, "L-dr"], [6, "L-ur"]].forEach(([r, k]) => { { const w = k === "T" ? 139 - PX : 147 - PX, st = el("stub " + k, { left: k === "T" ? PX : PX - 8, top: CY[r] - 4.4, width: w }); light(0, 8, w, 8, 16, st); } el("joint " + k, { left: PX - 30, top: CY[r] - 56.4 }); });
+
+CY.forEach((y, i) => {
+  el("socket", { left: 42, top: y - 34 });
+  const bars = el("bars", { left: 150, top: y - 22, width: 980 }); // starts right where the stub ends, so the three cage bars continue it
+  [6.5, 21.5, 35.5].forEach(o => /* bar centres (o+6) measured on the three torch cage openings: CY-9.5, CY+5.5, CY+19.5 */ light(0, o + 6, 980, o + 6, 12, bars));
+});
+// bonus spikes on tank/ship rows reference
+BADGES.forEach(b => {
+  const d = el("badge", { left: PX - 50, top: b.y - 70, width: 100, height: 140 });
+  d.innerHTML = `<div class="banner"></div><div class="bg"></div><span>${b.n}</span>`;
+});
+
+/* ---------- row 0 : City / Factory ---------- */
+const card = (x, y, w, h) => el("card", { left: x, top: y, width: w, height: h });
+function tab(x, y, w, h, text) {
+  const t = el("card tab", { left: x, top: y, width: w, height: h + 6, borderBottom: "none" });
+  t.innerHTML = `<div class="t" style="top:${h - 40}px">${text}</div>`;
+}
+function circle(cx, cy, row) {
+  const c = el("circle", { left: cx - 96, top: cy - 96 });
+  c.innerHTML = `<div class="fill"></div>`;
+  if (row.img) {
+    const w = { city: 92, bastion: 80, factory: 90 }[row.img];
+    c.innerHTML += `<img class="mini" src="../../src/images/base/${row.img}.png" style="width:${w}px;">`;
+  } // rows without an image (miniatures) show an empty circle
+  c.innerHTML += `<div class="ring"></div>`;
+}
+function costCard(top, cost, withForge) {
+  card(457, top, 168, 122);
+  el("cost", { left: 472, top: top + 37 }, cost);
+  el("gear", { left: 512, top: top + 12 });
+  if (withForge) {
+    const f = el("card tab forgeSlot", { left: 466, top: top + 124, width: 150, height: 50 });
+    f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
+  }
+}
+// connector stripes right of cost / stats
+function stripes() {} // bars are drawn once per row, full width, behind everything
+
+// City
+tab(470, 185 - 43, 138, 44, "City");
+costCard(185, 3);
+circle(335, CY[0], { img: "city" });
+// Factory
+circle(818, CY[0], { img: "factory" });
+tab(945, 185 - 43, 140, 44, "Factory");
+card(930, 185, 168, 125);
+el("cost", { left: 945, top: 222 }, 2);
+el("gear", { left: 985, top: 197 });
+stripes(625, 245, 105); stripes(905, 245, 30); stripes(1098, 245, 32); stripes(430, 245, 30);
+
+/* ---------- unit rows ---------- */
+ROWS.forEach((r, k) => {
+  const i = k + 1, top = CARD[i], cy = CY[i];
+  tab(500, top - 43, 556, 44, r.name);
+  circle(335, cy, r);
+  card(457, top, 168, 122);
+  el("cost", { left: 472, top: top + 38 }, r.cost);
+  el("gear", { left: 512, top: top + 14 });
+  if (r.forge) {
+    const f = el("card tab forgeSlot", { left: 466, top: top + 124, width: 150, height: 44 });
+    f.innerHTML = `<div class="icon" style="background-image:url(../../src/images/base/forge.png)"></div>`;
+  }
+  // stats screen in two layers: frame (border + rings) sits under the light bars, the fill sits over them
+  el("screenFrame", { left: 655, top, width: 443, height: 122 });
+  el("card screen", { left: 655, top, width: 443, height: 122 });
+  // icons
+  el("icon", { left: 678, top: top + 10, width: 102, height: 108, backgroundImage: "url(../../src/images/base/power.png)" });
+  el("icon", { left: 820, top: top + 8, width: 100, height: 106, backgroundImage: "url(../../src/images/base/health.png)" });
+  el("icon", { left: 962, top: top + 78, width: 98, height: 38, backgroundImage: "url(../../src/images/base/morale.png)" });
+  el("num white", { left: 728, top: top + 22 }, r.power);
+  el("num white", { left: 870, top: top + 22 }, r.health);
+  el("num orange", { left: 1010, top: top + 22 }, r.morale);
+  stripes(625, cy, 30); stripes(430, cy, 30); stripes(1098, cy, 32);
+});
+
+
+/* ---------- random ink splatters: every screen and title bar gets its own tile ---------- */
+function splatTile() {
+  const W = 600, H = 300, r = (a, b) => a + Math.random() * (b - a), out = [];
+  const drop = (x, y, rad) => out.push(`<ellipse cx='${x.toFixed(1)}' cy='${y.toFixed(1)}' rx='${(rad * r(.8, 1.25)).toFixed(2)}' ry='${(rad * r(.8, 1.25)).toFixed(2)}' transform='rotate(${Math.floor(r(0, 180))} ${x.toFixed(1)} ${y.toFixed(1)})'/>`);
+  for (let i = 0; i < 34; i++) {
+    const x = r(0, W), y = r(0, H), rad = [1.6, 2, 2.4, 2.9, 3.4][Math.floor(r(0, 5))], ang = r(0, 2 * Math.PI);
+    drop(x, y, rad);
+    for (let k = Math.floor(r(3, 10)); k--;) { // spray of tiny satellites flung one way
+      const d = r(rad * 2.2, rad * 9), a = ang + (Math.random() + Math.random() + Math.random() - 1.5) * .7;
+      drop(x + Math.cos(a) * d, y + Math.sin(a) * d, r(.35, 1.1) * Math.max(.5, rad / 2.2));
+    }
+  }
+  for (let i = 0; i < 160; i++) drop(r(0, W), r(0, H), r(.4, 1)); // fine specks
+  return `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'><g fill='%23463a26'>${out.join("")}</g></svg>")`;
+}
+document.querySelectorAll(".card.screen, .card.tab").forEach(e => e.style.setProperty("--splat", splatTile()));
+
+/* ---------- fit to window ---------- */
+function fit() {
+  const s = Math.min(1, innerWidth / 1290);
+  document.documentElement.style.setProperty("--s", s);
+}
+addEventListener("resize", fit); fit();
+</script>
+</body>
+</html>
