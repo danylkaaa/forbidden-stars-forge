@@ -12,6 +12,7 @@ import GenerationsPage from './pages/generations/GenerationsPage'
 import BackPage from './pages/assemble/BackPage'
 import PrintPage from './pages/print/PrintPage'
 import FactionLabPage from './pages/faction-lab/FactionLabPage'
+import FaqPage from './pages/faq/FaqPage'
 
 export const routes: RouteObject[] = [
   {
@@ -32,6 +33,7 @@ export const routes: RouteObject[] = [
       { path: '/test-generation', element: <Navigate to="/faction-lab" replace /> },
       { path: '/generations', element: <GenerationsPage /> },
       { path: '/settings', element: <SettingsPage /> },
+      { path: '/faq', element: <FaqPage /> },
     ],
   },
 ]

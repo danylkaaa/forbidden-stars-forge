@@ -48,3 +48,13 @@ test.each([
   mount(path)
   expect(modes().getByRole('link', { name: mode })).toHaveAttribute('aria-current', 'page')
 })
+
+test('the FAQ link opens a page without the section sidebar or a highlighted mode', async () => {
+  const router = createMemoryRouter([{ element: <AppLayout />, children: [{ path: '/faction-lab', element: <p>Lab</p> }, { path: '/faq', element: <p>Questions</p> }] }], { initialEntries: ['/faction-lab'] })
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
+  await userEvent.click(screen.getByRole('link', { name: 'FAQ' }))
+  expect(screen.getByText('Questions')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.queryByRole('navigation', { name: 'Sections' })).not.toBeInTheDocument()
+  for (const link of modes().getAllByRole('link')) expect(link).not.toHaveAttribute('aria-current')
+})

@@ -10,7 +10,7 @@ const modes = [
   { mode: 'print', to: '/print', label: 'Print', Icon: PrintIcon },
 ] as const
 
-export function ModeNavbar({ mode }: { mode: WorkspaceMode }) {
+export function ModeNavbar({ mode }: { mode: WorkspaceMode | null }) {
   // Card Templates previews are all drawn for one faction, picked here.
   const previews = useLocation().pathname === '/card-templates'
   return <header className="flex flex-none flex-wrap items-center justify-between gap-3 border-b border-accent/30 bg-surface px-4 py-1.5 sm:px-6">
@@ -20,6 +20,7 @@ export function ModeNavbar({ mode }: { mode: WorkspaceMode }) {
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
       {previews && <PreviewFactionNav />}
       <SafeAreaToggle />
+      <Link to="/faq" aria-current={mode === null ? 'page' : undefined} className={`text-xs no-underline hover:text-accent-300 ${mode === null ? 'text-accent-300' : 'text-ink/70'}`}>FAQ</Link>
     </div>
     <nav aria-label="Workspace mode" className="flex gap-1 rounded-md border border-divider bg-bg p-0.5">
       {modes.map(({ mode: value, to, label, Icon }) => <Link key={value} to={to} aria-current={mode === value ? 'page' : undefined}
