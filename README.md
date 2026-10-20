@@ -4,6 +4,10 @@ Local-only web app for managing factions and card-type templates and
 generating card artwork for a homemade Forbidden Stars expansion.
 See `docs/prd/PRD-1.md` and `docs/superpowers/specs/`.
 
+This is an unofficial fan project. It is not affiliated with or endorsed by
+Fantasy Flight Games or Games Workshop. See [License](#license) and
+[Assets and rights](#assets-and-rights).
+
 ## Development
 
 - `make dev-server` — Go API on :8080 (SQLite in ./data/)
@@ -142,3 +146,21 @@ font/icon bounds. All three textures span the full card width.
 In Faction Lab, **Card preview** above a finished run assembles it as a
 card with the demo card or one of the faction's combat cards (its text,
 artwork, level subtype and logo), to judge the image as a frame.
+
+## License
+
+The source code is open source under the [MIT License](LICENSE): use,
+change and share it freely, keeping the copyright notice.
+
+## Assets and rights
+
+The MIT License covers the code only. It does not cover the assets in this
+repository or anything made with the app: images, icons, 3D models, fonts,
+artwork, card texts, faction names and other game content. All rights to
+them belong to their authors and owners. Forbidden Stars is a trademark of
+Fantasy Flight Games; Warhammer 40,000 and its factions, names and imagery
+are trademarks of Games Workshop.
+
+Before you publish, print for others, sell or otherwise share cards or
+assets, ask their owners for permission. Generated artwork may also be
+subject to the terms of the AI service that produced it.
