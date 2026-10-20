@@ -112,7 +112,7 @@ export function FactionCardLayoutEditor() {
       </div>
       <div ref={root} className="relative select-none bg-black/30">
         {result ? <CardCanvas result={result} aria-label={`Faction card ${side} position preview`} className="block h-auto w-full" />
-          : <div className="grid aspect-[3165/2126] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
+          : <div className="grid aspect-[3118/1866] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
         {result && <SafeAreaLines px={CARD_SIZE} cutMm={FACTION_CARD_CUT_MM} />}
         {result && <ReferenceOverlay category="faction" side={side} />}
         {result && sideElements.filter(e => e.kind !== 'style').map(({ key, label }) => { const b = elementBox(key, layout), active = key === selected

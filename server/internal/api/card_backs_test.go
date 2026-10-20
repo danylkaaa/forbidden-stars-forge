@@ -42,7 +42,7 @@ func TestBackTemplatesAreCreatedOnceAtTheFrontSize(t *testing.T) {
 		// Faction cards are landscape.
 		wantW, wantH := 816, 1104
 		if store.IsFactionCardType(ct.Name) {
-			wantW, wantH = 1583, 1063
+			wantW, wantH = 1559, 933
 		}
 		// The upgrade element is a strip as wide as the card.
 		if store.IsElementCardType(ct.Name) {

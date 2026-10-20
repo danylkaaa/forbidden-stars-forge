@@ -17,7 +17,7 @@ import { PAPERS, cardOrder, cutSizeOf, backSlot, besideSlots, pairOfSlot, pairsP
 import { canvasAsset, useBackAsset, type PrintAsset } from './assets'
 import { useFactionCardCanvases } from '../faction-card/useFactionCardCanvases'
 
-// A faction card is 258 × 170 mm (268 × 180 mm with 5 mm bleed: 3165 × 2126 px at 300 dpi). It prints on its
+// A faction card is 258 × 152 mm (264 × 158 mm with 3 mm bleed: 3118 × 1866 px at 300 dpi). It prints on its
 // own: its size replaces the page's card size, landscape.
 
 // Renders a faction's card (front and back) off-screen as print assets.
@@ -149,7 +149,8 @@ export default function PrintPage() {
   const cardTypes = useCardTypes()
   // The cut size comes from the card type: the combat type for cards, the faction card type for faction cards.
   const cut = cutSizeOf(cardTypes.data, factionMode ? 'faction card' : 'combat')
-  const baseSettings = useMemo<PrintSettings>(() => ({ ...stored, cardWidth: cut.width, cardHeight: cut.height, ...(factionMode ? { orientation: 'landscape' as const } : {}) }), [stored, factionMode, cut.width, cut.height])
+  // A faction card's cutting lines lie on its cut edge, so they measure the finished size; its bleed covers a cut that wanders.
+  const baseSettings = useMemo<PrintSettings>(() => ({ ...stored, cardWidth: cut.width, cardHeight: cut.height, ...(factionMode ? { orientation: 'landscape' as const, cutTolerance: 0 } : {}) }), [stored, factionMode, cut.width, cut.height])
   const cards = useCards('', '')
 
   const [categories, setCategories] = useState<Set<Category>>(new Set(['combat']))
@@ -354,7 +355,7 @@ export default function PrintPage() {
               </label></li>)}
               {!sortedFactions.length && <li className="text-sm text-ink/50">{factions.isPending ? 'Loading…' : 'No factions yet.'}</li>}
             </ul>
-            <p className="m-0 text-xs text-ink/50">Faction cards are cut at 258 × 170 mm and printed with 5 mm of bleed (268 × 180 mm), landscape, one per sheet, with their back on the next page.</p>
+            <p className="m-0 text-xs text-ink/50">Faction cards are cut at 258 × 152 mm and printed with 3 mm of bleed (264 × 158 mm), landscape, one per sheet, with their back on the next page.</p>
           </>}
           {!factionMode && <>
           <div className="flex flex-wrap gap-1" role="group" aria-label="Card types">
@@ -424,8 +425,9 @@ export default function PrintPage() {
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.cutLines} onChange={e => update({ cutLines: e.target.checked })} className="accent-[var(--color-accent)]" />Draw cutting lines around each card</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.guidesToEdge} disabled={!settings.cutLines} onChange={e => update({ guidesToEdge: e.target.checked })} className="accent-[var(--color-accent)]" />Extend guides to the sheet edge</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.cutLinesOnBacks} disabled={!settings.cutLines || beside} onChange={e => update({ cutLinesOnBacks: e.target.checked })} className="accent-[var(--color-accent)]" />Also on back pages</label>
+          {factionMode ? <p className="m-0 text-xs text-ink/50">Faction cards: lines are drawn on the cut edge, {settings.cardWidth} × {settings.cardHeight} mm apart; the {grid.bleedX.toFixed(1)} mm of bleed beyond them covers a cut that wanders.</p> : <>
           <NumberField label="Cut tolerance (% of the card size)" value={settings.cutTolerance} min={0} step={0.5} disabled={!settings.cutLines} onChange={setNum('cutTolerance')} />
-          <p className="m-0 text-xs text-ink/50">Lines are drawn outside the card, {settings.cutTolerance}% of its size ({(settings.cardWidth * settings.cutTolerance / 100).toFixed(1)} mm across, {(settings.cardHeight * settings.cutTolerance / 100).toFixed(1)} mm down) away from the cut edge, so a cut that wanders a little still leaves the whole card. Keep it within the bleed.</p>
+          <p className="m-0 text-xs text-ink/50">Lines are drawn outside the card, {settings.cutTolerance}% of its size ({(settings.cardWidth * settings.cutTolerance / 100).toFixed(1)} mm across, {(settings.cardHeight * settings.cutTolerance / 100).toFixed(1)} mm down) away from the cut edge, so a cut that wanders a little still leaves the whole card. Keep it within the bleed.</p></>}
           <div className="grid grid-cols-3 gap-3">
             <NumberField label="Width (px)" value={settings.lineWidth} min={0.25} step={0.25} onChange={setNum('lineWidth')} />
             <Field label="Color">{id => <ColorInput id={id} value={settings.lineColor} onChange={lineColor => update({ lineColor })} className="h-9 w-16 cursor-pointer rounded-md border border-divider bg-bg p-0.5" />}</Field>

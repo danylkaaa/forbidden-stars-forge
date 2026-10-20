@@ -22,9 +22,9 @@ func EnsureBackTemplates(db *sql.DB, dataDir string) error {
 		return err
 	}
 	w, h := 816, 1104
-	// Faction cards are landscape; this is half of their 3165 x 2126 px size
-	// (268 x 180 mm with bleed at 300 dpi).
-	fw, fh := 1583, 1063
+	// Faction cards are landscape; this is half of their 3118 x 1866 px size
+	// (264 x 158 mm with bleed at 300 dpi).
+	fw, fh := 1559, 933
 	for _, ct := range list {
 		if ct.Name == "combat" && ct.TemplatePath != "" {
 			if f, err := os.Open(filepath.Join(dataDir, ct.TemplatePath)); err == nil {

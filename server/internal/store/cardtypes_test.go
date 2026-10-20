@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -154,10 +155,42 @@ func TestFactionCardPromptsAreRefreshedOnlyWhenUnedited(t *testing.T) {
 	if read() != current {
 		t.Fatal("a shipped description was not refreshed")
 	}
+	// The text shipped while the card had no bleed.
+	set(strings.Replace(current, factionCardSize, "258 x 156 mm,", 1))
+	s.EnsureBuiltins()
+	if read() != current {
+		t.Fatal("the no-bleed description was not refreshed")
+	}
 	set("my own prompt")
 	s.EnsureBuiltins()
 	if read() != "my own prompt" {
 		t.Fatal("an edited description was overwritten")
+	}
+}
+
+func TestFactionCardHeightIsCorrectedOnlyWhenUnedited(t *testing.T) {
+	s := openCardTypes(t)
+	if err := s.EnsureBuiltins(); err != nil {
+		t.Fatal(err)
+	}
+	height := func(h float64) float64 {
+		if _, err := s.db.Exec(`UPDATE card_types SET card_height_mm=? WHERE name='faction card'`, h); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.EnsureBuiltins(); err != nil {
+			t.Fatal(err)
+		}
+		var got float64
+		s.db.QueryRow(`SELECT card_height_mm FROM card_types WHERE name='faction card'`).Scan(&got)
+		return got
+	}
+	for _, old := range []float64{170, 156} {
+		if got := height(old); got != 152 {
+			t.Fatalf("%v mm high card became %v", old, got)
+		}
+	}
+	if got := height(160); got != 160 {
+		t.Fatalf("an edited height became %v", got)
 	}
 }
 
@@ -185,7 +218,7 @@ func TestCardTypeCutSize(t *testing.T) {
 	for _, ct := range all {
 		wantW, wantH := 63.5, 88.0
 		if IsFactionCardType(ct.Name) {
-			wantW, wantH = 258, 170
+			wantW, wantH = 258, 152
 		}
 		if ct.CardWidthMM != wantW || ct.CardHeightMM != wantH {
 			t.Fatalf("%s: %v x %v", ct.Name, ct.CardWidthMM, ct.CardHeightMM)

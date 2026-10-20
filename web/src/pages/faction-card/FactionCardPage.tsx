@@ -160,7 +160,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
       <section aria-label="Card preview" className="space-y-2 xl:sticky xl:top-3">
         {(['front', 'back'] as const).filter(side => !only || side === only).map(side => { const result = faces[side]
           return <div key={side} className="rounded-lg border border-divider bg-black/30 p-2">
-            <div className="relative mx-auto" style={{ width: 'min(100%, calc((100vh - 200px) / 2 * 1.4888))', aspectRatio: `${CARD_SIZE.width} / ${CARD_SIZE.height}` }}>
+            <div className="relative mx-auto" style={{ width: 'min(100%, calc((100vh - 200px) / 2 * 1.6709))', aspectRatio: `${CARD_SIZE.width} / ${CARD_SIZE.height}` }}>
               {result ? <>
                 <CardCanvas result={result} aria-label={`Faction card ${side}`} className="block h-full w-full" />
                 {side === 'back' && !only && <Link to={`/assemble/faction-card/back?faction=${factionId}`} aria-label="Edit card back" title="Edit card back" className="absolute inset-0 rounded border border-transparent hover:border-accent hover:bg-accent/10" />}
@@ -184,7 +184,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
         })}
         {faces.error && (faces.front || faces.back) && <p role="alert" className="m-0 text-xs text-danger">{faces.error}</p>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="text-xs text-ink/55">258 × 170 mm cut + 5 mm bleed = 268 × 180 mm, {CARD_SIZE.width} × {CARD_SIZE.height} px per side (previews are half size). Fits A4 landscape.</span>
+          <span className="text-xs text-ink/55">258 × 152 mm cut + 3 mm bleed = 264 × 158 mm, {CARD_SIZE.width} × {CARD_SIZE.height} px per side (previews are half size). Fits A4 landscape.</span>
         </div>
       </section>
 

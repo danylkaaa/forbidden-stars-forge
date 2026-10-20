@@ -347,7 +347,7 @@ export default function CardEditorPage({ newFactionId, newCategory = 'combat', o
             onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}
             className={result ? 'block h-auto max-h-[85vh] max-w-full' : 'hidden'} />
           {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
-          {result && <ReferenceOverlay category={source.category} side="front" />}
+          {result && <ReferenceOverlay category={source.category} side="front" cardWidth={result.canvas.width} />}
           {result && !movable && <Preview3DButton category={category} factionId={factionId ?? undefined} title={draft.name || 'Card'} canvas={result.canvas} back={back.image?.url ?? null} backLogoUrl={back.image?.logoUrl} backLogoScale={back.image?.logoScale} backElementUrl={back.image?.elementUrl} className="absolute right-2 top-2 z-10" />}
           {fileDrag && !upgrade && result && <div data-testid="artwork-drop-area" {...dropTarget('area')}
             className={`absolute z-[7] grid place-items-center border-2 border-dashed transition-colors ${artworkDrag === 'area' ? 'border-accent bg-accent/35 text-accent-100' : 'border-accent/80 bg-black/45 text-accent'}`}

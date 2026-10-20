@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest'
-import { UNIT_SLOTS, defaultData, normalizeData } from './model'
-import { mergeLayout } from './layout'
+import { CARD_SIZE, FACTION_CARD_BLEED_MM, FACTION_CARD_CUT_MM, UNIT_SLOTS, defaultData, normalizeData } from './model'
+import { ELEMENTS, defaultLayout, elementBox, mergeLayout } from './layout'
+import { SAFE_INSET_MM, mmToPx } from '../../components/safeAreaStore'
 import { richSpans } from './render'
 
 test('every faction starts with the same seven unit rows and six objectives', () => {
@@ -41,4 +42,16 @@ test('shadow, outline and contrast are one shared setting in the layout', () => 
   expect(layout.modelStyle).toMatchObject({ shadow: 0.1, contrast: 1.4, innerShadow: 0, outline: 0.012 })
   expect(mergeLayout(undefined).modelStyle.contrast).toBe(1)
   expect(mergeLayout({ title: { x: 5, y: 6 } }).title).toMatchObject({ x: 5, y: 6 })
+})
+
+test('the canvas is the cut card plus its bleed, and every default element sits in the safe area', () => {
+  expect(CARD_SIZE.width).toBe(Math.round(mmToPx(FACTION_CARD_CUT_MM.width + 2 * FACTION_CARD_BLEED_MM)))
+  expect(CARD_SIZE.height).toBe(Math.round(mmToPx(FACTION_CARD_CUT_MM.height + 2 * FACTION_CARD_BLEED_MM)))
+  const inset = mmToPx(FACTION_CARD_BLEED_MM + SAFE_INSET_MM), layout = defaultLayout()
+  const safe = { left: inset / CARD_SIZE.width * 100, top: inset / CARD_SIZE.height * 100, right: 100 - inset / CARD_SIZE.width * 100, bottom: 100 - inset / CARD_SIZE.height * 100 }
+  for (const { key, kind } of ELEMENTS) {
+    if (kind === 'style') continue
+    const b = elementBox(key, layout)
+    expect({ key, left: b.x >= safe.left, top: b.y >= safe.top, right: b.x + b.w <= safe.right, bottom: b.y + b.h <= safe.bottom }).toEqual({ key, left: true, top: true, right: true, bottom: true })
+  }
 })

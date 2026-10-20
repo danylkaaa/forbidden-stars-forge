@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"strings"
+)
 
 type CardType struct {
 	ID           int64  `json:"id"`
@@ -223,12 +226,15 @@ func backDescription(deck string) string {
 	return "Create the back of a Warhammer 40K board-game " + deck + " card for this faction. A symmetrical, ornate design that fills the whole card: a central faction emblem framed by an ornamental border, in the faction's colours and materials. It must read clearly at small size and be identical on every " + deck + " card of the deck. Do not reuse elements of the card front (no title bar, resource column or text panels)."
 }
 
-// Faction cards are one 258 × 170 mm (268 × 180 mm with bleed) landscape card per faction. Both sides
+// Faction cards are one 258 × 152 mm (264 × 158 mm with bleed) landscape card per faction. Both sides
 // are generated as empty frames: text, stats and unit icons are drawn by the
 // app. They are described here rather than as ordinary card backs.
+// The size phrase of the current descriptions, replaced by earlier ones to recognise old texts.
+const factionCardSize = "264 x 158 mm: the 258 x 152 mm card plus 3 mm of bleed on every edge,"
+
 var factionCardDescriptions = map[string]string{
-	"faction card":      "Create the front of a Warhammer 40K board-game faction card (landscape, 268 x 180 mm: the 258 x 170 mm card plus 5 mm of bleed on every edge, so the painted background and frame must run right to the canvas edge) for this faction, in the faction's colours and materials. The left third is a dramatic painted scene of the faction's leader or iconic troops, edge to edge. Over it sits a tall ornate frame in two parts. Left part: at the top an empty round medallion socket (the faction logo is added later), under it a wide empty parchment panel for a title and rules text, and below that an empty heading bar with a large empty dark area beneath it for tokens. Right part: a tall dark panel with eight evenly spaced horizontal rows; the first row holds two small empty plates (city and factory), each with an empty round socket and an empty number plate; the other seven rows each have an empty round socket on the left, an empty number plate beside it, and an empty wide plate with a narrow empty heading bar above it. Small empty round sockets sit in the frame's left edge beside some rows (tech levels). Every panel, plate and socket stays completely empty.",
-	"faction card back": "Create the back of a Warhammer 40K board-game faction card (landscape, 268 x 180 mm: the 258 x 170 mm card plus 5 mm of bleed on every edge, so the painted background and frame must run right to the canvas edge) for this faction, matching its front, in the faction's colours and materials. Left third: at the top an empty round medallion socket (the faction logo is added later); below it a tall framed panel with an empty heading bar and six equal empty rows, each with an empty square picture socket on the left and an empty wide plate on the right. Right two thirds: a large empty parchment panel for a story, with an empty portrait window beside it; below them three rows of two objective plates. Each objective plate has an empty picture window on its left with an angled frame, and an empty wide text plate on its right large enough for a bold name and three lines of description; a short connector pipe joins the two columns. Every panel, window and plate stays completely empty.",
+	"faction card":      "Create the front of a Warhammer 40K board-game faction card (landscape, 264 x 158 mm: the 258 x 152 mm card plus 3 mm of bleed on every edge, so the painted background and frame must run right to the canvas edge) for this faction, in the faction's colours and materials. The left third is a dramatic painted scene of the faction's leader or iconic troops, edge to edge. Over it sits a tall ornate frame in two parts. Left part: at the top an empty round medallion socket (the faction logo is added later), under it a wide empty parchment panel for a title and rules text, and below that an empty heading bar with a large empty dark area beneath it for tokens. Right part: a tall dark panel with eight evenly spaced horizontal rows; the first row holds two small empty plates (city and factory), each with an empty round socket and an empty number plate; the other seven rows each have an empty round socket on the left, an empty number plate beside it, and an empty wide plate with a narrow empty heading bar above it. Small empty round sockets sit in the frame's left edge beside some rows (tech levels). Every panel, plate and socket stays completely empty.",
+	"faction card back": "Create the back of a Warhammer 40K board-game faction card (landscape, 264 x 158 mm: the 258 x 152 mm card plus 3 mm of bleed on every edge, so the painted background and frame must run right to the canvas edge) for this faction, matching its front, in the faction's colours and materials. Left third: at the top an empty round medallion socket (the faction logo is added later); below it a tall framed panel with an empty heading bar and six equal empty rows, each with an empty square picture socket on the left and an empty wide plate on the right. Right two thirds: a large empty parchment panel for a story, with an empty portrait window beside it; below them three rows of two objective plates. Each objective plate has an empty picture window on its left with an angled frame, and an empty wide text plate on its right large enough for a bold name and three lines of description; a short connector pipe joins the two columns. Every panel, window and plate stays completely empty.",
 }
 
 // Descriptions shipped earlier. A card type still holding one of them is
@@ -270,7 +276,7 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 		}
 		w, h, size := 63.5, 88.0, ""
 		if IsFactionCardType(name) {
-			w, h = 258, 170
+			w, h = 258, 152
 		}
 		if IsElementCardType(name) {
 			size = ElementImageSize
@@ -278,7 +284,20 @@ func (s *CardTypesStore) EnsureBuiltins() error {
 		if _, err := s.db.Exec(`INSERT OR IGNORE INTO card_types(name,description,constraints,card_width_mm,card_height_mm,image_size) VALUES(?,?,?,?,?,?)`, name, description, constraints, w, h, size); err != nil {
 			return err
 		}
+		if IsFactionCardType(name) {
+			// The faction card is 258 x 152 mm; types created while it was recorded as 170 or 156 mm high are corrected (an edited size is left alone).
+			if _, err := s.db.Exec(`UPDATE card_types SET card_height_mm=152 WHERE name=? AND card_width_mm=258 AND card_height_mm IN (170,156)`, name); err != nil {
+				return err
+			}
+		}
 		if _, ok := factionCardDescriptions[name]; ok {
+			// The texts as they read at earlier card sizes (268 x 180 mm, 268 x 166 mm, then 258 x 156 mm without bleed) are old descriptions too.
+			for _, size := range []string{"268 x 180 mm: the 258 x 170 mm card plus 5 mm of bleed on every edge,", "268 x 166 mm: the 258 x 156 mm card plus 5 mm of bleed on every edge,", "258 x 156 mm,"} {
+				legacy := strings.Replace(description, factionCardSize, size, 1)
+				if _, err := s.db.Exec(`UPDATE card_types SET description=? WHERE name=? AND description=?`, description, name, legacy); err != nil {
+					return err
+				}
+			}
 			for _, old := range factionCardOldDescriptions {
 				if _, err := s.db.Exec(`UPDATE card_types SET description=? WHERE name=? AND description=?`, description, name, old); err != nil {
 					return err

@@ -98,3 +98,13 @@ test('cards print by type, then level, then name', () => {
   const cards = [upgrade('Zeal', 1), event('Chronomancy'), combat('Beta', 2), upgrade('Alpha', 0), combat('Alpha', 2), combat('Start', 0, true), event('Battle Forges'), combat('Gamma', 1)]
   expect(cards.sort(cardOrder).map(c => c.name)).toEqual(['Start', 'Gamma', 'Alpha', 'Beta', 'Battle Forges', 'Chronomancy', 'Alpha', 'Zeal'])
 })
+
+test('with no tolerance a faction card\'s cutting lines measure its cut size and its bleed lies beyond them', () => {
+  const s = { ...DEFAULT_SETTINGS, orientation: 'landscape' as const, cardWidth: 258, cardHeight: 152, cutTolerance: 0 }
+  const g = gridFor(s, { width: 264, height: 158 }), r = slotRect(g, s, 0), line = s.lineWidth * 0.75 / (72 / 25.4)
+  const [left, right, top, bottom] = cutGuides(g, s, [1])
+  expect(right.x1 - left.x1).toBeCloseTo(258 + line)
+  expect(bottom.y1 - top.y1).toBeCloseTo(152 + line)
+  expect(left.x1 - r.clip.x).toBeCloseTo(3 - line / 2)
+  expect(top.y1 - r.clip.y).toBeCloseTo(3 - line / 2)
+})

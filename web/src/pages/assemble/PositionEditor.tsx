@@ -106,7 +106,7 @@ export function PositionEditor({ id: editorId, category = 'combat', label, saved
           ? <CardCanvas result={result} aria-label={`${label} position preview`} className="block h-auto w-full" />
           : <div className="grid aspect-[3/4] place-items-center rounded border border-divider text-xs text-ink/50">{error || 'Rendering…'}</div>}
         {result && <SafeAreaLines px={result.canvas} cutMm={cutMm} />}
-        {result && <ReferenceOverlay category={category} side="front" />}
+        {result && <ReferenceOverlay category={category} side="front" cardWidth={result.canvas.width} />}
         {result && layers.map(key => { const b = key === 'resources' ? resourceBox(layout[key]) : shown(key), selected = key === layer
           return <div key={key} role="button" tabIndex={-1} aria-label={`Drag ${layerLabel(key, category)}`} title={layerLabel(key, category)}
             onPointerDown={e => startDrag(e, key, 'move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}

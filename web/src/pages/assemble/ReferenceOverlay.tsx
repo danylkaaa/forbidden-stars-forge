@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useReferenceCards, type ReferenceCategory, type Side } from './api'
 import { useReferenceOverlay } from './referenceOverlayStore'
 
@@ -8,13 +9,17 @@ function useShownReference(category: ReferenceCategory, side: Side) {
   return { cards, shown: cards.find(c => c.id === chosen) ?? cards[0] }
 }
 
-// Put inside a `relative` preview: draws the reference over it, stretched to
-// the card, when the overlay is switched on. Never takes clicks.
-export function ReferenceOverlay({ category, side }: { category: ReferenceCategory; side: Side }) {
+// Put inside a `relative` preview: draws the reference over it, centred and
+// scaled by the factor the card is shown at (display width / `cardWidth`, the
+// drawn card's pixels). Without `cardWidth` it fits the card's width. Never takes clicks.
+export function ReferenceOverlay({ category, side, cardWidth }: { category: ReferenceCategory; side: Side; cardWidth?: number }) {
   const on = useReferenceOverlay(s => s.on), opacity = useReferenceOverlay(s => s.opacity)
   const { shown } = useShownReference(category, side)
+  const [natural, setNatural] = useState(0)
   if (!on || !shown) return null
-  return <img src={shown.url} alt="" aria-hidden="true" data-testid="reference-overlay" draggable={false} className="pointer-events-none absolute inset-0 z-[5] h-full w-full object-fill" style={{ opacity }} />
+  const width = cardWidth && natural ? `${natural / cardWidth * 100}%` : '100%'
+  return <img src={shown.url} alt="" aria-hidden="true" data-testid="reference-overlay" draggable={false} onLoad={e => setNatural(e.currentTarget.naturalWidth)}
+    className="pointer-events-none absolute left-1/2 top-1/2 z-[5] h-auto max-w-none -translate-x-1/2 -translate-y-1/2" style={{ opacity, width }} />
 }
 
 // The switch, the reference to show and its opacity (debug aid).

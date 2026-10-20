@@ -1,8 +1,9 @@
-// Faction card: one per faction. 258 × 170 mm cut size plus 5 mm of bleed on
-// every edge = 268 × 180 mm, 3165 × 2126 px at 300 dpi per side.
-export const FACTION_CARD_CUT_MM = { width: 258, height: 170 } as const
-export const FACTION_CARD_BLEED_MM = 5
-export const CARD_SIZE = { width: 3165, height: 2126 } as const
+// Faction card: one per faction. 258 × 152 mm cut size plus 3 mm of bleed on
+// every edge = 264 × 158 mm, 3118 × 1866 px at 300 dpi per side. The layout is
+// placed on the whole canvas; the cut rectangle sits centred in it.
+export const FACTION_CARD_CUT_MM = { width: 258, height: 152 } as const
+export const FACTION_CARD_BLEED_MM = 3
+export const CARD_SIZE = { width: 3118, height: 1866 } as const
 
 // A unit icon is rendered with a field of view this many times wider than the model needs, and drawn this much bigger.
 export const MODEL_FIELD = 1.7

@@ -6,7 +6,7 @@ import type { Box } from '../placeholders'
 
 /* ---------- front: the unit table ---------- */
 // Design units of the table: the artwork is drawn on a 1290-wide canvas and scaled onto the card.
-export const TABLE = { x0: 40, y0: 130, w: 1100, cityTop: 185, firstTop: 408, step: 222, forgeExtra: 25, cardH: 122, forgeH: 42, fit: 0.975 } as const
+export const TABLE = { x0: 40, y0: 130, w: 1100, cityTop: 185, firstTop: 408, step: 222, forgeExtra: 25, cardH: 122, forgeH: 42, fit: 0.85 } as const
 
 // One line of the left rail: the city/factory line first, then the seven unit rows.
 export type TableItem = { slot: SlotKey | null; top: number; cy: number; level: number; forge: number }
