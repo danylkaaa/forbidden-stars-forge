@@ -11,3 +11,6 @@ export const SAFE_INSET_MM = 3
 
 // A generated card image is the 300 dpi canvas with bleed, so the cut and safe lines can be drawn on it.
 export const CARD_IMAGE_PX = { width: 816, height: 1104 }
+
+// The image size (px, with bleed) and the cut size (mm) the lines are drawn for; without one, a playing card's.
+export type SafeAreaGeometry = { px: { width: number; height: number }; cutMm: { width: number; height: number } }

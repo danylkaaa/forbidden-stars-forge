@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cardforge/internal/imaging"
@@ -28,7 +29,9 @@ type GenerationsHandler struct {
 	Settings  *store.SettingsStore
 	Usage     *store.UsageStore
 	Masks     *store.ImageMasksStore
-	DataDir   string
+	// Characters are the factions' character pictures, referenced when a faction card is generated.
+	Characters *store.CharactersStore
+	DataDir    string
 }
 
 type generateRequest struct {
@@ -103,6 +106,33 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		frontURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 		p = prompt.WithFrontReference(p)
 	}
+	// A faction card shows the faction's character when it has one: the picture is synced to OpenAI if
+	// it is not yet, and sent after the other images.
+	// On the front, the character is pasted onto the template itself (where the faction placed it), and that
+	// combined template is what gets edited.
+	templateID := ct.OpenAIFileID
+	var characterIDs []string
+	if usesCharacter(ct) && h.Characters != nil {
+		var err error
+		if pastesCharacter(ct) {
+			var id string
+			if id, err = characterTemplateFileID(r.Context(), h.Characters, h.Settings, h.DataDir, f.ID, ct); err == nil {
+				templateID = id
+			}
+		} else {
+			var id string
+			if id, err = characterFileID(r.Context(), h.Characters, h.Settings, h.DataDir, f.ID); err == nil {
+				characterIDs = []string{id}
+			}
+		}
+		switch {
+		case err == nil:
+			p = withCharacter(ct, p)
+		case !errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	}
 	model, err := h.resolveModel(req.Model)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -114,7 +144,7 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Quality is fixed now so the image name and the request agree.
-	quality := modeQuality(req.Mode, all)
+	quality := qualityFor(req.Mode, all, ct, model)
 	g, err := h.Gens.Create(req.FactionID, req.CardTypeID, req.Mode, model, quality,
 		store.ImageNameSuffix(f.Name, ct.Name, quality), p)
 	if err != nil {
@@ -122,8 +152,71 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.run(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize}, cropTo(ct))
+	h.start(g.ID, openai.ImageEditRequest{Model: model, FileID: templateID, ReferenceImageURL: frontURL, ExtraFileIDs: characterIDs, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct)}, cropTo(ct))
 	writeJSON(w, http.StatusCreated, g)
+}
+
+// isFactionCard reports whether a card type is the faction card (front or back): it may be generated at a better
+// quality than other finals, and is always opaque.
+func isFactionCard(ct store.CardType) bool {
+	return ct.Name == "faction card" || ct.Name == "faction card back"
+}
+
+// hasCharacter reports whether a faction has a character picture.
+func (h *GenerationsHandler) hasCharacter(factionID int64) bool {
+	if h.Characters == nil {
+		return false
+	}
+	_, err := h.Characters.Get(factionID)
+	return err == nil
+}
+
+// usesCharacter reports whether a card type shows the faction's character: only the faction card front (the back
+// shows the leader's portrait, added later on the card).
+func usesCharacter(ct store.CardType) bool {
+	return ct.Name == "faction card"
+}
+
+// pastesCharacter reports whether the faction's character is pasted onto this card type's template (the faction
+// card front, when it has a template) rather than sent as a separate reference picture.
+func pastesCharacter(ct store.CardType) bool {
+	return ct.Name == "faction card" && ct.TemplatePath != "" && !ct.NoTemplate
+}
+
+// withCharacter adds the prompt's note on the faction's character for this card type.
+func withCharacter(ct store.CardType, p string) string {
+	if pastesCharacter(ct) {
+		return prompt.WithCharacterOnTemplate(p)
+	}
+	return prompt.WithCharacterReference(p)
+}
+
+// backgroundFor is a card type's own background: the faction card is a full printed board, never transparent.
+// Empty = the Settings background.
+func backgroundFor(ct store.CardType) string {
+	if isFactionCard(ct) {
+		return "opaque"
+	}
+	return ""
+}
+
+// qualityFor is the quality of a run: the faction card's own final quality when one is set (Settings), else the
+// mode's. xhigh and max exist only on some models; others get high.
+func qualityFor(mode string, all map[string]string, ct store.CardType, model string) string {
+	q := all["faction_card_quality"]
+	if mode != "final" || !isFactionCard(ct) || q == "" {
+		return modeQuality(mode, all)
+	}
+	if (q == "xhigh" || q == "max") && !supportsExtraQuality(model) {
+		return "high"
+	}
+	return q
+}
+
+// supportsExtraQuality reports whether a model takes the xhigh and max qualities (gpt-image-2.5 sunburst and flare,
+// with their snapshots).
+func supportsExtraQuality(model string) bool {
+	return strings.HasPrefix(model, "gpt-image-2.5-sunburst") || strings.HasPrefix(model, "gpt-image-2.5-flare")
 }
 
 // modeQuality is the Settings quality for a draft/final run.
@@ -177,6 +270,31 @@ func (h *GenerationsHandler) resolveModel(override string) (string, error) {
 	return all["openai_model"], nil
 }
 
+// runs counts the OpenAI calls in progress, so a stopping server can let them finish (their pictures cannot be
+// fetched again once the connection is gone).
+var runs sync.WaitGroup
+
+// WaitForRuns waits up to timeout for the OpenAI calls in progress; it reports whether they all finished.
+func WaitForRuns(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() { runs.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+// start runs an OpenAI call in the background, counted in runs.
+func (h *GenerationsHandler) start(id int64, req openai.ImageEditRequest, postProcess func([]byte) ([]byte, error)) {
+	runs.Add(1)
+	go func() {
+		defer runs.Done()
+		h.run(id, req, postProcess)
+	}()
+}
+
 // run performs the OpenAI call in the background and persists the outcome.
 // req carries model, input image (FileID or ImageURL), optional mask,
 // prompt and quality; size/fidelity/background come from Settings.
@@ -205,7 +323,11 @@ func (h *GenerationsHandler) run(id int64, req openai.ImageEditRequest, postProc
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	start := time.Now()
-	req.InputFidelity, req.Background = all["input_fidelity"], all["background"]
+	// A request's own background (the faction card's) wins over the Settings one.
+	req.InputFidelity = all["input_fidelity"]
+	if req.Background == "" {
+		req.Background = all["background"]
+	}
 	if req.NoInput() {
 		req.Size = newImageSize(req.Size)
 	}
@@ -309,7 +431,10 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 		// nil = use the saved card type text
 		CardTypeDescription *string `json:"card_type_description"`
 		CardTypeConstraints *string `json:"card_type_constraints"`
+		CardTypeRendering   *string `json:"card_type_rendering_style"`
 		HasFrontImage       bool    `json:"has_front_image"`
+		// The faction whose character picture is referenced (0 = none).
+		FactionID int64 `json:"faction_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -326,12 +451,18 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	if req.CardTypeConstraints != nil {
 		ct.Constraints = *req.CardTypeConstraints
 	}
+	if req.CardTypeRendering != nil {
+		ct.RenderingStyle = *req.CardTypeRendering
+	}
 	p := promptFor(ct, prompt.FactionStyle{
 		Name: strings.TrimSpace(req.Name), PrimaryColor: strings.TrimSpace(req.PrimaryColor),
 		Texture: strings.TrimSpace(req.Texture), Description: req.Description,
 	})
 	if req.HasFrontImage && strings.HasSuffix(ct.Name, " back") {
 		p = prompt.WithFrontReference(p)
+	}
+	if usesCharacter(ct) && h.hasCharacter(req.FactionID) {
+		p = withCharacter(ct, p)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"prompt":   p,
@@ -359,13 +490,19 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	if model == "" {
 		model = all["openai_model"]
 	}
+	draft, final := qualityFor("draft", all, ct, model), qualityFor("final", all, ct, model)
+	p := promptFor(ct, factionStyle(f))
+	if usesCharacter(ct) && h.hasCharacter(f.ID) {
+		p = withCharacter(ct, p)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"prompt":            promptFor(ct, factionStyle(f)),
+		"prompt":            p,
 		"has_file":          ct.OpenAIFileID != "" || ct.NoTemplate,
-		"est_draft_usd":     estimatePerImage(h.Usage, all, model, "draft", ct.ImageSize),
-		"est_final_usd":     estimatePerImage(h.Usage, all, model, "final", ct.ImageSize),
-		"est_draft_seconds": estimateSeconds(h.Usage, all, model, "draft", ct.ID),
-		"est_final_seconds": estimateSeconds(h.Usage, all, model, "final", ct.ID),
+		"est_draft_usd":     estimatePerImage(h.Usage, all, model, draft, ct.ImageSize),
+		"est_final_usd":     estimatePerImage(h.Usage, all, model, final, ct.ImageSize),
+		"est_draft_seconds": estimateSeconds(h.Usage, model, draft, ct.ID),
+		"est_final_seconds": estimateSeconds(h.Usage, model, final, ct.ID),
+		"final_quality":     final,
 	})
 }
 
@@ -381,9 +518,9 @@ func backMatchesFront(back, front string) bool {
 // promptFor is the image prompt of a card type: it edits the template, or, with no template, paints from the text.
 func promptFor(ct store.CardType, f prompt.FactionStyle) string {
 	if ct.NoTemplate {
-		return prompt.ImageNew(ct.Description, ct.Constraints, f)
+		return prompt.ImageNew(ct.Description, ct.Constraints, f, ct.RenderingStyle)
 	}
-	return prompt.ImageEdit(ct.Description, ct.Constraints, f)
+	return prompt.ImageEdit(ct.Description, ct.Constraints, f, ct.RenderingStyle)
 }
 
 // newImageSize is the size of a picture made without a template: the card type's size when it is a fixed one

@@ -131,13 +131,13 @@ func (h *GenerationsHandler) Edit(w http.ResponseWriter, r *http.Request) {
 		post = crop
 	}
 	edit := openai.ImageEditRequest{
-		Model: model, Prompt: p, Quality: quality, Size: ct.ImageSize,
+		Model: model, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct),
 		ImageURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(original),
 	}
 	if maskPNG != nil {
 		edit.MaskURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(maskPNG)
 	}
-	go h.run(g.ID, edit, post)
+	h.start(g.ID, edit, post)
 	writeJSON(w, http.StatusCreated, g)
 }
 

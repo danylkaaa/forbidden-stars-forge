@@ -41,3 +41,33 @@ export function useFactionCardCanvases(factionId: number) {
   }, [ready, data, color, assets, shared, front, back, layout, logoUrl, cards.images])
   return { ...state, probes: cards.probes, hasFront: !!front, hasBack: !!back, loading: record.isPending || !faction }
 }
+
+// One side of a faction's saved card drawn over another picture (a freshly generated background), at half size,
+// as an object URL; null while it renders or when `backgroundUrl` is null.
+export function useFactionCardOver(factionId: number, side: 'front' | 'back', backgroundUrl: string | null) {
+  const faction = useFactions().data?.find(f => f.id === factionId)
+  const layoutQuery = useFactionCardLayout(), layout = layoutQuery.layout
+  const logoUrl = useFactionLogoUrl(factionId)
+  const record = useFactionCard(factionId), defaults = useFactionCardDefaults()
+  const [state, setState] = useState<{ url: string | null; error: string }>({ url: null, error: '' })
+  const data = useMemo(() => record.data && faction ? normalizeData(record.data.data, faction.name) : null, [record.data, faction])
+  const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
+  const shared = useMemo(() => byKey(defaults.data), [defaults.data])
+  const cards = useCardImages(data ? initialCardIds(data) : [])
+  const ready = !!backgroundUrl && !!data && !defaults.isPending && !layoutQuery.isPending && !cards.pending
+  const color = record.data?.unit_color ?? ''
+  useEffect(() => {
+    if (!ready || !data) return
+    let cancelled = false, url: string | null = null
+    renderFactionCard({ side, data, unitColor: color, backgroundUrl, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
+      .then(r => new Promise<Blob | null>(resolve => r.canvas.toBlob(resolve, 'image/png')))
+      .then(blob => {
+        if (cancelled || !blob) return
+        url = URL.createObjectURL(blob)
+        setState({ url, error: '' })
+      })
+      .catch(e => { if (!cancelled) setState({ url: null, error: e instanceof Error ? e.message : 'Could not render the faction card.' }) })
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
+  }, [ready, side, data, color, backgroundUrl, assets, shared, layout, logoUrl, cards.images])
+  return { url: ready ? state.url : null, error: state.error, pending: ready && !state.url && !state.error }
+}

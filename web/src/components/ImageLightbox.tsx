@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayerControls, LayeredImage } from './PreviewLayers'
+import { LayerControls, LayeredImage, OverlayToggle } from './PreviewLayers'
+import { usePreviewLayers } from '../lib/previewLayers'
 import { FavoriteButton } from './FavoriteButton'
 import type { ImageRef } from '../lib/favorites'
 import { useStartImageEdit } from '../lib/imageEdits'
@@ -15,7 +16,8 @@ import { BackFlatPreview } from '../pages/assemble/BackLogoPreview'
 import { EditIcon, MaskIcon } from './icons'
 import { ConfirmDialog } from './ConfirmDialog'
 
-type CombatPreviewProps = { backPreviewCategory?: import('../pages/cards/model').Category; cardPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
+// boardOverlay: the finished card drawn over the image (the faction card), shown while the overlay is on.
+type CombatPreviewProps = { boardOverlay?: { url: string | null; pending: boolean }; safeArea?: import('./safeAreaStore').SafeAreaGeometry; backPreviewCategory?: import('../pages/cards/model').Category; cardPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -50,7 +52,7 @@ export type EditProps = {
 }
 
 export function ImageLightbox({
-  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, onClose, startEditing = false, startHiding = false,
+  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, safeArea, boardOverlay, downloadName, favorite, editTarget, compareSrc, onEdited, onClose, startEditing = false, startHiding = false,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number
   downloadName?: string // file name without extension; defaults to a slug of alt
@@ -69,7 +71,9 @@ export function ImageLightbox({
   const tools = !editing && !hiding
   const [showOriginal, setShowOriginal] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const shownSrc = showOriginal && compareSrc ? compareSrc : src
+  const overlayOn = usePreviewLayers((l) => l.overlay)
+  const board = boardOverlay && overlayOn && !showOriginal ? boardOverlay.url : null
+  const shownSrc = board ?? (showOriginal && compareSrc ? compareSrc : src)
   const [editDirty, setEditDirty] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null)
   const [downloading, setDownloading] = useState(false)
@@ -129,6 +133,8 @@ export function ImageLightbox({
             Card preview
           </button>
         )}
+        {boardOverlay && tools && <OverlayToggle />}
+        {boardOverlay && overlayOn && boardOverlay.pending && <span role="status" className="text-xs text-ink/70">Drawing the faction card…</span>}
         {tools && !asCard && <LayerControls maskSrc={maskSrc} />}
         {compareSrc && tools && (
           <button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}
@@ -180,7 +186,7 @@ export function ImageLightbox({
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={maskSrc} fit="natural"
+          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={board ? null : maskSrc} fit="natural" safeArea={safeArea}
             imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />}
         </div>
       )}
@@ -288,7 +294,7 @@ function AreaEditor({ src, alt, target, onCancel, onStarted, onDirtyChange, mask
 
 // Wraps a thumbnail in a button that opens the image in an ImageLightbox.
 export function ZoomableImage({
-  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
+  src, alt, maskSrc, cardPreviewFactionId, cardPreviewCategory, combatPreviewSide, previewFactionId, backPreviewCategory, safeArea, boardOverlay, downloadName, favorite, editTarget, compareSrc, onEdited, className, children,
 }: {
   src: string; alt: string; maskSrc?: string | null; cardPreviewFactionId?: number; downloadName?: string
   favorite?: FavoriteProp; className?: string; children: ReactNode
@@ -304,7 +310,7 @@ export function ZoomableImage({
       >
         {children}
       </button>
-      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} cardPreviewCategory={cardPreviewCategory} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} downloadName={downloadName} favorite={favorite}
+      {open && <ImageLightbox src={src} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardPreviewFactionId} cardPreviewCategory={cardPreviewCategory} combatPreviewSide={combatPreviewSide} previewFactionId={previewFactionId} backPreviewCategory={backPreviewCategory} safeArea={safeArea} boardOverlay={boardOverlay} downloadName={downloadName} favorite={favorite}
         editTarget={editTarget} compareSrc={compareSrc} onEdited={onEdited} onClose={() => setOpen(false)} />}
     </>
   )

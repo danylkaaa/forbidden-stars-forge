@@ -19,6 +19,7 @@ export function SaveBar({ settings }: { settings: Settings }) {
           openai_model: draft.openai_model,
           draft_quality: draft.draft_quality,
           final_quality: draft.final_quality,
+          faction_card_quality: draft.faction_card_quality,
           input_fidelity: draft.input_fidelity,
           background: draft.background,
           claude_binary: draft.claude_binary,

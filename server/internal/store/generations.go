@@ -170,3 +170,13 @@ func (s *GenerationsStore) MarkFailed(id int64, errMsg string) error {
 	}
 	return nil
 }
+
+// FailInterrupted marks every pending generation failed. A run lives in the server process, so at start-up a
+// pending one was cut off by a restart and would otherwise stay "generating" forever. It returns how many it marked.
+func (s *GenerationsStore) FailInterrupted() (int64, error) {
+	res, err := s.db.Exec(`UPDATE generations SET status = 'failed', error = 'Interrupted by a server restart. Generate it again.' WHERE status = 'pending'`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

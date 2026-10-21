@@ -8,9 +8,10 @@ export const sameFields = (a: LabFields, b: LabFields) =>
   a.primary_color === b.primary_color && a.texture === b.texture && a.description === b.description
 
 // The card type text the lab can experiment with.
-export type CtFields = { description: string; constraints: string }
+// rendering_style is optional: drafts saved before it existed have none ('' = photorealistic).
+export type CtFields = { description: string; constraints: string; rendering_style?: string }
 
-export const sameCt = (a: CtFields, b: CtFields) => a.description === b.description && a.constraints === b.constraints
+export const sameCt = (a: CtFields, b: CtFields) => a.description === b.description && a.constraints === b.constraints && (a.rendering_style ?? '') === (b.rendering_style ?? '')
 
 type LabState = {
   factionId: number | null

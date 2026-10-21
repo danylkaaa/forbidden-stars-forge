@@ -7,6 +7,8 @@ export type SettingsDraft = {
   openai_model: string
   draft_quality: 'low' | 'medium'
   final_quality: 'medium' | 'high'
+  // The faction card's final quality; '' = the final quality. xhigh and max need gpt-image-2.5 sunburst or flare.
+  faction_card_quality: '' | 'high' | 'xhigh' | 'max'
   input_fidelity: 'low' | 'high'
   background: Background
   claude_binary: string
@@ -30,6 +32,7 @@ const fromSettings = (s: Settings): SettingsDraft => ({
   openai_model: s.openai_model,
   draft_quality: s.draft_quality,
   final_quality: s.final_quality,
+  faction_card_quality: s.faction_card_quality ?? '',
   input_fidelity: s.input_fidelity,
   background: s.background,
   claude_binary: s.claude_binary,
@@ -80,6 +83,7 @@ export function selectIsDirty(st: SettingsState): boolean {
     d.openai_model !== p.openai_model ||
     d.draft_quality !== p.draft_quality ||
     d.final_quality !== p.final_quality ||
+    d.faction_card_quality !== p.faction_card_quality ||
     d.input_fidelity !== p.input_fidelity ||
     d.background !== p.background ||
     d.claude_binary !== p.claude_binary ||

@@ -23,7 +23,7 @@ func TestFactionDescriptionInterpolates(t *testing.T) {
 func TestImageEditInterpolates(t *testing.T) {
 	p := ImageEdit("frontline warriors", "fill the crimson zone; keep banner", FactionStyle{
 		Name: "Tau Empire", PrimaryColor: "ochre", Texture: "matte ceramic plating", Description: "blue-grey plating",
-	})
+	}, "")
 	want := `Edit the provided card template image into finished card art.
 
 ## Description
@@ -55,7 +55,7 @@ blue-grey plating
 }
 
 func TestImageEditOmitsEmptySections(t *testing.T) {
-	p := ImageEdit("  ", "", FactionStyle{Name: "Tau Empire", Description: "blue-grey plating"})
+	p := ImageEdit("  ", "", FactionStyle{Name: "Tau Empire", Description: "blue-grey plating"}, "")
 	if strings.Contains(p, "## Description") || strings.Contains(p, "## Constraints") || strings.Contains(p, "## Card type") ||
 		strings.Contains(p, "## Primary color") || strings.Contains(p, "## Texture") ||
 		!strings.Contains(p, "## Faction\nTau Empire") || !strings.Contains(p, "## Faction style\nblue-grey plating") {
@@ -136,5 +136,12 @@ func TestAreaEditAppendsInstructionToOriginalPrompt(t *testing.T) {
 	if !strings.HasPrefix(p, "## Faction\nTau\n\n## Edit\nreplace the skull with a cog\n") ||
 		!strings.Contains(p, "Change only the masked (transparent) area") {
 		t.Fatalf("prompt:\n%s", p)
+	}
+}
+
+func TestAnImageTypesRenderingStyleReplacesThePhotorealisticLine(t *testing.T) {
+	p := ImageEdit("d", "", FactionStyle{Name: "Tau"}, "  Hand-painted\n box art.  ")
+	if !strings.Contains(p, "## Rendering\n- Hand-painted box art.\n") || strings.Contains(p, "Photorealistic") {
+		t.Fatalf("prompt: %s", p)
 	}
 }

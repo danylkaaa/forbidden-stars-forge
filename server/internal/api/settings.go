@@ -25,6 +25,7 @@ type settingsResponse struct {
 	OpenAIModel         string `json:"openai_model"`
 	DraftQuality        string `json:"draft_quality"`
 	FinalQuality        string `json:"final_quality"`
+	FactionCardQuality  string `json:"faction_card_quality"`
 	InputFidelity       string `json:"input_fidelity"`
 	Background          string `json:"background"`
 	ClaudeBinary        string `json:"claude_binary"`
@@ -34,16 +35,18 @@ type settingsResponse struct {
 }
 
 type settingsUpdate struct {
-	OpenAIAPIKey  string `json:"openai_api_key"`
-	OpenAIModel   string `json:"openai_model"`
-	DraftQuality  string `json:"draft_quality"`
-	FinalQuality  string `json:"final_quality"`
-	InputFidelity string `json:"input_fidelity"`
-	Background    string `json:"background"`
-	ClaudeBinary  string `json:"claude_binary"`
-	ClaudeModel   string `json:"claude_model"`
-	ClaudeEffort  string `json:"claude_effort"`
-	PriceTable    string `json:"price_table"`
+	OpenAIAPIKey string `json:"openai_api_key"`
+	OpenAIModel  string `json:"openai_model"`
+	DraftQuality string `json:"draft_quality"`
+	FinalQuality string `json:"final_quality"`
+	// The faction card's final quality; empty = the final quality.
+	FactionCardQuality string `json:"faction_card_quality"`
+	InputFidelity      string `json:"input_fidelity"`
+	Background         string `json:"background"`
+	ClaudeBinary       string `json:"claude_binary"`
+	ClaudeModel        string `json:"claude_model"`
+	ClaudeEffort       string `json:"claude_effort"`
+	PriceTable         string `json:"price_table"`
 }
 
 func maskKey(key string) string {
@@ -80,6 +83,7 @@ func (h *SettingsHandler) buildResponse() (settingsResponse, error) {
 		OpenAIModel:         all["openai_model"],
 		DraftQuality:        all["draft_quality"],
 		FinalQuality:        all["final_quality"],
+		FactionCardQuality:  all["faction_card_quality"],
 		InputFidelity:       all["input_fidelity"],
 		Background:          all["background"],
 		ClaudeBinary:        all["claude_binary"],
@@ -112,6 +116,10 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "final_quality must be medium or high")
 		return
 	}
+	if !oneOf(u.FactionCardQuality, "", "high", "xhigh", "max") {
+		writeError(w, http.StatusBadRequest, "faction_card_quality must be empty, high, xhigh or max")
+		return
+	}
 	if !oneOf(u.InputFidelity, "low", "high") {
 		writeError(w, http.StatusBadRequest, "input_fidelity must be low or high")
 		return
@@ -131,15 +139,16 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kv := map[string]string{
-		"openai_model":   u.OpenAIModel,
-		"draft_quality":  u.DraftQuality,
-		"final_quality":  u.FinalQuality,
-		"input_fidelity": u.InputFidelity,
-		"background":     u.Background,
-		"claude_binary":  u.ClaudeBinary,
-		"claude_model":   u.ClaudeModel,
-		"claude_effort":  u.ClaudeEffort,
-		"price_table":    u.PriceTable,
+		"openai_model":         u.OpenAIModel,
+		"draft_quality":        u.DraftQuality,
+		"final_quality":        u.FinalQuality,
+		"faction_card_quality": u.FactionCardQuality,
+		"input_fidelity":       u.InputFidelity,
+		"background":           u.Background,
+		"claude_binary":        u.ClaudeBinary,
+		"claude_model":         u.ClaudeModel,
+		"claude_effort":        u.ClaudeEffort,
+		"price_table":          u.PriceTable,
 	}
 	if u.OpenAIAPIKey != "" { // write-only: empty means "leave unchanged"
 		kv["openai_api_key"] = u.OpenAIAPIKey

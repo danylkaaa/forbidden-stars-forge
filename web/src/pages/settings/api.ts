@@ -7,6 +7,8 @@ export type Settings = {
   openai_model: string
   draft_quality: 'low' | 'medium'
   final_quality: 'medium' | 'high'
+  // The faction card's final quality; '' = the final quality. xhigh and max need gpt-image-2.5 sunburst or flare.
+  faction_card_quality: '' | 'high' | 'xhigh' | 'max'
   input_fidelity: 'low' | 'high'
   background: Background
   claude_binary: string

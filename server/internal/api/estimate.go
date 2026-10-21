@@ -8,13 +8,9 @@ import (
 )
 
 // estimatePerImage is the standard-price estimate for one image of the
-// given model and mode, using the Settings quality, the card type's size and recent real
+// given model and quality, using the card type's size and recent real
 // runs (same model if any, else any model) to calibrate the input cost.
-func estimatePerImage(usage *store.UsageStore, all map[string]string, model, mode, size string) float64 {
-	quality := all["draft_quality"]
-	if mode == "final" {
-		quality = all["final_quality"]
-	}
+func estimatePerImage(usage *store.UsageStore, all map[string]string, model, quality, size string) float64 {
 	pt, err := pricing.Parse(all["price_table"])
 	if err != nil {
 		return 0
@@ -31,13 +27,9 @@ func estimatePerImage(usage *store.UsageStore, all map[string]string, model, mod
 
 // estimateSeconds is how long one image typically takes with these settings: the median of recent finished runs
 // of the same model, quality and card type, else of the same model and quality; 0 when there is no history.
-func estimateSeconds(usage *store.UsageStore, all map[string]string, model, mode string, cardTypeID int64) float64 {
+func estimateSeconds(usage *store.UsageStore, model, quality string, cardTypeID int64) float64 {
 	if usage == nil {
 		return 0
-	}
-	quality := all["draft_quality"]
-	if mode == "final" {
-		quality = all["final_quality"]
 	}
 	for _, typeID := range []int64{cardTypeID, 0} {
 		runs, err := usage.RecentDurations(model, quality, typeID, 20)

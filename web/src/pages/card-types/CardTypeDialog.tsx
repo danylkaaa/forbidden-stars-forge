@@ -10,7 +10,7 @@ import { ImageSizeField } from '../../components/ImageSizeField'
 import { RatioSizeField } from '../../components/RatioSizeField'
 import { isDraftDirty } from '../../lib/draftForm'
 import { sizeError } from '../../lib/imageSize'
-import { buildCardTypeForm, isBuiltinCardType, isElementCardType, createCardType, templateUrl, startCardTypeAssist, updateCardType, type CardType } from './api'
+import { buildCardTypeForm, isBuiltinCardType, isElementCardType, createCardType, templateUrl, startCardTypeAssist, updateCardType, uploadToOpenAI, type CardType } from './api'
 import { OpenAIFilePanel } from './OpenAIFilePanel'
 import { TemplateDropzone } from './TemplateDropzone'
 import { useCardTypeDraft, useCardTypesUi } from './store'
@@ -39,18 +39,29 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
       const sizeProblem = sizeError(d.image_size ?? '')
       if (sizeProblem) return { error: `AI image size: ${sizeProblem}` }
       const form = buildCardTypeForm(
-        { name: d.name.trim(), description: d.description, constraints: d.constraints, image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm, aspect_ratio: d.aspect_ratio ?? '' },
+        { name: d.name.trim(), description: d.description, constraints: d.constraints, rendering_style: d.rendering_style ?? '', image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm, aspect_ratio: d.aspect_ratio ?? '' },
         stagedFile,
       )
+      let saved: CardType
       try {
-        if (dialogMode === 'edit' && editingId !== null) await updateCardType(editingId, form)
-        else await createCardType(form)
-        queryClient.invalidateQueries({ queryKey: ['card-types'] })
-        useCardTypesUi.getState().closeDialog()
-        return { error: null }
+        saved = dialogMode === 'edit' && editingId !== null ? await updateCardType(editingId, form) : await createCardType(form)
       } catch (e) {
         return { error: e instanceof Error ? e.message : 'Save failed' }
       }
+      // A newly attached template is sent to OpenAI straight away, so the type can generate at once.
+      if (stagedFile) {
+        try {
+          await uploadToOpenAI(saved.id)
+        } catch (e) {
+          // The type is saved: the dialog stays open on it, with the upload button to try again.
+          queryClient.invalidateQueries({ queryKey: ['card-types'] })
+          useCardTypesUi.getState().openEdit(saved)
+          return { error: `Saved, but the template was not uploaded to OpenAI: ${e instanceof Error ? e.message : 'upload failed'}` }
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ['card-types'] })
+      useCardTypesUi.getState().closeDialog()
+      return { error: null }
     },
     { error: null },
   )
@@ -127,6 +138,10 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
         </Field>
         {textField('description', 'Description', 'What this image is, overall aesthetic…')}
         {textField('constraints', 'Constraints', 'Zones, chromakey color, do-not-touch areas…')}
+        <Field label="Art style (first line of Rendering)">
+          {(id) => <input id={id} type="text" value={draft.rendering_style ?? ''} placeholder="Photorealistic style."
+            onChange={(e) => draftState.setField('rendering_style', e.target.value)} className={inputClass} />}
+        </Field>
         {!isElementCardType(draft.name) && <div>
           <div className="mb-1 text-xs text-ink/70">Card size (cut), mm</div>
           <div className="grid grid-cols-2 gap-3.5">
@@ -154,6 +169,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
               { field: 'name', before: persisted.name, after: draft.name },
               { field: 'description', before: persisted.description, after: draft.description },
               { field: 'constraints', before: persisted.constraints, after: draft.constraints },
+              { field: 'art style', before: persisted.rendering_style ?? '', after: draft.rendering_style ?? '' },
               { field: 'image size', before: persisted.image_size, after: draft.image_size },
               { field: 'aspect ratio', before: persisted.aspect_ratio, after: draft.aspect_ratio },
               { field: 'card width (mm)', before: persisted.card_width_mm, after: draft.card_width_mm },
@@ -179,7 +195,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
             {dirty && <Button type="button" onClick={discardAll}>Discard</Button>}
             <Button type="button" onClick={requestClose}>Cancel</Button>
             <Button variant="primary" type="submit" disabled={!draft.name.trim() || saving || sizeError(draft.image_size ?? '') !== null || cutSizeError(draft) !== null}>
-              {saving ? 'Saving…' : 'Save Image Type'}
+              {saving ? (ui.stagedFile ? 'Saving and uploading to OpenAI…' : 'Saving…') : 'Save Image Type'}
             </Button>
           </form>
         </div>

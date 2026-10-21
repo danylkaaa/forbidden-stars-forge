@@ -186,7 +186,7 @@ test('card type tab: unsaved constraints feed the prompt and the snapshot; save 
 
   await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
-  await waitFor(() => expect(useFactionLab.getState().ctSnapshots[50]).toEqual({ description: '', constraints: 'fill green and keep banner' }))
+  await waitFor(() => expect(useFactionLab.getState().ctSnapshots[50]).toEqual({ description: '', constraints: 'fill green and keep banner', rendering_style: '' }))
 
   await userEvent.click(screen.getByRole('button', { name: 'Save to image type' }))
   await waitFor(() => expect(ctSaved).toBe(true))
@@ -379,7 +379,9 @@ test('clicking a part of the prompt opens the tab with its field and focuses it'
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Primary color' })).toHaveFocus())
   await userEvent.click(within(prompt()).getByRole('button', { name: 'Edit Texture' }))
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Texture' })).toHaveFocus())
-  expect(within(prompt()).queryByRole('button', { name: 'Edit Rendering' })).not.toBeInTheDocument()
+  // The Rendering part opens the image type's art style.
+  await userEvent.click(within(prompt()).getByRole('button', { name: 'Edit Rendering' }))
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Art style (first line of Rendering)' })).toHaveFocus())
 })
 
 test('"Use for faction" makes the shown image the faction default for its image type', async () => {

@@ -56,9 +56,10 @@ test('renders the card types table', async () => {
   expect(await screen.findByText('combat')).toBeInTheDocument()
 })
 
-test('create flow posts multipart with staged file', async () => {
-  let gotName: unknown, gotFile: File | null = null
+test('create flow posts multipart with staged file, then uploads the template to OpenAI', async () => {
+  let gotName: unknown, gotFile: File | null = null, synced = false
   server.use(
+    http.post('/api/card-types/3/upload-to-openai', () => { synced = true; return HttpResponse.json({ openai_file_id: 'file-3' }) }),
     http.post('/api/card-types', async ({ request }) => {
       // request.formData() throws inside the jsdom + undici harness on a
       // File body, so the multipart text is read directly.
@@ -90,6 +91,7 @@ test('create flow posts multipart with staged file', async () => {
   const uploaded = gotFile as File | null
   expect(uploaded).not.toBeNull()
   expect(uploaded?.type).toBe('image/png')
+  await waitFor(() => expect(synced).toBe(true))
 })
 
 test('staged file makes form dirty; discard clears it', async () => {

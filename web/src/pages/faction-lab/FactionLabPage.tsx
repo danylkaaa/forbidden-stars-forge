@@ -1,6 +1,6 @@
 import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
@@ -27,6 +27,12 @@ import { useElapsedMs } from '../../lib/useElapsedMs'
 import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
 import { usePreviewLayers } from '../../lib/previewLayers'
 import { useAssembledPrompt } from './api'
+import { isFactionCardType, useFactionCharacters, usesCharacter } from '../factions/characters'
+import { CharacterPlacementDialog } from '../factions/CharacterPlacementDialog'
+import { CARD_SIZE, FACTION_CARD_CUT_MM } from '../faction-card/model'
+import { useFactionCardOver } from '../faction-card/useFactionCardCanvases'
+
+const FACTION_CARD_SAFE_AREA = { px: CARD_SIZE, cutMm: FACTION_CARD_CUT_MM }
 import { joinPrompt, splitPrompt } from './promptSections'
 import { FrontImagePicker, type FrontImageOption } from './FrontImagePicker'
 import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
@@ -35,6 +41,7 @@ import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from
 const PART_FIELDS: Record<string, { tab: 'faction' | 'card-type'; field: string }> = {
   Description: { tab: 'card-type', field: 'ct-description' },
   Constraints: { tab: 'card-type', field: 'ct-constraints' },
+  Rendering: { tab: 'card-type', field: 'ct-rendering_style' },
   'Primary color': { tab: 'faction', field: 'primary_color' },
   Texture: { tab: 'faction', field: 'texture' },
   'Faction style': { tab: 'faction', field: 'description' },
@@ -42,7 +49,7 @@ const PART_FIELDS: Record<string, { tab: 'faction' | 'card-type'; field: string 
 const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
 
 const savedFields = (f: Faction): LabFields => ({ primary_color: f.primary_color, texture: f.texture, description: f.description })
-const savedCt = (c: CardType): CtFields => ({ description: c.description, constraints: c.constraints })
+const savedCt = (c: CardType): CtFields => ({ description: c.description, constraints: c.constraints, rendering_style: c.rendering_style ?? '' })
 
 // Debounce typing so the prompt is re-assembled once the user pauses.
 function useDebounced<T>(value: T, ms: number): T {
@@ -112,7 +119,13 @@ export default function FactionLabPage() {
 
   const inputs = useMemo(() => ({ fields, ct: ctFields }), [fields, ctFields])
   const debounced = useDebounced(inputs, 300)
-  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage)
+  // The faction card is generated with the faction's character picture, when it has one.
+  const { data: characters } = useFactionCharacters()
+  const showsCharacter = usesCharacter(cardType?.name)
+  const character = characters?.find((c) => c.faction_id === faction?.id)
+  const [placing, setPlacing] = useState(false)
+  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage,
+    showsCharacter && character ? character.faction_id : null, character?.url ?? '')
   const { data: preview } = usePreview(lab.factionId, lab.cardTypeId, lab.model)
   // Parts of the prompt switched off; they are neither shown nor sent.
   const [off, setOff] = useState<ReadonlySet<string>>(new Set())
@@ -136,6 +149,7 @@ export default function FactionLabPage() {
     'Faction style': !!saved && !!fields && saved.description !== fields.description,
     Description: !!ctSaved && !!ctFields && ctSaved.description !== ctFields.description,
     Constraints: !!ctSaved && !!ctFields && ctSaved.constraints !== ctFields.constraints,
+    Rendering: !!ctSaved && !!ctFields && (ctSaved.rendering_style ?? '') !== (ctFields.rendering_style ?? ''),
   }
   const promptReady = assembled.data !== undefined && !assembled.isFetching &&
     debounced.fields !== null && fields !== null && sameFields(debounced.fields, fields) &&
@@ -200,7 +214,7 @@ export default function FactionLabPage() {
     setError(null)
     try {
       await updateCardType(cardType.id, buildCardTypeForm(
-        { name: cardType.name, description: ctFields.description, constraints: ctFields.constraints }, null))
+        { name: cardType.name, description: ctFields.description, constraints: ctFields.constraints, rendering_style: ctFields.rendering_style ?? '' }, null))
       await queryClient.invalidateQueries({ queryKey: ['card-types'] })
       lab.clearCtDraft(cardType.id)
     } catch (e) {
@@ -281,6 +295,21 @@ export default function FactionLabPage() {
               loading={gensLoading} error={!!gensError} />
           )}
 
+          {showsCharacter && faction && (
+            // Uploaded once per faction, on the Factions page; shown here so it is clear what is sent.
+            <div className="flex items-center gap-3 rounded-md border border-divider bg-bg p-2 text-xs">
+              {character ? <img src={character.url} alt="Faction character" className="h-16 w-12 shrink-0 rounded border border-divider object-contain" /> : null}
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-ink">{!character ? 'No faction character' : cardType?.name === 'faction card' ? 'Faction character, pasted on the template' : 'Faction character, sent as a reference (no template)'}</p>
+                <div className="flex flex-wrap gap-x-3">
+                  {character && cardType?.name === 'faction card' && <button type="button" onClick={() => setPlacing(true)} className="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent">Position on template</button>}
+                  <Link to="/factions" className="text-accent">{character ? 'Change it on the Factions page' : 'Upload one on the Factions page'}</Link>
+                </div>
+              </div>
+            </div>
+          )}
+          {placing && faction && character && <CharacterPlacementDialog factionId={faction.id} character={character} onClose={() => setPlacing(false)} />}
+
           <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">
             {([['faction', 'Faction', dirty], ['card-type', 'Image type', ctDirty]] as const).map(([key, label, isDirty]) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
@@ -303,7 +332,9 @@ export default function FactionLabPage() {
                 </div>
                 <p className="-mt-1 m-0 text-[11px] text-ink/45">Shared by every faction — saving changes all of this image type&apos;s prompts.</p>
                 {(['description', 'constraints'] as const).map((key) => (
-                  <div key={key} className={`flex flex-col ${key === 'constraints' ? 'min-h-48 flex-1' : 'min-h-28'}`}>
+                  // shrink-0: the column scrolls instead of squeezing a field under the next one (with Claude open, the field
+                  // is as tall as its content).
+                  <div key={key} className={`flex flex-col ${key === 'constraints' && ctAssist !== key ? 'min-h-48 flex-1' : 'min-h-28 shrink-0'}`}>
                     <div className="mb-1 flex items-center justify-between">
                       <label htmlFor={`lab-ct-${key}`} className="text-xs text-ink/70">{key === 'description' ? 'Image type description' : 'Constraints'}</label>
                       <button type="button" disabled={ctAssist !== null} onClick={() => setCtAssist(key)}
@@ -332,6 +363,10 @@ export default function FactionLabPage() {
                     )}
                   </div>
                 ))}
+                <Field label="Art style (first line of Rendering)">
+                  {(id) => <input id={id} data-field="ct-rendering_style" type="text" value={ctFields.rendering_style ?? ''} placeholder="Photorealistic style."
+                    onChange={(e) => setCtField('rendering_style', e.target.value)} className={`${inputClass} font-sans text-[13px]`} />}
+                </Field>
                 <div className="flex items-center justify-end gap-2">
                   {ctDirty && <Button type="button" onClick={() => lab.clearCtDraft(cardType.id)}>Reset to saved</Button>}
                   <Button variant="primary" type="button" disabled={!ctDirty || busy !== null} onClick={onSaveCt}>
@@ -509,6 +544,11 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   const [previewCardId, setPreviewCardId] = useState(0)
   const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'card back' ? 'back' : undefined
   const backCategory = cardTypeName === 'card back' ? 'combat' : undefined
+  // The faction card is a landscape board, not a playing card: its cut and safe lines are its own.
+  const factionCard = isFactionCardType(cardTypeName)
+  const safeArea = factionCard ? FACTION_CARD_SAFE_AREA : undefined
+  // With the overlay on, the faction card is checked as the finished card: the faction's saved base drawn over the picture.
+  const board = useFactionCardOver(gen.faction_id, cardTypeName === 'faction card back' ? 'back' : 'front', factionCard && overlayOn ? cardImageUrl : null)
   // Event fronts are checked as the finished event card, like combat fronts.
   const cardCategory = cardTypeName === 'events' ? 'schema' as const : combatSide === 'front' ? 'combat' as const : undefined
   const asCard = !!cardCategory && overlayOn
@@ -518,7 +558,9 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
-        {(cardCategory || backCategory || elementKind) && <OverlayToggle />}
+        {(cardCategory || backCategory || elementKind || factionCard) && <OverlayToggle />}
+        {factionCard && overlayOn && board.pending && <span role="status" className="inline-flex items-center gap-2 text-xs text-ink/70"><GeneratingSpinner seed={gen.id} size="sm" />Drawing the faction card…</span>}
+        {factionCard && overlayOn && board.error && <span role="alert" className="text-xs text-danger">{board.error}</span>}
         <EditImageButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
         <HideAreasButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
         {cardType && <UseForFactionButton factionId={gen.faction_id} cardType={cardType} generationId={gen.id} />}
@@ -529,9 +571,9 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
       {placing && elementKind ? <ElementPlacement key={gen.id} kind={elementKind} factionId={gen.faction_id} generationId={gen.id} /> : cardImageUrl && asCard ? <QuickCardPreview picker={false} imageUrl={cardImageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} category={cardCategory} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} safeArea={safeArea} boardOverlay={factionCard ? board : undefined} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={imageUrl} alt={alt} maskSrc={maskSrc} fit="contain" />}
+            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={board.url ?? imageUrl} alt={alt} maskSrc={board.url ? null : maskSrc} fit="contain" safeArea={safeArea} />}
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>

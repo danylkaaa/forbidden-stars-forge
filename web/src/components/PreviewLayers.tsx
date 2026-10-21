@@ -1,7 +1,7 @@
 import { usePreviewLayers } from '../lib/previewLayers'
 import { useCutMm } from '../pages/print/layout'
 import { SafeAreaLines } from './SafeArea'
-import { CARD_IMAGE_PX } from './safeAreaStore'
+import { CARD_IMAGE_PX, type SafeAreaGeometry } from './safeAreaStore'
 
 // UI for the template-as-mask preview layer; state lives in
 // lib/previewLayers so every preview shares it. Card frames are checked
@@ -51,7 +51,7 @@ export function LayerControls({ maskSrc }: { maskSrc?: string | null }) {
 // fit="contain": fills its parent box; every layer is object-contain'ed in
 // the same box, so same-aspect layers stay aligned at any size.
 export function LayeredImage({
-  src, alt, maskSrc, fit, imgClassName = '', logoUrl, logoScale = 0.5,
+  src, alt, maskSrc, fit, imgClassName = '', logoUrl, logoScale = 0.5, safeArea,
 }: {
   src: string
   alt: string
@@ -60,9 +60,11 @@ export function LayeredImage({
   imgClassName?: string
   logoUrl?: string
   logoScale?: number
+  safeArea?: SafeAreaGeometry
 }) {
   const { mask, maskOpacity } = usePreviewLayers()
-  const cutMm = useCutMm()
+  const cardCutMm = useCutMm()
+  const px = safeArea?.px ?? CARD_IMAGE_PX, cutMm = safeArea?.cutMm ?? cardCutMm
   const layer = fit === 'contain'
     ? 'pointer-events-none absolute inset-0 h-full w-full object-contain'
     : 'pointer-events-none absolute inset-0 h-full w-full rounded-md'
@@ -74,8 +76,9 @@ export function LayeredImage({
         <img src={maskSrc} alt="" data-testid="mask" className={layer} style={{ opacity: maskOpacity }} />
       )}
       {fit === 'contain'
-        ? <div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="relative h-full max-w-full" style={{ aspectRatio: `${CARD_IMAGE_PX.width} / ${CARD_IMAGE_PX.height}` }}><SafeAreaLines px={CARD_IMAGE_PX} cutMm={cutMm} /></div></div>
-        : <SafeAreaLines px={CARD_IMAGE_PX} cutMm={cutMm} />}
+        // Fitted like the image, whatever the box's shape (a wide faction card in a tall column too).
+        ? <SafeAreaLines px={px} cutMm={cutMm} contain />
+        : <SafeAreaLines px={px} cutMm={cutMm} />}
       {logoUrl && <img src={logoUrl} alt="Card back logo" className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
         style={{ width: `${logoScale * 100}%`, height: `${logoScale * 100}%` }} />}
     </div>

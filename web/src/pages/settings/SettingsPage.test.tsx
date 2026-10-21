@@ -13,6 +13,7 @@ const base: Settings = {
   openai_model: 'gpt-image-2',
   draft_quality: 'low',
   final_quality: 'high',
+  faction_card_quality: '',
   input_fidelity: 'high',
   background: 'auto',
   claude_binary: 'claude',

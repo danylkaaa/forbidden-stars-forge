@@ -202,3 +202,19 @@ func TestRecentDurationsFilterByModelQualityAndCardType(t *testing.T) {
 		t.Fatalf("other card type: %v", got)
 	}
 }
+
+func TestPendingGenerationsAreFailedAfterARestart(t *testing.T) {
+	s, fid, ctid := genFixtures(t)
+	pending, _ := s.Create(fid, ctid, "final", "gpt-image-2", "high", "-tau-combat-high", "p")
+	done, _ := s.Create(fid, ctid, "final", "gpt-image-2", "high", "-tau-combat-high", "p")
+	_ = s.MarkDone(done.ID, "generated/gen-2.png", 1, 1, 0, 1)
+	if n, err := s.FailInterrupted(); err != nil || n != 1 {
+		t.Fatalf("marked %d, %v", n, err)
+	}
+	if got, _ := s.Get(pending.ID); got.Status != "failed" || got.Error == "" {
+		t.Fatalf("pending run: %+v", got)
+	}
+	if got, _ := s.Get(done.ID); got.Status != "done" {
+		t.Fatalf("finished run: %+v", got)
+	}
+}

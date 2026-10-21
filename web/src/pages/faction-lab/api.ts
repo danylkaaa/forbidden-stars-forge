@@ -4,15 +4,19 @@ import type { CtFields, LabFields } from './store'
 
 // Assembles the image prompt from unsaved faction fields and card type text
 // (server-side, so it's exactly what AI Lab would send).
-export function useAssembledPrompt(cardTypeId: number | null, name: string, fields: LabFields | null, ct: CtFields | null, hasFrontImage = false) {
+// `characterOf` is the faction whose character picture the prompt references (null = none); `characterKey`
+// changes when that picture does, so the prompt is assembled again.
+export function useAssembledPrompt(cardTypeId: number | null, name: string, fields: LabFields | null, ct: CtFields | null, hasFrontImage = false, characterOf: number | null = null, characterKey = '') {
   return useQuery({
-    queryKey: ['assemble', cardTypeId, name, fields, ct, hasFrontImage],
+    queryKey: ['assemble', cardTypeId, name, fields, ct, hasFrontImage, characterOf, characterKey],
     queryFn: () => apiSend<{ prompt: string; has_file: boolean }>('POST', '/api/generate/assemble', {
       card_type_id: cardTypeId, name, ...fields,
       has_front_image: hasFrontImage,
-      ...(ct ? { card_type_description: ct.description, card_type_constraints: ct.constraints } : {}),
+      ...(characterOf ? { faction_id: characterOf } : {}),
+      ...(ct ? { card_type_description: ct.description, card_type_constraints: ct.constraints, card_type_rendering_style: ct.rendering_style ?? '' } : {}),
     }),
     enabled: cardTypeId !== null && fields !== null,
     placeholderData: (prev) => prev, // no flicker while typing
   })
 }
+

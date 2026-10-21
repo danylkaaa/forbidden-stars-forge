@@ -180,7 +180,10 @@ const imageEditIntro = "Edit the provided card template image into finished card
 
 const imageNewIntro = "Create finished card art from the description below. There is no template image."
 
-const imageEditRendering = `- Photorealistic style.
+// DefaultRenderingStyle is the first line of the Rendering section when an image type sets no style of its own.
+const DefaultRenderingStyle = "Photorealistic style."
+
+const imageEditRendering = `- %s
 - Keep all important elements at least 6 mm from the image edges; background
   artwork must extend to the full bleed edge.
 - Do not add any text or lettering.`
@@ -195,16 +198,20 @@ type FactionStyle struct {
 
 // ImageEdit assembles the per-card prompt (PRD §8.2) as Markdown sections
 // so the image model can tell the parts apart. Empty sections are omitted.
-func ImageEdit(cardTypeDescription, constraints string, f FactionStyle) string {
-	return build(imageEditIntro, cardTypeDescription, constraints, f)
+// style is the image type's rendering style; empty = DefaultRenderingStyle.
+func ImageEdit(cardTypeDescription, constraints string, f FactionStyle, style string) string {
+	return build(imageEditIntro, cardTypeDescription, constraints, f, style)
 }
 
 // ImageNew is the prompt for a card type with no template image: the model paints the picture from the text alone.
-func ImageNew(cardTypeDescription, constraints string, f FactionStyle) string {
-	return build(imageNewIntro, cardTypeDescription, constraints, f)
+func ImageNew(cardTypeDescription, constraints string, f FactionStyle, style string) string {
+	return build(imageNewIntro, cardTypeDescription, constraints, f, style)
 }
 
-func build(intro, cardTypeDescription, constraints string, f FactionStyle) string {
+func build(intro, cardTypeDescription, constraints string, f FactionStyle, style string) string {
+	if style = strings.Join(strings.Fields(style), " "); style == "" {
+		style = DefaultRenderingStyle
+	}
 	var b strings.Builder
 	b.WriteString(intro)
 	section := func(title, body string) {
@@ -218,7 +225,7 @@ func build(intro, cardTypeDescription, constraints string, f FactionStyle) strin
 	section("Primary color", f.PrimaryColor)
 	section("Texture", f.Texture)
 	section("Faction style", f.Description)
-	section("Rendering", imageEditRendering)
+	section("Rendering", fmt.Sprintf(imageEditRendering, style))
 	return b.String()
 }
 
@@ -227,7 +234,7 @@ func build(intro, cardTypeDescription, constraints string, f FactionStyle) strin
 var assembledPromptShape = ImageEdit("{description}", "{constraints}", FactionStyle{
 	Name: "{faction name}", PrimaryColor: "{faction primary color}", Texture: "{faction texture}",
 	Description: "{faction-specific style description}",
-})
+}, "")
 
 // AreaEdit is the prompt for editing a painted area of an existing image:
 // the image's original prompt for context, plus the requested change.
@@ -269,4 +276,37 @@ func WithFrontReference(p string) string {
 		return p
 	}
 	return p + "\n\n" + frontReference
+}
+
+const characterReference = `## Character reference
+The last input image is this faction's character. Use it only as a visual
+reference: feature this character on the card, keeping their face, armour,
+wargear, colours and silhouette recognisable, painted in the card's style.
+Do not copy that picture's background, framing or lighting.`
+
+// WithCharacterReference adds the note on the faction's character picture; it also accepts a previewed
+// prompt that already has it.
+func WithCharacterReference(p string) string {
+	p = strings.TrimSpace(p)
+	if strings.Contains(p, characterReference) {
+		return p
+	}
+	return p + "\n\n" + characterReference
+}
+
+const characterOnTemplate = `## Character on the template
+The faction's character is already painted onto the template. Keep this
+character where they are, at the same size and in the same pose, and keep
+their face, armour, wargear, colours and silhouette recognisable. Repaint them
+in the card's finished style and blend them into the scene around them. Do not
+move, crop, mirror or duplicate them.`
+
+// WithCharacterOnTemplate adds the note on the character pasted onto the template; it also accepts a previewed
+// prompt that already has it.
+func WithCharacterOnTemplate(p string) string {
+	p = strings.TrimSpace(p)
+	if strings.Contains(p, characterOnTemplate) {
+		return p
+	}
+	return p + "\n\n" + characterOnTemplate
 }

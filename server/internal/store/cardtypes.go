@@ -23,8 +23,10 @@ type CardType struct {
 	// AspectRatio (width / height) is the shape of the finished image when it is beyond the model's 3:1 limit: the
 	// picture is made at ImageSize and cropped to it. 0 means the shape of ImageSize.
 	AspectRatio float64 `json:"aspect_ratio"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	// RenderingStyle is the art style line of the prompt's Rendering section; empty = the default (photorealistic).
+	RenderingStyle string `json:"rendering_style"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -35,11 +37,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm, aspect_ratio"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm, aspect_ratio, rendering_style"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM, &ct.AspectRatio)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM, &ct.AspectRatio, &ct.RenderingStyle)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -121,6 +123,18 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 // SetImageSize sets (or with "" clears) the type's AI image size.
 func (s *CardTypesStore) SetImageSize(id int64, size string) (CardType, error) {
 	res, err := s.db.Exec(`UPDATE card_types SET image_size = ?, updated_at = datetime('now') WHERE id = ?`, size, id)
+	if err != nil {
+		return CardType{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return CardType{}, ErrNotFound
+	}
+	return s.Get(id)
+}
+
+// SetRenderingStyle sets (or with "" clears) the type's art style line.
+func (s *CardTypesStore) SetRenderingStyle(id int64, style string) (CardType, error) {
+	res, err := s.db.Exec(`UPDATE card_types SET rendering_style = ?, updated_at = datetime('now') WHERE id = ?`, style, id)
 	if err != nil {
 		return CardType{}, err
 	}

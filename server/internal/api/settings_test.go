@@ -86,6 +86,17 @@ func TestPutSetsAndMasksKey(t *testing.T) {
 	}
 }
 
+func TestTheFactionCardQualityIsSaved(t *testing.T) {
+	r := newTestRouter(t)
+	body := `{"openai_model":"gpt-image-2.5-flare","draft_quality":"low","final_quality":"high","faction_card_quality":"max","input_fidelity":"high","claude_binary":"claude","price_table":"{}"}`
+	if rec, out := doJSON(t, r, http.MethodPut, "/api/settings", body); rec.Code != 200 {
+		t.Fatalf("status %d: %v", rec.Code, out)
+	}
+	if _, out := doJSON(t, r, http.MethodGet, "/api/settings", ""); out["faction_card_quality"] != "max" {
+		t.Fatalf("faction_card_quality = %v", out["faction_card_quality"])
+	}
+}
+
 func TestPutRejectsInvalidQuality(t *testing.T) {
 	body := `{"openai_api_key":"","openai_model":"m","image_size":"816x1104","draft_quality":"ultra","final_quality":"high","input_fidelity":"high","claude_binary":"claude","price_table":"{}"}`
 	rec, _ := doJSON(t, newTestRouter(t), http.MethodPut, "/api/settings", body)

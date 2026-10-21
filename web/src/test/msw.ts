@@ -7,7 +7,7 @@ export const server = setupServer(
   http.get('/api/settings', () =>
     HttpResponse.json({
       openai_api_key_masked: 'sk-…test', openai_api_key_from_env: false, openai_model: 'gpt-image-2',
-      draft_quality: 'low', final_quality: 'high', input_fidelity: 'high',
+      draft_quality: 'low', final_quality: 'high', faction_card_quality: '', input_fidelity: 'high',
       background: 'auto', claude_binary: 'claude', claude_model: '', claude_effort: '', price_table: '{}',
     }),
   ),

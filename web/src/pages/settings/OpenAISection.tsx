@@ -57,6 +57,20 @@ export function OpenAISection({ settings }: { settings: Settings }) {
         {select('draft_quality', 'Draft quality', ['low', 'medium'])}
         {select('final_quality', 'Final quality', ['medium', 'high'])}
       </div>
+      <div className="grid grid-cols-2 gap-3.5">
+        <Field label="Faction card final quality">
+          {(id) => (
+            <SearchableSelect id={id} value={draft.faction_card_quality}
+              onChange={(e) => setField('faction_card_quality', e.target.value as SettingsDraft['faction_card_quality'])} className={selectClass}>
+              <option value="">same as final</option>
+              {(['high', 'xhigh', 'max'] as const).map((o) => <option key={o} value={o}>{o}</option>)}
+            </SearchableSelect>
+          )}
+        </Field>
+      </div>
+      <p className="-mt-2 text-[11px] text-ink/45">
+        Final runs of the faction card (front and back) only. xhigh and max work on gpt-image-2.5 sunburst and flare; other models get high.
+      </p>
       <TestButton label="Test OpenAI connection" run={postTestOpenAI} />
     </section>
   )
