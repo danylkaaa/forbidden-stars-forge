@@ -9,11 +9,12 @@ const SLIDERS = [
 ] as const
 
 // Drop shadow, outline, inner shadow and contrast of every unit icon on the faction card.
-export function ModelStyleControls({ value, onChange, onStart, open }: { value: ModelStyle; onChange: (value: ModelStyle) => void; onStart?: () => void; open?: boolean }) {
+// `flat` (the structures' images) leaves out inner shadow and contrast, which only the 3D models have.
+export function ModelStyleControls({ value, onChange, onStart, open, title = 'Model shadow, outline and contrast (all units and factions)', flat }: { value: ModelStyle; onChange: (value: ModelStyle) => void; onStart?: () => void; open?: boolean; title?: string; flat?: boolean }) {
   return <details open={open} className="rounded border border-divider px-3 py-2">
-    <summary className="cursor-pointer text-sm text-accent-300">Model shadow, outline and contrast (all units and factions)</summary>
+    <summary className="cursor-pointer text-sm text-accent-300">{title}</summary>
     <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-      {SLIDERS.map(([key, name, min, max, step]) => <label key={key} className="block text-xs text-ink/70">{name} ({Math.round(value[key] * 1000) / 1000})
+      {SLIDERS.filter(([key]) => !flat || !['innerShadow', 'innerShadowSize', 'contrast'].includes(key)).map(([key, name, min, max, step]) => <label key={key} className="block text-xs text-ink/70">{name} ({Math.round(value[key] * 1000) / 1000})
         <input type="range" min={min} max={max} step={step} value={value[key]} className="w-full" onPointerDown={onStart} onChange={e => onChange({ ...value, [key]: Number(e.target.value) })} /></label>)}
     </div>
   </details>

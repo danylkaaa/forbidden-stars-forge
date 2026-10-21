@@ -58,23 +58,34 @@ export function tableTransform(layout: FactionCardLayout, items: TableItem[]) {
   return { k, ox, oy, box, bounds: box(tableBounds(items)) }
 }
 
+/* ---------- front: the objective tokens heading ---------- */
+// The heading bar in design units (35 = the layout's text size): the panel is inset by its outer border, so the whole bar is 62 tall.
+export const HEADING_BAR = { inset: 6, h: 62 } as const
+
 /* ---------- back: starting forces ---------- */
+// The rows fill the layout's `forces` zone (y, w, h in % of the card): they share its height evenly
+// and span its width, so they scale with the zone and with the number of rows. The zone is centred under its heading.
+// `gap` is the space between a row's two cells (% of the card width), `rowGap` the space between rows (% of its height).
 export type ForcesRow = { cy: number; count: Box; name: Box }
 export function forcesGeometry(layout: FactionCardLayout, rowCount: number) {
-  const W = CARD_SIZE.width, H = CARD_SIZE.height, g = layout.forces, k = g.scale ?? 1
-  const cy0 = g.y / 100 * H
-  // Many rows are packed closer so the last one stays on the card.
-  const wanted = (g.pitch ?? 0) / 100 * H * k, pitch = rowCount > 1 ? Math.min(wanted, (0.96 * H - cy0) / (rowCount - 1 + 0.43)) : wanted
-  const rowH = pitch * 0.86, u = rowH / 112
-  const x = g.x / 100 * W, rowW = 410 * W / 1932 * k
-  const cw = rowW * 0.42, gap = rowW * 0.037
+  const W = CARD_SIZE.width, H = CARD_SIZE.height, g = layout.forces, t = layout.forcesTitle
+  const top = g.y / 100 * H, rowW = (g.w ?? 21) / 100 * W, zoneH = (g.h ?? 58) / 100 * H
+  const titleX = t.x / 100 * W, titleW = t.w !== undefined ? t.w / 100 * W : rowW, x = titleX + titleW / 2 - rowW / 2
+  // The last row ends at the zone's bottom; few rows stop growing at a sensible height.
+  const n = Math.max(1, rowCount), rowGap = (g.rowGap ?? 1.4) / 100 * H
+  const rowH = Math.max(1, Math.min((zoneH - (n - 1) * rowGap) / n, rowW * 0.3)), pitch = rowH + rowGap, u = rowH / 112
+  // The gap is centred on the split between the cells, so widening it narrows both cells by half of it.
+  const split = Math.min(220 * u, rowW * 0.45), gap = Math.min((g.gap ?? 0.85) / 100 * W, rowW * 0.3)
+  const cw = split - gap / 2, nameX = x + split + gap / 2
   const rows: ForcesRow[] = Array.from({ length: rowCount }, (_, i) => {
-    const cy = cy0 + i * pitch
-    return { cy, count: { x, y: cy - rowH / 2, w: cw, h: rowH }, name: { x: x + cw + gap, y: cy - rowH / 2, w: rowW - cw - gap, h: rowH } }
+    const cy = top + rowH / 2 + i * pitch
+    return { cy, count: { x, y: cy - rowH / 2, w: cw, h: rowH }, name: { x: nameX, y: cy - rowH / 2, w: x + rowW - nameX, h: rowH } }
   })
-  const t = layout.forcesTitle, ty = t.y / 100 * H, room = cy0 - rowH / 2 - ty - 22 * u
-  const title: Box = { x: t.x / 100 * W, y: ty, w: t.w !== undefined ? t.w / 100 * W : rowW, h: Math.max(40 * u, Math.min(rowH * 0.625, room)) }
-  return { u, rowH, rows, title }
+  const ty = t.y / 100 * H, room = top - ty - 22 * u
+  const title: Box = { x: titleX, y: ty, w: titleW, h: Math.max(40 * u, Math.min(rowH * 0.625, room)) }
+  // The zone as the editor shows it, in % of the card.
+  const zone = { x: x / W * 100, y: g.y, w: rowW / W * 100, h: zoneH / H * 100 }
+  return { u, rowH, rows, title, zone }
 }
 
 /* ---------- back: letter, portrait, objectives ---------- */
@@ -90,11 +101,11 @@ export function letterBox(layout: FactionCardLayout): Box {
   const snapped = Math.abs(x - edge.left) < SNAP ? edge.left : x
   return { x: snapped, y: top - pad * 0.8, w: right + pad - snapped, h: bottom - top + 1.6 * pad }
 }
-// The portrait is as tall as the letter and ends where the objectives end on the right.
+// The portrait is placed automatically: as tall as the letter, `portraitStyle.gap` (% of the card width) to its right,
+// and ending where the objectives end.
 export function portraitBox(layout: FactionCardLayout): Box {
-  const e = layout.portrait, W = CARD_SIZE.width, l = letterBox(layout), x = e.x / 100 * W, right = x + (e.w ?? 20) / 100 * W
-  const edge = objectivesEdges(layout).right, r = Math.abs(right - edge) < SNAP ? edge : right
-  return { x, y: l.y, w: r - x, h: l.h }
+  const l = letterBox(layout), x = l.x + l.w + (layout.portraitStyle.gap ?? 0.8) / 100 * CARD_SIZE.width
+  return { x, y: l.y, w: Math.max(0, objectivesEdges(layout).right - x), h: l.h }
 }
 function objectivesEdges(layout: FactionCardLayout) {
   const cells = objectiveCells(layout, 6)
@@ -109,9 +120,11 @@ export function objectiveCells(layout: FactionCardLayout, count: number): Object
   // The whole block scales about its top-left corner: frames, text, row spacing and column gap.
   const k = g.scale ?? 1, pitch = (g.pitch ?? 0) / 100 * H * k, gap = (g.gap ?? 0) / 100 * W * k, u = pitch / OBJECTIVE.pitch
   const ox = g.x / 100 * W, oy = g.y / 100 * H, o = OBJECTIVE
+  // The text card's own size (`w`, `h` in % of the card at scale 1); without one it keeps its designed size.
+  const textW = g.w !== undefined ? g.w / 100 * W * k : o.textW * u, textH = g.h !== undefined ? g.h / 100 * H * k : o.textH * u
   return Array.from({ length: count }, (_, i) => {
     const x = ox + (i % 2) * gap, y = oy + Math.floor(i / 2) * pitch
     const body = { x: x + o.frameW * o.shift * u, y: y + o.tip * u, w: o.frameW * u, h: o.bodyH * u }
-    return { u, body, frame: { x: body.x, y: y, w: body.w, h: body.h + 2 * o.tip * u }, text: { x: x + o.textX * u, y: body.y + o.textY * u, w: o.textW * u, h: o.textH * u } }
+    return { u, body, frame: { x: body.x, y: y, w: body.w, h: body.h + 2 * o.tip * u }, text: { x: x + o.textX * u, y: body.y + o.textY * u, w: textW, h: textH } }
   })
 }

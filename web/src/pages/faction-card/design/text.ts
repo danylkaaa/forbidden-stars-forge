@@ -38,3 +38,13 @@ export function centerNormal(ctx: Ctx, text: string, x: number, top: number, h: 
   ctx.restore()
   cssLine(ctx, text, x, top + paddingTop + (h - paddingTop - box) / 2, size, 0, s)
 }
+// A line whose drawn glyphs (not the font's line box) are centred vertically in a box of height `h` starting at `top`.
+// Capitals sit high in the font's box, so centring the box leaves an all-caps label looking low.
+export function centerInk(ctx: Ctx, text: string, x: number, top: number, h: number, size: number, s: LineStyle) {
+  ctx.save(); ctx.font = fontOf(size, s)
+  const m = ctx.measureText(text), ascent = m.actualBoundingBoxAscent, descent = m.actualBoundingBoxDescent
+  ctx.fillStyle = s.color; ctx.textAlign = s.align ?? 'left'; ctx.textBaseline = 'alphabetic'
+  ctx.translate(x, top + h / 2 + (ascent - descent) / 2)
+  if (s.squeeze && s.squeeze !== 1) ctx.scale(s.squeeze, 1)
+  ctx.fillText(text, 0, 0); ctx.restore()
+}

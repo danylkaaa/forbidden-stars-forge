@@ -40,6 +40,32 @@ export type ForcesIcon = SlotKey | 'city' | 'factory' | 'reinforcement' | 'forge
 // `card_id` is the library card shown when the icon is 'card' (e.g. an order upgrade).
 export type InitialRow = { icon: ForcesIcon; count: number; label: string; card_id?: number }
 export type Objective = { name: string; text: string }
+// Which part of the leader portrait shows in its frame (see fitImage): x, y from 0 to 1 and a zoom of at least 1.
+export type PortraitCrop = { x: number; y: number; zoom: number }
+export const DEFAULT_PORTRAIT_CROP: PortraitCrop = { x: 0.5, y: 0.5, zoom: 1 }
+
+// Every text on the card can be made bigger or smaller (`scale`, 1 = its designed size) and, where it can
+// wrap, spaced (`lineHeight`, × the font size; null = a single line). The shared values are part of the
+// layout; a faction overrides any of them in its own data.
+export const TEXT_STYLES = [
+  { key: 'title', label: 'Title', side: 'front', lineHeight: 1 },
+  { key: 'subtitle', label: 'Subtitle', side: 'front', lineHeight: 1.1 },
+  { key: 'text', label: 'Faction text', side: 'front', lineHeight: 1.3 },
+  { key: 'objectiveHeader', label: 'Objective tokens heading', side: 'front', lineHeight: null },
+  { key: 'forcesTitle', label: 'Starting forces heading', side: 'back', lineHeight: null },
+  { key: 'forces', label: 'Starting forces rows', side: 'back', lineHeight: null },
+  { key: 'story', label: 'Story text', side: 'back', lineHeight: 1.38 },
+  { key: 'signature', label: 'Signature', side: 'back', lineHeight: 1 },
+  { key: 'signatureTitle', label: 'Signature title', side: 'back', lineHeight: 1 },
+  { key: 'objectives', label: 'Objectives', side: 'back', lineHeight: 1.08 },
+] as const
+export type TextKey = typeof TEXT_STYLES[number]['key']
+export type TextStyle = { scale: number; lineHeight: number }
+export type TextStyles = Partial<Record<TextKey, Partial<TextStyle>>>
+// The style each text is drawn with: the faction's override, else the shared value, else the design.
+export function resolveTextStyles(shared?: TextStyles, faction?: TextStyles): Record<TextKey, TextStyle> {
+  return Object.fromEntries(TEXT_STYLES.map(({ key, lineHeight }) => [key, { scale: 1, lineHeight: lineHeight ?? 1, ...shared?.[key], ...faction?.[key] }])) as Record<TextKey, TextStyle>
+}
 
 export type FactionCardData = {
   title: string; subtitle: string; text: string
@@ -53,6 +79,8 @@ export type FactionCardData = {
   models: Partial<Record<SlotKey, Partial<Orientation>>>
   initial: InitialRow[]
   objectives: Objective[]
+  text_styles: TextStyles
+  portrait_crop: PortraitCrop
 }
 
 const unit = (name: string, cost: number, dice: number, health: number, morale: number, tech: number | null, forge = 0): UnitStats => ({ name, cost, dice, health, morale, tech, forge })
@@ -73,6 +101,7 @@ export function defaultData(factionName = ''): FactionCardData {
       { icon: 'materiel', count: 6, label: 'Materiel' },
     ],
     objectives: Array.from({ length: 6 }, () => ({ name: '', text: '' })),
+    text_styles: {}, portrait_crop: DEFAULT_PORTRAIT_CROP,
   }
 }
 
@@ -83,6 +112,8 @@ export function normalizeData(raw: unknown, factionName = ''): FactionCardData {
   return {
     ...base, ...r, units,
     models: r.models ?? {},
+    portrait_crop: { ...DEFAULT_PORTRAIT_CROP, ...r.portrait_crop },
+    text_styles: r.text_styles && typeof r.text_styles === 'object' ? r.text_styles : {},
     theme: typeof r.theme === 'string' ? r.theme : '',
     panel_color: typeof r.panel_color === 'string' ? r.panel_color : '', frame_color: typeof r.frame_color === 'string' ? r.frame_color : '', light_color: typeof r.light_color === 'string' ? r.light_color : '',
     // Cache tokens were removed from the initial forces.

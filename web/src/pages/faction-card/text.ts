@@ -38,7 +38,10 @@ export function paintParagraph(ctx: CanvasRenderingContext2D, spans: Span[], s: 
     let x = s.x + (s.align === 'center' ? (s.width - total) / 2 : s.align === 'right' ? s.width - total : 0)
     for (const w of line) {
       ctx.font = `${w.italic ? 'italic ' : ''}${w.bold ? 'bold ' : ''}${size}px ${s.family}, CardEvent, serif`
-      ctx.fillText(w.text, x, y); x += w.width
+      ctx.fillText(w.text, x, y)
+      // The card fonts have no bold face and the canvas does not fake one, so bold runs get a thin outline in the ink colour.
+      if (w.bold) { ctx.save(); ctx.strokeStyle = s.color; ctx.lineWidth = size * 0.045; ctx.lineJoin = 'round'; ctx.strokeText(w.text, x, y); ctx.restore() }
+      x += w.width
     }
     y += size * s.lineHeight
   })

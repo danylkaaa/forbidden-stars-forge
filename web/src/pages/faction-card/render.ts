@@ -1,12 +1,12 @@
 import { loadFonts, loadImage } from '../assemble/render'
-import { CARD_SIZE, MODEL_FIELD, UNIT_SLOTS, assetKeys, defaultData, withDefaults, type FactionCardData, type ForcesIcon, type InitialRow, type Orientation, type SlotKey } from './model'
+import { CARD_SIZE, MODEL_FIELD, UNIT_SLOTS, assetKeys, defaultData, resolveTextStyles, withDefaults, type FactionCardData, type ForcesIcon, type InitialRow, type Orientation, type SlotKey } from './model'
 import { drawPlaceholder, type Box } from './placeholders'
 import { renderModelIcon } from './stl'
 import { BUNDLED_ICONS, DESIGN_ASSETS } from './bundled'
-import { defaultLayout, logoRect, type FactionCardLayout } from './layout'
+import { aligned, defaultLayout, logoRect, type FactionCardLayout } from './layout'
 import { paintParagraph } from './text'
 import { drawForces, drawLetterPanel, drawObjectives, drawPortrait } from './design/back'
-import { drawHeadingBar, drawUnitTable, unitRowDesignBox, type FrontIcons } from './design/front'
+import { drawHeadingBar, drawUnitTable, structureIcon, unitRowDesignBox, type FrontIcons } from './design/front'
 import { tableItems, tableTransform } from './design/geometry'
 import { withShadows, type DesignAssets } from './design/paint'
 import { deriveTheme, themeColor } from './design/theme'
@@ -121,15 +121,17 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
   const lb = logoRect(side, layout)
   if (logo) fit(ctx, logo, { x: lb.x / 100 * w, y: lb.y / 100 * h, w: lb.w / 100 * w, h: lb.h / 100 * h })
 
+  // Font size and line spacing of each text: the faction's override, else the shared layout's.
+  const ts = resolveTextStyles(layout.textStyles, data.text_styles)
   if (side === 'front') {
     const t = box(layout.title)
-    note('Title', paintParagraph(ctx, [{ text: data.title }], { x: t.x, y: t.y, width: t.width, size: t.size, lineHeight: 1, color: INK, family: 'CardHeadline', align: 'center' }).overflow)
-    const sub = box(layout.subtitle)
-    paintParagraph(ctx, [{ text: data.subtitle, bold: true }], { x: sub.x, y: sub.y, width: sub.width, height: sub.height, size: sub.size, lineHeight: 1.1, color: INK, family: 'CardRules', align: 'center' })
-    const body = box(layout.text)
-    note('Faction text', paintParagraph(ctx, richSpans(data.text), { x: body.x, y: body.y, width: body.width, height: body.height, size: body.size, lineHeight: 1.3, color: INK, family: 'CardRules', paragraphGap: 0.3 }).overflow)
-    const heading = box(layout.objectiveHeader)
-    drawHeadingBar(ctx, { x: heading.x, y: heading.y, w: heading.width, size: heading.size }, 'Objective tokens', theme, design, `${seed}-objective-heading`)
+    note('Title', paintParagraph(ctx, [{ text: data.title }], { x: t.x, y: t.y, width: t.width, size: t.size * ts.title.scale, lineHeight: ts.title.lineHeight, color: INK, family: 'CardHeadline', align: 'center' }).overflow)
+    const sub = box(aligned('subtitle', layout))
+    paintParagraph(ctx, [{ text: data.subtitle, bold: true }], { x: sub.x, y: sub.y, width: sub.width, height: sub.height, size: sub.size * ts.subtitle.scale, lineHeight: ts.subtitle.lineHeight, color: INK, family: 'CardRules', align: 'center' })
+    const body = box(aligned('text', layout))
+    note('Faction text', paintParagraph(ctx, richSpans(data.text), { x: body.x, y: body.y, width: body.width, height: body.height, size: body.size * ts.text.scale, lineHeight: ts.text.lineHeight, color: INK, family: 'CardRules', paragraphGap: 0.3 }).overflow)
+    const heading = box(aligned('objectiveHeader', layout))
+    drawHeadingBar(ctx, { x: heading.x, y: heading.y, w: heading.width, size: heading.size }, 'Objective tokens', theme, design, `${seed}-objective-heading`, ts.objectiveHeader.scale)
 
     // City, factory and the seven unit rows, drawn as one designed table.
     const icons: FrontIcons = { city: icon.city, factory: icon.factory, gear: icon.gear, forge: icon.forge, tech: icon.tech, bastion: icon.bastion, dice: icon.dice, health: icon.health, morale: icon.morale, unit: unitIcon }
@@ -139,40 +141,50 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
     }).warnings)
   } else {
     // Initial forces: a title bar and one pair of cells (number and icon, name) per row.
+    // Unit models are drawn at the unit table's scale (their padded square is 186 × MODEL_FIELD table units), not fitted to the row.
+    const tableK = tableTransform(layout, tableItems(data)).k, modelSide = 186 * MODEL_FIELD * tableK
+    // Structures get the same outline and shadow as on the unit table, scaled from its units into the row's.
+    const structure = (key: string, b: Box, u: number) => structureIcon(ctx, icon[key], b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h), layout.structureStyle, key, tableK / u)
     warnings.push(...drawForces(ctx, {
-      rows: data.initial.slice(0, 8), title: 'Starting forces', layout, theme, assets: design, seed,
-      icon: (c, row, b) => forcesIconInto(c, row, b, input, unitIcon, sharedIcon),
+      rows: data.initial.slice(0, 8), title: 'Starting forces', layout, theme, assets: design, seed, scale: { title: ts.forcesTitle.scale, rows: ts.forces.scale },
+      icon: (c, row, b, u) => isStructure(row.icon) ? structure(row.icon, b, u) : forcesIconInto(c, row, b, modelSide / u, input, unitIcon, sharedIcon),
     }).warnings)
-    // The letter: its panel, then the story and the signature (positions from the layout).
+    // The letter: its panel, then the story and the signature (positions from the layout), in a handwritten
+    // chancery font (Felipa) that is slanted already, so it is not set in italics.
     drawLetterPanel(ctx, layout, theme, seed)
     const st = box(layout.story)
-    note('Story text', paintParagraph(ctx, richSpans(data.back_text), { x: st.x, y: st.y, width: st.width, height: st.height, size: st.size, lineHeight: 1.38, color: SCRIPT_INK, family: 'CardEvent', italic: true, paragraphGap: 0.25 }).overflow)
+    note('Story text', paintParagraph(ctx, richSpans(data.back_text), { x: st.x, y: st.y, width: st.width, height: st.height, size: st.size * ts.story.scale, lineHeight: ts.story.lineHeight, color: SCRIPT_INK, family: 'CardLetter', paragraphGap: 0.25 }).overflow)
     const sig = box(layout.signature), sigTitle = box(layout.signatureTitle)
-    paintParagraph(ctx, [{ text: data.signature }], { x: sig.x, y: sig.y, width: sig.width, size: sig.size, lineHeight: 1, color: SCRIPT_INK, family: 'CardEvent', italic: true, align: 'right' })
-    paintParagraph(ctx, [{ text: data.signature_title }], { x: sigTitle.x, y: sigTitle.y, width: sigTitle.width, size: sigTitle.size, lineHeight: 1, color: SCRIPT_INK, family: 'CardEvent', italic: true, align: 'right' })
-    drawPortrait(ctx, layout, theme, design, portrait)
-    warnings.push(...drawObjectives(ctx, { objectives: data.objectives, pictures: objectiveImages, layout, theme, seed }).warnings)
+    paintParagraph(ctx, [{ text: data.signature }], { x: sig.x, y: sig.y, width: sig.width, size: sig.size * ts.signature.scale, lineHeight: ts.signature.lineHeight, color: SCRIPT_INK, family: 'CardLetter', align: 'right' })
+    paintParagraph(ctx, [{ text: data.signature_title }], { x: sigTitle.x, y: sigTitle.y, width: sigTitle.width, size: sigTitle.size * ts.signatureTitle.scale, lineHeight: ts.signatureTitle.lineHeight, color: SCRIPT_INK, family: 'CardLetter', align: 'right' })
+    drawPortrait(ctx, layout, theme, design, portrait, data.portrait_crop)
+    warnings.push(...drawObjectives(ctx, { objectives: data.objectives, pictures: objectiveImages, layout, theme, seed, text: ts.objectives }).warnings)
   }
   return { canvas, warnings }
 }
 
+// City, factory and bastion are structures (the bastion never has a model).
+function isStructure(icon: ForcesIcon): icon is 'city' | 'factory' | 'bastion' {
+  return icon === 'city' || icon === 'factory' || icon === 'bastion'
+}
+
 // One row's icon inside its box: a unit model, a structure, a token, or a rendered library card.
-function forcesIconInto(ctx: CanvasRenderingContext2D, row: InitialRow, b: Box, input: FactionCardInput, unitIcon: Record<SlotKey, Drawable | null>, shared: (key: string, b: Box) => void) {
+function forcesIconInto(ctx: CanvasRenderingContext2D, row: InitialRow, b: Box, modelSide: number, input: FactionCardInput, unitIcon: Record<SlotKey, Drawable | null>, shared: (key: string, b: Box) => void) {
   const lift = (draw: () => void) => withShadows(ctx, [{ dx: 0, dy: 5, blur: 4, color: 'rgba(0,0,0,.5)' }], draw)
   if (row.icon === 'card') {
     const card = row.card_id ? input.cardImages?.[row.card_id] : undefined
     if (card) lift(() => fit(ctx, card, b))
     return
   }
-  lift(() => forcesIcon(ctx, row.icon, b, unitIcon, shared))
+  lift(() => forcesIcon(ctx, row.icon, b, modelSide, unitIcon, shared))
 }
-function forcesIcon(ctx: CanvasRenderingContext2D, icon: ForcesIcon, b: Box, unitIcon: Record<SlotKey, Drawable | null>, shared: (key: string, b: Box) => void) {
+function forcesIcon(ctx: CanvasRenderingContext2D, icon: ForcesIcon, b: Box, modelSide: number, unitIcon: Record<SlotKey, Drawable | null>, shared: (key: string, b: Box) => void) {
   if (icon === 'materiel') shared('gear', b)
   else if (icon === 'reinforcement') shared('reinforce', b)
   else if (icon === 'forge_token') shared('forge-token', b)
   else if (icon === 'city' || icon === 'factory') shared(icon, b)
   else if (icon === 'card') return
-  else if (unitIcon[icon]) fit(ctx, unitIcon[icon]!, b)
+  else if (unitIcon[icon]) fit(ctx, unitIcon[icon]!, { x: b.x + b.w / 2 - modelSide / 2, y: b.y + b.h / 2 - modelSide / 2, w: modelSide, h: modelSide })
   else if (icon === 'bastion') shared('bastion', b)
   else drawPlaceholder(ctx, 'none', b)
 }

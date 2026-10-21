@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../../lib/api'
-import { CARD_SIZE, DEFAULT_MODEL_STYLE, defaultData, type ModelStyle } from './model'
-import { TABLE, forcesGeometry, objectiveCells, tableItems, tableTransform } from './design/geometry'
+import { CARD_SIZE, DEFAULT_MODEL_STYLE, defaultData, type ModelStyle, type TextStyles } from './model'
+import { HEADING_BAR, TABLE, forcesGeometry, objectiveCells, tableItems, tableTransform } from './design/geometry'
 
 export type Side = 'front' | 'back'
 // Every element is placed in % of the card (x, y, w, h), text sizes are % of
@@ -13,7 +13,7 @@ export type Side = 'front' | 'back'
 // Style elements (no box) set how an icon and its number look: number colour
 // and offset from the icon centre (× icon size), and the icon's drop shadow
 // (strength 0–1, blur and offset × icon size).
-export type ElementLayout = { x: number; y: number; w?: number; h?: number; size?: number; scale?: number; pitch?: number; gap?: number; color?: string; outline?: number; nx?: number; ny?: number; shadow?: number; blur?: number; sx?: number; sy?: number }
+export type ElementLayout = { x: number; y: number; w?: number; h?: number; size?: number; scale?: number; pitch?: number; gap?: number; rowGap?: number; color?: string; outline?: number; nx?: number; ny?: number; shadow?: number; blur?: number; sx?: number; sy?: number }
 export const ELEMENTS = [
   { key: 'logo', label: 'Faction logo', side: 'front', kind: 'image' },
   { key: 'title', label: 'Faction title', side: 'front', kind: 'text' },
@@ -30,19 +30,22 @@ export const ELEMENTS = [
   { key: 'moraleStyle', label: 'Eagle (morale) icon and number', side: 'front', kind: 'style' },
   { key: 'backLogo', label: 'Faction logo', side: 'back', kind: 'image' },
   { key: 'forcesTitle', label: 'Initial forces heading', side: 'back', kind: 'text' },
-  { key: 'forces', label: 'Initial forces rows', side: 'back', kind: 'group' },
+  { key: 'forces', label: 'Initial forces rows', side: 'back', kind: 'box' },
+  { key: 'portraitStyle', label: 'Leader portrait', side: 'back', kind: 'style' },
   { key: 'story', label: 'Story text', side: 'back', kind: 'box' },
   { key: 'signature', label: 'Signature', side: 'back', kind: 'text' },
   { key: 'signatureTitle', label: 'Signature title', side: 'back', kind: 'text' },
-  { key: 'portrait', label: 'Portrait', side: 'back', kind: 'image' },
   { key: 'objectives', label: 'Objectives', side: 'back', kind: 'group' },
 ] as const
 export type ElementKey = typeof ELEMENTS[number]['key']
 export type ElementKind = typeof ELEMENTS[number]['kind']
 // `modelStyle` (shadow, outline, inner shadow, contrast of the unit icons) is
-// shared by every faction; it is edited on the Card Types page.
-export type FactionCardLayout = Record<ElementKey, ElementLayout> & { modelStyle: ModelStyle }
-export type SavedLayout = Partial<Record<ElementKey, Partial<ElementLayout>>> & { modelStyle?: Partial<ModelStyle> }
+// shared by every faction; it is edited on the Card Types page. `textStyles` are the
+// shared font sizes and line spacing (see TEXT_STYLES); a faction may override them.
+// `structureStyle` is the same for the city, factory and bastion icons, set apart from the units'
+// (inner shadow and contrast do not apply to a flat image).
+export type FactionCardLayout = Record<ElementKey, ElementLayout> & { modelStyle: ModelStyle; structureStyle: ModelStyle; textStyles: TextStyles }
+export type SavedLayout = Partial<Record<ElementKey, Partial<ElementLayout>>> & { modelStyle?: Partial<ModelStyle>; structureStyle?: Partial<ModelStyle>; textStyles?: TextStyles }
 
 // Reference card the defaults come from: 1932 × 966 per side.
 const RX = 1932, RY = 966
@@ -51,7 +54,7 @@ const px = (x: number) => Math.round(x / RX * 10000) / 100, py = (y: number) => 
 const sz = (v: number) => Math.round(v * 0.0901 * 100) / 100
 export function defaultLayout(): FactionCardLayout {
   return {
-    modelStyle: DEFAULT_MODEL_STYLE,
+    modelStyle: DEFAULT_MODEL_STYLE, structureStyle: DEFAULT_MODEL_STYLE, textStyles: {},
     logo: { x: 45.8, y: 14, w: 10.5, h: 16 },
     backLogo: { x: 14.1, y: 7.5, w: 11.3, h: 18 },
     title: { x: px(800), y: py(318), w: px(395), size: sz(38) },
@@ -66,17 +69,32 @@ export function defaultLayout(): FactionCardLayout {
     moraleStyle: { x: 0, y: 0, color: '#e5632a', nx: 0, ny: 0, shadow: 0, blur: 0.05, sx: 0.02, sy: 0.04 },
     cityIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' }, factoryIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' }, bastionIcon: { x: 0, y: 0, scale: 1, outline: 0.02, color: '#ffffff' },
     forcesTitle: { x: px(205), y: py(291 - 22), w: px(410), size: sz(23) },
-    forces: { x: px(205), y: py(364), scale: 1, pitch: py(102) },
+    // The zone the rows are fitted into.
+    forces: { x: px(205), y: py(320), w: px(410), h: py(560), gap: 0.85, rowGap: 1.4 },
+    // Space between the letter and the portrait, % of the card width.
+    portraitStyle: { x: 0, y: 0, gap: 0.8 },
     story: { x: px(870), y: py(212), w: px(570), h: py(190), size: sz(19) },
     signature: { x: px(870), y: py(396), w: px(585), size: sz(30) },
     signatureTitle: { x: px(870), y: py(444), w: px(585), size: sz(19) },
-    portrait: { x: px(1497), y: py(209), w: px(295), h: py(287) },
-    objectives: { x: px(843), y: py(544), scale: 1, pitch: py(92), gap: px(542) },
+    // `w`, `h`: each objective's text card, % of the card at scale 1 (the same for all six).
+    objectives: { x: px(843), y: py(544), scale: 1, pitch: py(92), gap: px(542), w: 14.52, h: 7.62 },
   }
 }
 export function mergeLayout(saved: SavedLayout | undefined): FactionCardLayout {
   const base = defaultLayout()
-  return { ...Object.fromEntries(ELEMENTS.map(({ key }) => [key, { ...base[key], ...saved?.[key] }])), modelStyle: { ...DEFAULT_MODEL_STYLE, ...saved?.modelStyle } } as FactionCardLayout
+  saved = saved && { ...saved, forces: forcesZone(saved) }
+  return { ...Object.fromEntries(ELEMENTS.map(({ key }) => [key, { ...base[key], ...saved?.[key] }])), modelStyle: { ...DEFAULT_MODEL_STYLE, ...saved?.modelStyle },
+    // Layouts saved before structures had their own style keep the units' one.
+    structureStyle: { ...DEFAULT_MODEL_STYLE, ...saved?.modelStyle, ...saved?.structureStyle }, textStyles: saved?.textStyles ?? {} } as FactionCardLayout
+}
+
+// Older layouts placed the forces by the first row's centre, a scale and a pitch, with the rows as wide
+// as their heading; they become the zone six such rows covered.
+function forcesZone(saved: SavedLayout): Partial<ElementLayout> | undefined {
+  const f = saved.forces
+  if (!f || f.h !== undefined || f.pitch === undefined) return f
+  const t = { ...defaultLayout().forcesTitle, ...saved.forcesTitle }, p = f.pitch * (f.scale ?? 1)
+  return { x: t.x, y: (f.y ?? 0) - 0.43 * p, w: t.w, h: 5.86 * p }
 }
 
 // Pixel geometry shared by the renderer and the editor's overlay boxes.
@@ -104,24 +122,27 @@ export function logoRect(side: Side, l: FactionCardLayout): { x: number; y: numb
   return { x: heading.x + (heading.w ?? 20) / 2 - w / 2, y: e.y, w, h }
 }
 
+// The front's subtitle, text and objective heading share the title's width and centre; only their height and position down the card are their own.
+export const TITLE_ALIGNED: readonly ElementKey[] = ['subtitle', 'text', 'objectiveHeader']
+export function aligned(key: ElementKey, l: FactionCardLayout): ElementLayout {
+  return TITLE_ALIGNED.includes(key) ? { ...l[key], x: l.title.x, w: l.title.w } : l[key]
+}
+
 // The area an element occupies, in % of the card, for the editor's drag boxes.
 export function elementBox(key: ElementKey, l: FactionCardLayout): { x: number; y: number; w: number; h: number } {
-  const e = l[key], W = CARD_SIZE.width, H = CARD_SIZE.height
+  const e = aligned(key, l), W = CARD_SIZE.width, H = CARD_SIZE.height
   const pct = (x: number, y: number, w: number, h: number) => ({ x, y, w: w / W * 100, h: h / H * 100 })
   switch (key) {
     case 'forcesTitle': { const t = forcesGeometry(l, 1).title; return pct(t.x / W * 100, t.y / H * 100, t.w, t.h) }
-    case 'objectiveHeader': { const u = (e.size ?? 2) / 100 * H / 35; return pct(e.x, e.y - 6 * u / H * 100, (e.w ?? 20) / 100 * W, 50 * u) }
+    case 'objectiveHeader': { const u = (e.size ?? 2) / 100 * H / 35; return pct(e.x, e.y - 6 * u / H * 100, (e.w ?? 20) / 100 * W, HEADING_BAR.h * u) }
     case 'title': case 'signature': case 'signatureTitle': return { x: e.x, y: e.y, w: e.w ?? 20, h: (e.size ?? 2) * 1.15 }
     case 'logo': return logoRect('front', l)
     case 'backLogo': return logoRect('back', l)
-    case 'subtitle': case 'text': case 'story': case 'portrait': return { x: e.x, y: e.y, w: e.w ?? 20, h: e.h ?? 10 }
-    case 'materialsStyle': case 'diceStyle': case 'healthStyle': case 'moraleStyle': return { x: 0, y: 0, w: 0, h: 0 }
+    case 'subtitle': case 'text': case 'story': return { x: e.x, y: e.y, w: e.w ?? 20, h: e.h ?? 10 }
+    case 'materialsStyle': case 'diceStyle': case 'healthStyle': case 'moraleStyle': case 'portraitStyle': return { x: 0, y: 0, w: 0, h: 0 }
     case 'cityIcon': case 'factoryIcon': case 'bastionIcon': { const b = structureIconBox(key.slice(0, -4) as 'city' | 'factory' | 'bastion', l); return pct(b.x / W * 100, b.y / H * 100, b.w, b.h) }
+    case 'forces': return forcesGeometry(l, 1).zone
     case 'unitTable': { const b = tableTransform(l, tableItems(defaultData())).bounds; return pct(b.x / W * 100, b.y / H * 100, b.w, b.h) }
-    case 'forces': {
-      const g = forcesGeometry(l, 4), first = g.rows[0], last = g.rows.at(-1)!
-      return pct(first.count.x / W * 100, first.count.y / H * 100, first.name.x + first.name.w - first.count.x, last.cy + g.rowH / 2 - first.count.y)
-    }
     case 'objectives': {
       const cells = objectiveCells(l, 6), x0 = Math.min(...cells.map(c => c.frame.x)), y0 = Math.min(...cells.map(c => c.frame.y))
       return pct(x0 / W * 100, y0 / H * 100, Math.max(...cells.map(c => c.text.x + c.text.w)) - x0, Math.max(...cells.map(c => c.frame.y + c.frame.h)) - y0)

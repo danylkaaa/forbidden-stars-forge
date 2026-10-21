@@ -12,6 +12,7 @@ import { combatPanels } from './combatPanels'
 import headline from '../../fonts/Headline.woff2?url'
 import event from '../../fonts/EventFont.woff2?url'
 import symbols from '../../fonts/ForbiddenStars.woff2?url'
+import letter from '../../fonts/Felipa-Regular.ttf?url'
 import advanceIcon from '../../images/upgrades/advance.png?url'
 import deployIcon from '../../images/upgrades/deploy.png?url'
 import dominateIcon from '../../images/upgrades/dominate.png?url'
@@ -52,7 +53,7 @@ export const ACTION_ICONS: Record<string, string> = { rotate_clockwise: clockwis
 
 let fonts: Promise<unknown> | undefined
 export function loadFonts() {
-  return fonts ??= Promise.all([['CardHeadline', headline], ['CardEvent', event], ['CardSymbols', symbols]].map(async ([name, url]) => {
+  return fonts ??= Promise.all([['CardHeadline', headline], ['CardEvent', event], ['CardSymbols', symbols], ['CardLetter', letter]].map(async ([name, url]) => {
     const face = new FontFace(name, `url("${url}")`)
     await face.load()
     document.fonts.add(face)

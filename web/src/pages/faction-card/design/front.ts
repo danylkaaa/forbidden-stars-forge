@@ -5,9 +5,9 @@
 import { CARD_SIZE, MODEL_FIELD, UNIT_SLOTS, type FactionCardData, type SlotKey } from '../model'
 import type { FactionCardLayout } from '../layout'
 import { drawPlaceholder, type Box } from '../placeholders'
-import { TABLE, bannerCenter, levelGroups, tableItems, tableTransform, type TableItem } from './geometry'
+import { HEADING_BAR, TABLE, bannerCenter, levelGroups, tableItems, tableTransform, type TableItem } from './geometry'
 import { boxShadow, connector, fitImage, insetShadow, lightBar, lightPipe, paperTexture, parchmentCard, recolor, screenPanel, shade, silhouette, tabPanel, withShadows, CARD_SHADOW, type Ctx, type DesignAssets, type Drawable } from './paint'
-import { centerNormal, cssLine, fitFont } from './text'
+import { centerInk, cssLine, fitFont } from './text'
 import type { CardTheme } from './theme'
 
 export type IconStyle = { color: string; nx: number; ny: number; shadow: number; blur: number; sx: number; sy: number }
@@ -80,8 +80,10 @@ function circle(ctx: Ctx, cx: number, cy: number, T: CardTheme, A: DesignAssets,
   miniature(ctx)
   if (A.ring) ctx.drawImage(A.ring, cx - 100, cy - 100 + 1.7, 200, 200) // the ring art is centred 1.7 units above its image centre
 }
-// The model icons already carry their own outline and shadow (the shared "model style"); structures get the same, so a city and a 3D unit look alike.
-const MODEL_ICON_UNITS = 186 // the icon square, in design units, that the style fractions are relative to
+// The model icons already carry their own outline and shadow (the shared "model style"); structures get theirs from the layout's `structureStyle`.
+// A model icon is drawn 186 × MODEL_FIELD units wide, but its style fractions are divided by MODEL_FIELD (see wideField
+// in render.ts), so in card units they are fractions of 186, the same as a structure's.
+const MODEL_ICON_UNITS = 186
 function drawFitted(img: Drawable, cx: number, cy: number, w: number, h: number, draw: (img: Drawable, x: number, y: number, w: number, h: number) => void) {
   const iw = img instanceof HTMLImageElement ? img.naturalWidth : img.width, ih = img instanceof HTMLImageElement ? img.naturalHeight : img.height
   const k = Math.min(w / (iw || 1), h / (ih || 1)), dw = iw * k, dh = ih * k
@@ -90,9 +92,10 @@ function drawFitted(img: Drawable, cx: number, cy: number, w: number, h: number,
 function plainIcon(ctx: Ctx, img: Drawable | null, cx: number, cy: number, w: number, h = w) {
   if (img) drawFitted(img, cx, cy, w, h, (i, x, y, dw, dh) => ctx.drawImage(i, x, y, dw, dh))
 }
-function structureIcon(ctx: Ctx, img: Drawable | null, cx: number, cy: number, w: number, style: FactionCardLayout['modelStyle'], placeholder: string) {
-  if (!img) return drawPlaceholder(ctx, placeholder, { x: cx - 45, y: cy - 45, w: 90, h: 90 })
-  const width = Math.max(0, style.outline) * MODEL_ICON_UNITS, white = silhouette(img), u = MODEL_ICON_UNITS
+// `scale` converts the table's units into the caller's (the starting forces draw at their own scale).
+export function structureIcon(ctx: Ctx, img: Drawable | null, cx: number, cy: number, w: number, style: FactionCardLayout['structureStyle'], placeholder: string, scale = 1) {
+  if (!img) return drawPlaceholder(ctx, placeholder, { x: cx - w / 2, y: cy - w / 2, w, h: w })
+  const u = MODEL_ICON_UNITS * scale, width = Math.max(0, style.outline) * u, white = silhouette(img)
   const shadow = { dx: style.shadowX * u, dy: style.shadowY * u, blur: style.shadowBlur * u / 2, color: `rgba(0,0,0,${Math.min(1, Math.max(0, style.shadow))})` }
   withShadows(ctx, [shadow], () => drawFitted(img, cx, cy, w, w, (i, x, y, dw, dh) => {
     if (width > 0) for (let n = 0; n < 28; n++) { const a = n * Math.PI * 2 / 28; ctx.drawImage(white, x + Math.cos(a) * width, y + Math.sin(a) * width, dw, dh) }
@@ -107,7 +110,7 @@ export function drawUnitTable(ctx: Ctx, p: FrontInput): { warnings: string[] } {
   const W = CARD_SIZE.width, H = CARD_SIZE.height
   const structure = (key: 'city' | 'factory' | 'bastion', base: number, defaultCx: number, cy: number) => {
     const e = layout[`${key}Icon`], w = base * (e.scale ?? 1), cx = defaultCx + e.x / 100 * W / t.k, y = cy + 5 + e.y / 100 * H / t.k
-    structureIcon(ctx, icons[key], cx, y, w, layout.modelStyle, key)
+    structureIcon(ctx, icons[key], cx, y, w, layout.structureStyle, key)
   }
 
   ctx.save(); ctx.translate(t.ox - TABLE.x0 * t.k, t.oy - TABLE.y0 * t.k); ctx.scale(t.k, t.k)
@@ -209,15 +212,18 @@ function forgeSlot(ctx: Ctx, r: TableItem, T: CardTheme, icon: Drawable | null, 
 }
 
 // A heading in a resources rectangle (e.g. "Objective tokens"): `size` is the text size in card pixels, the bar grows around it.
-export function drawHeadingBar(ctx: Ctx, box: { x: number; y: number; w: number; size: number }, text: string, T: CardTheme, A: DesignAssets, seed: string): boolean {
+// `textScale` makes the label bigger or smaller than designed; it still shrinks to fit the bar.
+export function drawHeadingBar(ctx: Ctx, box: { x: number; y: number; w: number; size: number }, text: string, T: CardTheme, A: DesignAssets, seed: string, textScale = 1): boolean {
   const u = box.size / 35, w = box.w / u
   ctx.save(); ctx.translate(box.x, box.y - 6 * u); ctx.scale(u, u)
+  // The panel's outer border and corner squares reach 6 units past it, so it is inset to keep them inside the box.
+  const P = HEADING_BAR.inset, pw = w - 2 * P, cy = P + 25
   // light bars out of both vertical edges, behind the panel
-  if (A.light) { const art = recolor(A.light, { hue: T.hue }); connector(ctx, art, -34, 8, 25); connector(ctx, art, w - 8, w + 34, 25) }
+  if (A.light) { const art = recolor(A.light, { hue: T.hue }); connector(ctx, art, P - 34, P + 8, cy); connector(ctx, art, P + pw - 8, P + pw + 34, cy) }
   // the resources rectangle: own border, gap, outer border, corner squares
-  screenPanel(ctx, { x: 0, y: 0, w, h: 50 }, T, seed)
-  const label = text.toUpperCase(), fit = fitFont(ctx, label, w - 40, 35, 12)
-  centerNormal(ctx, label, w / 2, 0, 50, fit.size, { color: '#1c1c1c', align: 'center', squeeze: .95 }, 3) // centred in the whole rectangle
+  screenPanel(ctx, { x: P, y: P, w: pw, h: 50 }, T, seed)
+  const label = text.toUpperCase(), fit = fitFont(ctx, label, pw - 40, 46 * textScale, 12)
+  centerInk(ctx, label, w / 2, P, 50, fit.size, { color: '#1c1c1c', align: 'center', squeeze: .95 }) // centred in the whole rectangle
   ctx.restore()
   return fit.fits
 }

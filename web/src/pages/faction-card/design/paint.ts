@@ -276,8 +276,10 @@ export function silhouette(image: Drawable, color = '#fff'): Drawable {
   return out
 }
 // Draws an image inside a box, whole (contain) or filling it with the overflow cut off (cover).
-export function fitImage(ctx: Ctx, image: Drawable, b: Box, mode: 'contain' | 'cover' = 'contain') {
-  const { w, h } = dims(image), k = mode === 'contain' ? Math.min(b.w / w, b.h / h) : Math.max(b.w / w, b.h / h)
+// `crop` picks which part of a covering image shows: x, y from 0 (left/top edge) to 1 (right/bottom edge),
+// and a zoom of at least 1 on top of the cover fit.
+export function fitImage(ctx: Ctx, image: Drawable, b: Box, mode: 'contain' | 'cover' = 'contain', crop: { x: number; y: number; zoom: number } = { x: 0.5, y: 0.5, zoom: 1 }) {
+  const { w, h } = dims(image), k = (mode === 'contain' ? Math.min(b.w / w, b.h / h) : Math.max(b.w / w, b.h / h)) * Math.max(1, crop.zoom)
   ctx.save(); ctx.beginPath(); rectPath(ctx, b); ctx.clip()
-  ctx.drawImage(image, b.x + (b.w - w * k) / 2, b.y + (b.h - h * k) / 2, w * k, h * k); ctx.restore()
+  ctx.drawImage(image, b.x + (b.w - w * k) * crop.x, b.y + (b.h - h * k) * crop.y, w * k, h * k); ctx.restore()
 }

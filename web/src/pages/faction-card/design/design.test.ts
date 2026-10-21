@@ -82,12 +82,20 @@ test('the table is placed by the layout and fits the card', () => {
   expect(tableTransform(layout, items).k).toBeCloseTo(TABLE.fit / 2)
 })
 
-test('many starting forces are packed to stay on the card', () => {
-  const layout = defaultLayout(), few = forcesGeometry(layout, 4), many = forcesGeometry(layout, 8)
-  expect(few.rows[1].cy - few.rows[0].cy).toBeCloseTo(layout.forces.pitch! / 100 * CARD_SIZE.height)
-  expect(many.rows[1].cy - many.rows[0].cy).toBeLessThan(few.rows[1].cy - few.rows[0].cy)
-  expect(many.rows.at(-1)!.count.y + many.rowH).toBeLessThan(CARD_SIZE.height)
-  expect(many.title.y + many.title.h).toBeLessThan(many.rows[0].count.y)
+test('starting forces fill their zone whatever the number of rows', () => {
+  const layout = defaultLayout(), W = CARD_SIZE.width, H = CARD_SIZE.height, z = layout.forces
+  const top = z.y / 100 * H, bottom = (z.y + z.h!) / 100 * H, right = (z.x + z.w!) / 100 * W
+  for (const n of [6, 8]) {
+    const g = forcesGeometry(layout, n), last = g.rows.at(-1)!
+    expect(g.rows[0].count.y).toBeCloseTo(top)
+    expect(last.count.y + g.rowH).toBeCloseTo(bottom)
+    expect(last.name.x + last.name.w).toBeCloseTo(right)
+    expect(g.title.y + g.title.h).toBeLessThan(g.rows[0].count.y)
+  }
+  layout.forces.w = z.w! / 2
+  const narrow = forcesGeometry(layout, 6), row = narrow.rows[0]
+  expect(row.name.x + row.name.w - row.count.x).toBeCloseTo(z.w! / 100 * W) // z is the same object, now half as wide
+  expect((row.count.x + row.name.x + row.name.w) / 2).toBeCloseTo(narrow.title.x + narrow.title.w / 2)
 })
 
 test('objective frames overlap their text cards and touch tip to tip', () => {

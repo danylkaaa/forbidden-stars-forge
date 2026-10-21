@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { CARD_SIZE, FACTION_CARD_BLEED_MM, FACTION_CARD_CUT_MM, UNIT_SLOTS, defaultData, normalizeData } from './model'
+import { CARD_SIZE, FACTION_CARD_BLEED_MM, FACTION_CARD_CUT_MM, UNIT_SLOTS, defaultData, normalizeData, resolveTextStyles } from './model'
 import { ELEMENTS, defaultLayout, elementBox, mergeLayout } from './layout'
 import { SAFE_INSET_MM, mmToPx } from '../../components/safeAreaStore'
 import { richSpans } from './render'
@@ -54,4 +54,11 @@ test('the canvas is the cut card plus its bleed, and every default element sits 
     const b = elementBox(key, layout)
     expect({ key, left: b.x >= safe.left, top: b.y >= safe.top, right: b.x + b.w <= safe.right, bottom: b.y + b.h <= safe.bottom }).toEqual({ key, left: true, top: true, right: true, bottom: true })
   }
+})
+
+test('a faction text style overrides the shared one, which overrides the design', () => {
+  const s = resolveTextStyles({ story: { scale: 1.2, lineHeight: 1.5 }, title: { scale: 0.9 } }, { story: { scale: 0.8 } })
+  expect(s.story).toEqual({ scale: 0.8, lineHeight: 1.5 })
+  expect(s.title).toEqual({ scale: 0.9, lineHeight: 1 })
+  expect(s.text).toEqual({ scale: 1, lineHeight: 1.3 })
 })

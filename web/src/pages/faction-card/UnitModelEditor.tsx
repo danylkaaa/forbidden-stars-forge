@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { deleteAsset, uploadAsset } from './api'
+import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { DEFAULT_ORIENTATION, assetKeys, withDefaults, type ModelStyle, type Orientation, type SlotKey } from './model'
 import { renderModelIcon } from './stl'
 
@@ -85,6 +86,7 @@ export function UnitModelEditor({ factionId, slot, label, stlUrl, iconUrl, orien
         <label className={`${fileButton} ${busy ? 'pointer-events-none opacity-45' : ''}`}>{iconUrl ? 'Replace PNG' : 'Use own PNG'}
           <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={`${label} icon PNG`} disabled={busy} onChange={pick(assetKeys.icon(slot))} /></label>
         {iconUrl && <Button disabled={busy} onClick={() => remove.mutate(assetKeys.icon(slot))}>Use the model</Button>}
+        {upload.isPending && <span role="status" className="inline-flex items-center gap-2 text-xs text-ink/70"><GeneratingSpinner seed={0} size="sm" />Uploading {upload.variables?.key === assetKeys.model(slot) ? 'STL' : 'PNG'}…</span>}
       </div>
       {failure && <p role="alert" className="m-0 text-xs text-danger">{failure.message}</p>}
       {stlUrl && !iconUrl && <>

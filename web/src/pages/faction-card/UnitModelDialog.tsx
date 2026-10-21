@@ -7,7 +7,8 @@ import type { ModelStyle, Orientation, SlotKey, UnitStats } from './model'
 import type { FactionCardInput } from './render'
 import { UnitModelEditor } from './UnitModelEditor'
 
-const STAT_FIELDS = [['dice', 'Dice'], ['health', 'Health'], ['morale', 'Morale'], ['cost', 'Price'], ['forge', 'Forge']] as const
+// In the order the card shows them: command level (the select below comes first), price and forge, then dice, health, morale.
+const STAT_FIELDS = [['cost', 'Price'], ['forge', 'Forge'], ['dice', 'Dice'], ['health', 'Health'], ['morale', 'Morale']] as const
 
 // The popup for a unit: its name and numbers, its model (upload, pose,
 // colour-override PNG) and how it looks on the card. Opened from the unit's
@@ -21,9 +22,9 @@ export function UnitModelDialog({ factionId, slot, label, unit, onUnitChange, st
     <div className="space-y-2">
       <Field label="Name">{id => <input id={id} className={inputClass} value={unit.name} onChange={e => onUnitChange({ name: e.target.value })} />}</Field>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-        {STAT_FIELDS.map(([stat, name]) => <Field key={stat} label={name}>{id => <StepperInput id={id} label={name} value={unit[stat]} onChange={n => onUnitChange({ [stat]: n })} />}</Field>)}
         <Field label="Tech">{id => <select id={id} className={selectClass} value={unit.tech ?? ''} onChange={e => onUnitChange({ tech: e.target.value === '' ? null : Number(e.target.value) })}>
           <option value="">—</option>{[0, 1, 2, 3].map(n => <option key={n} value={n}>{n}</option>)}</select>}</Field>
+        {STAT_FIELDS.map(([stat, name]) => <Field key={stat} label={name}>{id => <StepperInput id={id} label={name} value={unit[stat]} onChange={n => onUnitChange({ [stat]: n })} />}</Field>)}
       </div>
     </div>
     {slot === 'bastion'

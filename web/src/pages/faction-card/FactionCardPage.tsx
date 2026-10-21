@@ -20,11 +20,16 @@ import { useFactionCardLayout, type FactionCardLayout } from './layout'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
 import { useCardImages } from './useCardImages'
 import { deleteAsset, saveFactionCard, uploadAsset, useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
-import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, downloadName, initialCardIds, normalizeData, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
+import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, downloadName, initialCardIds, normalizeData, resolveTextStyles, DEFAULT_PORTRAIT_CROP, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
 import { pngBlob, renderFactionCard, structurePriceBox, unitRowBox, type FactionCardResult, type Side } from './render'
 import { BUNDLED_ICONS } from './bundled'
 import { THEME_PRESETS, themeColor } from './design/theme'
 import { StructureDialog, UnitModelDialog } from './UnitModelDialog'
+import { TextStyleFields } from './TextStyleFields'
+import { GeneratingSpinner } from '../../components/GeneratingSpinner'
+import { portraitBox } from './design/geometry'
+import { CardLens, MagnifierButton, useMagnifier } from './CardLens'
+import { PortraitHandle } from './PortraitHandle'
 
 const panel = 'space-y-3 rounded-lg border border-divider bg-surface p-4'
 const byKey = (assets: AssetRef[] | undefined) => Object.fromEntries((assets ?? []).map(a => [a.key, a.url]))
@@ -57,23 +62,38 @@ function Section({ title, label, open, children }: { title: string; label?: stri
   </details>
 }
 
-function AssetPicker({ label, url, onPick, onRemove, disabled, builtIn }: { label: string; url?: string; onPick: (file: File) => void; onRemove: () => void; disabled?: boolean; builtIn?: string }) {
+function AssetPicker({ label, url, onPick, onRemove, disabled, builtIn, uploading }: { label: string; url?: string; onPick: (file: File) => void; onRemove: () => void; disabled?: boolean; builtIn?: string; uploading?: boolean }) {
   return <div className="flex items-center gap-2">
     <div className="grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded border border-divider bg-black/30 text-[10px] text-ink/45">
       {url ?? builtIn ? <img src={url ?? builtIn} alt="" className={`h-full w-full ${builtIn && !url ? 'object-contain' : 'object-cover'}`} /> : 'none'}</div>
     <label className={`inline-flex cursor-pointer items-center rounded-md border border-divider px-3 py-1.5 text-xs font-semibold uppercase tracking-wider hover:border-accent/60 ${disabled ? 'pointer-events-none opacity-45' : ''}`}>{url ? 'Replace' : builtIn ? 'Override' : 'Upload'}
       <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label={label} disabled={disabled} onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = '' }} /></label>
     {url && <Button disabled={disabled} onClick={onRemove}>Remove</Button>}
+    {uploading && <span role="status" className="inline-flex items-center gap-2 text-xs text-ink/70"><GeneratingSpinner seed={0} size="sm" />Uploading…</span>}
   </div>
 }
 
 // `only` opens one side's own editor page: just that side's preview and fields.
 export default function FactionCardPage({ only }: { only?: Side } = {}) {
   const factions = useFactions(), state = useAssembly(), queryClient = useQueryClient()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const requested = Number(params.get('faction'))
   const factionId = (factions.data?.some(f => f.id === requested) ? requested : null) ?? (factions.data?.some(f => f.id === state.factionId) ? state.factionId : null) ?? factions.data?.[0]?.id ?? null
+  // The link's faction and the sidebar's selection stay in step: a link selects its faction in the sidebar,
+  // and picking another faction in the sidebar puts it in the link, which opens its card.
+  const { select } = state, selected = state.factionId
+  const lastSelected = useRef(selected), lastShown = useRef<number | null>(null)
+  useEffect(() => {
+    if (selected === lastSelected.current) return
+    lastSelected.current = selected
+    if (selected && selected !== factionId) setParams(p => { const next = new URLSearchParams(p); next.set('faction', String(selected)); return next }, { replace: true })
+  }, [selected, factionId, setParams])
+  useEffect(() => {
+    if (factionId === lastShown.current) return
+    lastShown.current = factionId
+    if (factionId && factionId !== selected) { lastSelected.current = factionId; select({ factionId }) }
+  }, [factionId, selected, select])
   const faction = factions.data?.find(f => f.id === factionId)
   const { layout } = useFactionCardLayout()
   const logoUrl = useFactionLogoUrl(factionId)
@@ -100,6 +120,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
   const backgrounds = useMemo(() => ({ front: backgroundUrl(draft?.front ?? '', 'front', assets, images.data), back: backgroundUrl(draft?.back ?? '', 'back', assets, images.data) }), [draft?.front, draft?.back, assets, images.data])
   const frontInput = useMemo(() => ({ side: 'front' as const, data: draft?.data as FactionCardData, unitColor: draft?.color ?? '', backgroundUrl: backgrounds.front, assets, defaults, layout, logoUrl }), [draft, backgrounds, assets, defaults, layout, logoUrl])
   const faces = useRenderedFaces(draft, assets, defaults, backgrounds, layout, logoUrl, cards.images)
+  const [magnify, setMagnify] = useMagnifier()
 
   const save = useMutation({
     mutationFn: () => saveFactionCard(factionId!, { data: draft!.data, front_image_key: draft!.front, back_image_key: draft!.back, unit_color: draft!.color }),
@@ -137,6 +158,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
       <h1 className="m-0 font-display text-2xl text-accent-300">{only ? `Faction card ${only}` : 'Faction card'}</h1>
       {factions.data?.find(f => f.id === factionId) && <span className="font-mono text-xs uppercase tracking-[0.18em] text-ink/60">{factions.data.find(f => f.id === factionId)!.dlc} / <span className="text-ink">{factions.data.find(f => f.id === factionId)!.name}</span></span>}
       <div className="ml-auto flex flex-wrap gap-2">
+        <MagnifierButton on={magnify} onToggle={() => setMagnify(v => !v)} disabled={!faces.front && !faces.back} />
         {only !== 'back' && <Button disabled={!faces.front} onClick={() => void download('front')}>Download front PNG</Button>}
         {only !== 'front' && <Button disabled={!faces.back} onClick={() => void download('back')}>Download back PNG</Button>}
         <Button disabled={!dirty || save.isPending} onClick={() => { save.reset(); loaded.current = ''; record.refetch() }}>Discard changes</Button>
@@ -156,16 +178,22 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
       orientation={draft.data.models[openSlot]} color={draft.color} cardInput={frontInput} onChange={o => edit({ models: { ...draft.data.models, [openSlot]: o } })} onClose={() => setOpenSlot(null)} />}
     {draft && (openSlot === 'city' || openSlot === 'factory') && <StructureDialog label={openSlot === 'city' ? 'City' : 'Factory'} cost={openSlot === 'city' ? draft.data.city_cost : draft.data.factory_cost}
       onCost={n => edit(openSlot === 'city' ? { city_cost: n } : { factory_cost: n })} onClose={() => setOpenSlot(null)} />}
-    {draft && <div className="grid items-start gap-5 xl:grid-cols-[minmax(320px,1.3fr)_minmax(360px,1fr)]">
+    {draft && <div className="grid items-start gap-5 xl:grid-cols-[minmax(320px,2.2fr)_minmax(380px,1fr)]">
       <section aria-label="Card preview" className="space-y-2 xl:sticky xl:top-3">
         {(['front', 'back'] as const).filter(side => !only || side === only).map(side => { const result = faces[side]
           return <div key={side} className="rounded-lg border border-divider bg-black/30 p-2">
-            <div className="relative mx-auto" style={{ width: 'min(100%, calc((100vh - 200px) / 2 * 1.6709))', aspectRatio: `${CARD_SIZE.width} / ${CARD_SIZE.height}` }}>
+            <CardLens on={magnify} source={result?.canvas ?? null}><div className="relative mx-auto" style={{ width: 'min(100%, calc((100vh - 160px) * 1.6709))', aspectRatio: `${CARD_SIZE.width} / ${CARD_SIZE.height}` }}>
               {result ? <>
                 <CardCanvas result={result} aria-label={`Faction card ${side}`} className="block h-full w-full" />
                 {side === 'back' && !only && <Link to={`/assemble/faction-card/back?faction=${factionId}`} aria-label="Edit card back" title="Edit card back" className="absolute inset-0 rounded border border-transparent hover:border-accent hover:bg-accent/10" />}
                 <SafeAreaLines px={CARD_SIZE} cutMm={FACTION_CARD_CUT_MM} />
                 <ReferenceOverlay category="faction" side={side} />
+                {side === 'back' && assets[assetKeys.portrait] && <PortraitHandle box={portraitBox(layout)} url={assets[assetKeys.portrait]} crop={draft.data.portrait_crop} onChange={portrait_crop => edit({ portrait_crop })} />}
+                {side === 'back' && only === 'back' && !assets[assetKeys.portrait] && (() => { const b = portraitBox(layout)
+                  return <label title="Upload the leader portrait" className={`absolute cursor-pointer rounded border border-transparent hover:border-accent hover:bg-accent/10 ${busy ? 'pointer-events-none' : ''}`}
+                    style={{ left: `${b.x / CARD_SIZE.width * 100}%`, top: `${b.y / CARD_SIZE.height * 100}%`, width: `${b.w / CARD_SIZE.width * 100}%`, height: `${b.h / CARD_SIZE.height * 100}%` }}>
+                    <input type="file" accept={IMAGE_ACCEPT} className="sr-only" aria-label="Upload the leader portrait" disabled={busy} onChange={e => { const f = e.target.files?.[0]; if (f) upload.mutate({ id: factionId!, key: assetKeys.portrait, file: f }); e.target.value = '' }} />
+                  </label> })()}
                 {side === 'front' && UNIT_SLOTS.map(({ key, label }) => { const r = unitRowBox(key, layout, draft.data)
                   return <button key={key} type="button" aria-label={`Edit ${draft.data.units[key].name || label}`} title={`Edit ${draft.data.units[key].name || label}`} onClick={() => setOpenSlot(key)}
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
@@ -177,7 +205,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
                     style={{ left: `${b.x / CARD_SIZE.width * 100}%`, top: `${b.y / CARD_SIZE.height * 100}%`, width: `${b.w / CARD_SIZE.width * 100}%`, height: `${b.h / CARD_SIZE.height * 100}%` }} />
                 })}
               </> : <p role="status" className="absolute inset-0 grid place-items-center text-sm text-ink/60">{faces.error || 'Rendering card…'}</p>}
-            </div>
+            </div></CardLens>
             <div className="mt-2"><ReferenceField category="faction" side={side} /></div>
             {!!result?.warnings.length && <div role="status" className="mt-1 space-y-1 text-xs text-warn">{result.warnings.map(w => <p key={w} className="m-0">{w}</p>)}</div>}
           </div>
@@ -226,6 +254,14 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
         
         </Section>}
 
+        <Section title="Text size and line spacing (this faction)" label="Text styles">
+          {(['front', 'back'] as const).filter(s => !only || s === only).map(s => <div key={s} className="space-y-1">
+            <span className="block text-xs font-semibold capitalize text-ink/70">{s}</span>
+            <TextStyleFields side={s} label={`${s} text styles`} value={draft.data.text_styles} base={resolveTextStyles(layout.textStyles)} onChange={text_styles => edit({ text_styles })} />
+          </div>)}
+          <p className="m-0 text-xs text-ink/55">Empty fields use the shared values from <Link to="/card-templates" className="text-accent underline">Card Types → Faction card</Link>. Text that still does not fit shrinks.</p>
+        </Section>
+
         {only !== 'back' && <Section title="Units" label="Units">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Faction unit colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.color} onChange={color => { save.reset(); setDraft(d => d && { ...d, color }) }} />}</Field>
@@ -239,9 +275,12 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
             <Field label="Signature">{id => <input id={id} className={inputClass} value={draft.data.signature} onChange={e => edit({ signature: e.target.value })} />}</Field>
             <Field label="Signature title">{id => <input id={id} className={inputClass} value={draft.data.signature_title} onChange={e => edit({ signature_title: e.target.value })} />}</Field>
           </div>
-          <div><span className="mb-1 block text-xs text-ink/70">Portrait</span>
-            <AssetPicker label="Portrait image" url={assets[assetKeys.portrait]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.portrait, file })} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.portrait })} /></div>
-        
+        </Section>}
+
+        {only !== 'front' && <Section title="Leader portrait" label="Leader portrait" open>
+          <AssetPicker label="Leader portrait image" url={assets[assetKeys.portrait]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.portrait, file })} uploading={upload.isPending && upload.variables?.id === factionId! && upload.variables.key === assetKeys.portrait} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.portrait })} />
+          <p className="m-0 text-xs text-ink/55">The faction leader, drawn in the frame next to the letter on the card back. It fills the frame and is cropped, never squashed. Drag it on the preview to choose which part shows and scroll over it to zoom in.{only === 'back' && ' Before one is uploaded, click the empty frame on the preview to upload.'}</p>
+          <Button disabled={JSON.stringify(draft.data.portrait_crop) === JSON.stringify(DEFAULT_PORTRAIT_CROP)} onClick={() => edit({ portrait_crop: DEFAULT_PORTRAIT_CROP })}>Centre the portrait</Button>
         </Section>}
 
         {only !== 'front' && <Section title="Initial forces" label="Initial forces">
@@ -265,7 +304,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
             <legend className="px-1 text-xs text-ink/60">Objective {i + 1}</legend>
             <Field label={`Objective ${i + 1} name`}>{id => <input id={id} className={inputClass} value={o.name} onChange={e => edit({ objectives: draft.data.objectives.map((x, n) => n === i ? { ...x, name: e.target.value } : x) })} />}</Field>
             <Field label={`Objective ${i + 1} text`}>{id => <textarea id={id} rows={2} className={inputClass} value={o.text} onChange={e => edit({ objectives: draft.data.objectives.map((x, n) => n === i ? { ...x, text: e.target.value } : x) })} />}</Field>
-            <AssetPicker label={`Objective ${i + 1} image`} url={assets[assetKeys.objective(i)]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.objective(i), file })} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.objective(i) })} />
+            <AssetPicker label={`Objective ${i + 1} image`} url={assets[assetKeys.objective(i)]} disabled={busy} onPick={file => upload.mutate({ id: factionId!, key: assetKeys.objective(i), file })} uploading={upload.isPending && upload.variables?.id === factionId! && upload.variables.key === assetKeys.objective(i)} onRemove={() => remove.mutate({ id: factionId!, key: assetKeys.objective(i) })} />
           </fieldset>)}
         
         </Section>}
@@ -273,7 +312,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
         {only !== 'back' && <Section title="Shared icons (all factions)" label="Shared icons">
           <p className="text-xs text-ink/55">Structures, stat icons, forge and tech badge come with the app; upload one to override it.</p>
           <div className="space-y-2">{DEFAULT_ICONS.map(({ key, label }) => <div key={key}><span className="mb-1 block text-xs text-ink/70">{label}</span>
-            <AssetPicker label={`${label} icon`} url={defaults[key]} builtIn={BUNDLED_ICONS[key]} disabled={busy} onPick={file => upload.mutate({ id: 0, key, file })} onRemove={() => remove.mutate({ id: 0, key })} /></div>)}</div>
+            <AssetPicker label={`${label} icon`} url={defaults[key]} builtIn={BUNDLED_ICONS[key]} disabled={busy} onPick={file => upload.mutate({ id: 0, key, file })} uploading={upload.isPending && upload.variables?.id === 0 && upload.variables.key === key} onRemove={() => remove.mutate({ id: 0, key })} /></div>)}</div>
         
         </Section>}
       </div>
