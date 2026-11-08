@@ -16,6 +16,7 @@ import { useCardTypes } from '../card-types/api'
 import { PAPERS, cardOrder, cutSizeOf, backSlot, besideSlots, pairOfSlot, pairsPerRow, mmToPx, cutGuides, gridFor, PRINT_DPI, type Grid, mirrorPage, MM_PT, reconcile, reflow, slotRect, strokeFor, swapSlots, usePrintSettings, type Pages, type PrintSettings } from './layout'
 import { canvasAsset, useBackAsset, type PrintAsset } from './assets'
 import { useFactionCardCanvases } from '../faction-card/useFactionCardCanvases'
+import { FACTION_CARD_CUT_MM } from '../faction-card/model'
 
 // A faction card is 258 × 152 mm (264 × 158 mm with 3 mm bleed: 3118 × 1866 px at 300 dpi). It prints on its
 // own: its size replaces the page's card size, landscape.
@@ -147,8 +148,10 @@ export default function PrintPage() {
   const [mode, setMode] = useState<'cards' | 'faction'>('cards')
   const factionMode = mode === 'faction'
   const cardTypes = useCardTypes()
-  // The cut size comes from the card type: the combat type for cards, the faction card type for faction cards.
-  const cut = cutSizeOf(cardTypes.data, factionMode ? 'faction card' : 'combat')
+  // The cut size of cards comes from the combat card type. A faction card is always drawn at its fixed size
+  // (its "faction card" image type now makes only the plate, a smaller picture placed on it).
+  const combatCut = cutSizeOf(cardTypes.data, 'combat')
+  const cut = factionMode ? FACTION_CARD_CUT_MM : combatCut
   // A faction card's cutting lines lie on its cut edge, so they measure the finished size; its bleed covers a cut that wanders.
   const baseSettings = useMemo<PrintSettings>(() => ({ ...stored, cardWidth: cut.width, cardHeight: cut.height, ...(factionMode ? { orientation: 'landscape' as const, cutTolerance: 0 } : {}) }), [stored, factionMode, cut.width, cut.height])
   const cards = useCards('', '')

@@ -187,11 +187,10 @@ func (c *Client) UploadFile(ctx context.Context, filename, purpose string, data 
 
 type ImageEditRequest struct {
 	Model             string
-	FileID            string   // input image as an uploaded file…
-	ImageURL          string   // …or as a URL / base64 data URL (used when FileID is empty)
-	ReferenceImageURL string   // optional second image, used as a visual reference
-	ExtraFileIDs      []string // optional further reference images (uploaded files), sent last
-	MaskURL           string   // optional mask (PNG with alpha) as a URL / data URL
+	FileID            string // input image as an uploaded file…
+	ImageURL          string // …or as a URL / base64 data URL (used when FileID is empty)
+	ReferenceImageURL string // optional second image, used as a visual reference
+	MaskURL           string // optional mask (PNG with alpha) as a URL / data URL
 	Prompt            string
 	Size              string
 	Quality           string
@@ -223,9 +222,6 @@ func EditBody(req ImageEditRequest) map[string]any {
 	images := []map[string]string{imageRef(req)}
 	if req.ReferenceImageURL != "" {
 		images = append(images, map[string]string{"image_url": req.ReferenceImageURL})
-	}
-	for _, id := range req.ExtraFileIDs {
-		images = append(images, map[string]string{"file_id": id})
 	}
 	body := map[string]any{
 		"model":         req.Model,
@@ -283,7 +279,7 @@ func GenerateBody(req ImageEditRequest) map[string]any {
 
 // NoInput reports whether a request has no image to edit: the picture is made from the prompt alone.
 func (r ImageEditRequest) NoInput() bool {
-	return r.FileID == "" && r.ImageURL == "" && r.ReferenceImageURL == "" && len(r.ExtraFileIDs) == 0
+	return r.FileID == "" && r.ImageURL == "" && r.ReferenceImageURL == ""
 }
 
 // EditImage calls POST /v1/images/edits referencing an uploaded template
@@ -293,13 +289,9 @@ func (c *Client) EditImage(ctx context.Context, req ImageEditRequest) (ImageEdit
 	switch {
 	case req.NoInput():
 		path, body = "/v1/images/generations", GenerateBody(req)
-	case req.FileID == "" && req.ImageURL == "" && req.ReferenceImageURL != "":
+	case req.FileID == "" && req.ImageURL == "":
 		// No template, but a reference picture (a front for a back): that picture is what gets edited.
 		req.ImageURL, req.ReferenceImageURL = req.ReferenceImageURL, ""
-		body = EditBody(req)
-	case req.FileID == "" && req.ImageURL == "":
-		// Only further references (a faction's character): the first one is the input image.
-		req.FileID, req.ExtraFileIDs = req.ExtraFileIDs[0], req.ExtraFileIDs[1:]
 		body = EditBody(req)
 	}
 	payload, err := json.Marshal(body)

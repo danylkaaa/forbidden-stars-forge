@@ -1,3 +1,4 @@
+import type { LabQuality } from '../test-generation/api'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -17,6 +18,7 @@ type LabState = {
   factionId: number | null
   cardTypeId: number | null
   mode: 'draft' | 'final'
+  quality: LabQuality // what Generate asks for
   model: string // '' = Settings default
   // Unsaved edits per faction; nothing reaches the server until Save.
   drafts: Record<number, LabFields>
@@ -25,7 +27,7 @@ type LabState = {
   // Unsaved card type edits per card type, and their per-generation snapshots.
   ctDrafts: Record<number, CtFields>
   ctSnapshots: Record<number, CtFields>
-  set: (p: Partial<Pick<LabState, 'factionId' | 'cardTypeId' | 'mode' | 'model'>>) => void
+  set: (p: Partial<Pick<LabState, 'factionId' | 'cardTypeId' | 'mode' | 'quality' | 'model'>>) => void
   setDraft: (factionId: number, fields: LabFields) => void
   clearDraft: (factionId: number) => void
   snapshot: (generationId: number, fields: LabFields, ct: CtFields) => void
@@ -40,6 +42,7 @@ export const useFactionLab = create<LabState>()(
       factionId: null,
       cardTypeId: null,
       mode: 'draft',
+      quality: 'low',
       model: '',
       drafts: {},
       snapshots: {},

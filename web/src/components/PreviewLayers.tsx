@@ -60,7 +60,7 @@ export function LayeredImage({
   imgClassName?: string
   logoUrl?: string
   logoScale?: number
-  safeArea?: SafeAreaGeometry
+  safeArea?: SafeAreaGeometry | null // null: no cut lines (the image is not a card)
 }) {
   const { mask, maskOpacity } = usePreviewLayers()
   const cardCutMm = useCutMm()
@@ -77,8 +77,8 @@ export function LayeredImage({
       )}
       {fit === 'contain'
         // Fitted like the image, whatever the box's shape (a wide faction card in a tall column too).
-        ? <SafeAreaLines px={px} cutMm={cutMm} contain />
-        : <SafeAreaLines px={px} cutMm={cutMm} />}
+        ? safeArea !== null && <SafeAreaLines px={px} cutMm={cutMm} contain />
+        : safeArea !== null && <SafeAreaLines px={px} cutMm={cutMm} />}
       {logoUrl && <img src={logoUrl} alt="Card back logo" className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
         style={{ width: `${logoScale * 100}%`, height: `${logoScale * 100}%` }} />}
     </div>

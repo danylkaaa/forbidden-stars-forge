@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { CARD_SIZE, FACTION_CARD_BLEED_MM, FACTION_CARD_CUT_MM, UNIT_SLOTS, defaultData, normalizeData, resolveTextStyles } from './model'
+import { CARD_SIZE, DEFAULT_LAYERS, FACTION_CARD_BLEED_MM, FACTION_CARD_CUT_MM, UNIT_SLOTS, UPLOADED_IMAGE, defaultData, normalizeData, plateUrl, resolveTextStyles } from './model'
 import { ELEMENTS, defaultLayout, elementBox, mergeLayout } from './layout'
 import { SAFE_INSET_MM, mmToPx } from '../../components/safeAreaStore'
 import { richSpans } from './render'
@@ -61,4 +61,17 @@ test('a faction text style overrides the shared one, which overrides the design'
   expect(s.story).toEqual({ scale: 0.8, lineHeight: 1.5 })
   expect(s.title).toEqual({ scale: 0.9, lineHeight: 1 })
   expect(s.text).toEqual({ scale: 1, lineHeight: 1.3 })
+})
+
+test('the front plate and the layer places are kept, and filled in for cards saved before them', () => {
+  const old = normalizeData({ title: 'X' })
+  expect(old.plate).toBe('')
+  expect(old.layers).toEqual(DEFAULT_LAYERS)
+  const moved = normalizeData({ plate: 'test-7', layers: { plate: { x: 0.6 } } })
+  expect(moved.layers.plate).toEqual({ ...DEFAULT_LAYERS.plate, x: 0.6 })
+  expect(moved.layers.background).toEqual(DEFAULT_LAYERS.background)
+  const library = [{ key: 'test-7', url: '/gen/7' }]
+  expect(plateUrl('test-7', {}, library)).toBe('/gen/7')
+  expect(plateUrl(UPLOADED_IMAGE, { 'front-plate': '/asset/plate' }, library)).toBe('/asset/plate')
+  expect(plateUrl('', {}, library)).toBeNull()
 })

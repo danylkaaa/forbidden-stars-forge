@@ -29,15 +29,16 @@ type GenerationsHandler struct {
 	Settings  *store.SettingsStore
 	Usage     *store.UsageStore
 	Masks     *store.ImageMasksStore
-	// Characters are the factions' character pictures, referenced when a faction card is generated.
-	Characters *store.CharactersStore
-	DataDir    string
+	DataDir   string
 }
 
 type generateRequest struct {
 	FactionID      int64        `json:"faction_id"`
 	CardTypeID     int64        `json:"card_type_id"`
 	Mode           string       `json:"mode"`
+	// Quality chosen for this run (low, medium, high, xhigh, max); empty = the mode's Settings quality. A low or
+	// medium run counts as a draft, the rest as finals.
+	Quality string `json:"quality"`
 	PromptOverride string       `json:"prompt_override"`
 	Model          string       `json:"model"` // empty = Settings default
 	FrontImage     *imageSource `json:"front_image"`
@@ -63,6 +64,16 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
+	}
+	if req.Quality != "" {
+		if !oneOf(req.Quality, "low", "medium", "high", "xhigh", "max") {
+			writeError(w, http.StatusBadRequest, "quality must be low, medium, high, xhigh or max")
+			return
+		}
+		req.Mode = "final"
+		if oneOf(req.Quality, "low", "medium") {
+			req.Mode = "draft"
+		}
 	}
 	if !oneOf(req.Mode, "draft", "final") {
 		writeError(w, http.StatusBadRequest, "mode must be draft or final")
@@ -106,33 +117,6 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		frontURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 		p = prompt.WithFrontReference(p)
 	}
-	// A faction card shows the faction's character when it has one: the picture is synced to OpenAI if
-	// it is not yet, and sent after the other images.
-	// On the front, the character is pasted onto the template itself (where the faction placed it), and that
-	// combined template is what gets edited.
-	templateID := ct.OpenAIFileID
-	var characterIDs []string
-	if usesCharacter(ct) && h.Characters != nil {
-		var err error
-		if pastesCharacter(ct) {
-			var id string
-			if id, err = characterTemplateFileID(r.Context(), h.Characters, h.Settings, h.DataDir, f.ID, ct); err == nil {
-				templateID = id
-			}
-		} else {
-			var id string
-			if id, err = characterFileID(r.Context(), h.Characters, h.Settings, h.DataDir, f.ID); err == nil {
-				characterIDs = []string{id}
-			}
-		}
-		switch {
-		case err == nil:
-			p = withCharacter(ct, p)
-		case !errors.Is(err, store.ErrNotFound):
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-	}
 	model, err := h.resolveModel(req.Model)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -145,6 +129,9 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Quality is fixed now so the image name and the request agree.
 	quality := qualityFor(req.Mode, all, ct, model)
+	if req.Quality != "" {
+		quality = modelQuality(req.Quality, model)
+	}
 	g, err := h.Gens.Create(req.FactionID, req.CardTypeID, req.Mode, model, quality,
 		store.ImageNameSuffix(f.Name, ct.Name, quality), p)
 	if err != nil {
@@ -152,50 +139,21 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.start(g.ID, openai.ImageEditRequest{Model: model, FileID: templateID, ReferenceImageURL: frontURL, ExtraFileIDs: characterIDs, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct)}, cropTo(ct))
+	h.start(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct)}, cropTo(ct))
 	writeJSON(w, http.StatusCreated, g)
 }
 
 // isFactionCard reports whether a card type is the faction card (front or back): it may be generated at a better
-// quality than other finals, and is always opaque.
+// quality than other finals, and is always transparent.
 func isFactionCard(ct store.CardType) bool {
 	return ct.Name == "faction card" || ct.Name == "faction card back"
 }
 
-// hasCharacter reports whether a faction has a character picture.
-func (h *GenerationsHandler) hasCharacter(factionID int64) bool {
-	if h.Characters == nil {
-		return false
-	}
-	_, err := h.Characters.Get(factionID)
-	return err == nil
-}
-
-// usesCharacter reports whether a card type shows the faction's character: only the faction card front (the back
-// shows the leader's portrait, added later on the card).
-func usesCharacter(ct store.CardType) bool {
-	return ct.Name == "faction card"
-}
-
-// pastesCharacter reports whether the faction's character is pasted onto this card type's template (the faction
-// card front, when it has a template) rather than sent as a separate reference picture.
-func pastesCharacter(ct store.CardType) bool {
-	return ct.Name == "faction card" && ct.TemplatePath != "" && !ct.NoTemplate
-}
-
-// withCharacter adds the prompt's note on the faction's character for this card type.
-func withCharacter(ct store.CardType, p string) string {
-	if pastesCharacter(ct) {
-		return prompt.WithCharacterOnTemplate(p)
-	}
-	return prompt.WithCharacterReference(p)
-}
-
-// backgroundFor is a card type's own background: the faction card is a full printed board, never transparent.
-// Empty = the Settings background.
+// backgroundFor is a card type's own background: the faction card's pictures (the front's plate, the back) are
+// drawn over a background of their own, so they come transparent. Empty = the Settings background.
 func backgroundFor(ct store.CardType) string {
 	if isFactionCard(ct) {
-		return "opaque"
+		return "transparent"
 	}
 	return ""
 }
@@ -207,6 +165,11 @@ func qualityFor(mode string, all map[string]string, ct store.CardType, model str
 	if mode != "final" || !isFactionCard(ct) || q == "" {
 		return modeQuality(mode, all)
 	}
+	return modelQuality(q, model)
+}
+
+// modelQuality is a quality the model takes: xhigh and max exist only on some models; others get high.
+func modelQuality(q, model string) string {
 	if (q == "xhigh" || q == "max") && !supportsExtraQuality(model) {
 		return "high"
 	}
@@ -433,8 +396,6 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 		CardTypeConstraints *string `json:"card_type_constraints"`
 		CardTypeRendering   *string `json:"card_type_rendering_style"`
 		HasFrontImage       bool    `json:"has_front_image"`
-		// The faction whose character picture is referenced (0 = none).
-		FactionID int64 `json:"faction_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -460,9 +421,6 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	})
 	if req.HasFrontImage && strings.HasSuffix(ct.Name, " back") {
 		p = prompt.WithFrontReference(p)
-	}
-	if usesCharacter(ct) && h.hasCharacter(req.FactionID) {
-		p = withCharacter(ct, p)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"prompt":   p,
@@ -491,10 +449,13 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		model = all["openai_model"]
 	}
 	draft, final := qualityFor("draft", all, ct, model), qualityFor("final", all, ct, model)
-	p := promptFor(ct, factionStyle(f))
-	if usesCharacter(ct) && h.hasCharacter(f.ID) {
-		p = withCharacter(ct, p)
+	// Per quality the slider offers: what it costs and takes with this model (xhigh and max fall back to high).
+	estimates := map[string]map[string]any{}
+	for _, q := range []string{"low", "high", "xhigh", "max"} {
+		mq := modelQuality(q, model)
+		estimates[q] = map[string]any{"quality": mq, "usd": estimatePerImage(h.Usage, all, model, mq, ct.ImageSize), "seconds": estimateSeconds(h.Usage, model, mq, ct.ID)}
 	}
+	p := promptFor(ct, factionStyle(f))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"prompt":            p,
 		"has_file":          ct.OpenAIFileID != "" || ct.NoTemplate,
@@ -503,6 +464,7 @@ func (h *GenerationsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		"est_draft_seconds": estimateSeconds(h.Usage, model, draft, ct.ID),
 		"est_final_seconds": estimateSeconds(h.Usage, model, final, ct.ID),
 		"final_quality":     final,
+		"estimates":         estimates,
 	})
 }
 

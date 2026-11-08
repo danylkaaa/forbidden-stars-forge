@@ -20,7 +20,7 @@ import { useFactionCardLayout, type FactionCardLayout } from './layout'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
 import { useCardImages } from './useCardImages'
 import { deleteAsset, saveFactionCard, uploadAsset, useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
-import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, downloadName, initialCardIds, normalizeData, resolveTextStyles, DEFAULT_PORTRAIT_CROP, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
+import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, plateUrl, downloadName, initialCardIds, normalizeData, resolveTextStyles, DEFAULT_PORTRAIT_CROP, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
 import { pngBlob, renderFactionCard, structurePriceBox, unitRowBox, type FactionCardResult, type Side } from './render'
 import { BUNDLED_ICONS } from './bundled'
 import { THEME_PRESETS, themeColor } from './design/theme'
@@ -30,6 +30,7 @@ import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { portraitBox } from './design/geometry'
 import { CardLens, MagnifierButton, useMagnifier } from './CardLens'
 import { PortraitHandle } from './PortraitHandle'
+import { LayerArrange, LayerControls, type LayerKey } from './LayerArrange'
 
 const panel = 'space-y-3 rounded-lg border border-divider bg-surface p-4'
 const byKey = (assets: AssetRef[] | undefined) => Object.fromEntries((assets ?? []).map(a => [a.key, a.url]))
@@ -39,13 +40,16 @@ type Draft = { data: FactionCardData; front: string; back: string; color: string
 
 // Both sides of the card, redrawn on the next frame after any change at half
 // size (previews only), so editing feels immediate; only the newest request counts.
-function useRenderedFaces(draft: Draft | null, assets: Record<string, string>, defaults: Record<string, string>, backgrounds: { front: string | null; back: string | null }, layout: FactionCardLayout, logoUrl: string | null, cardImages: Record<number, HTMLCanvasElement>) {
+// Both sides share the front's background; over it the front's plate or the back image.
+const pictures = (b: { front: string | null; back: string | null; plate: string | null }, side: Side) => ({ backgroundUrl: b.front, plateUrl: side === 'front' ? b.plate : b.back })
+
+function useRenderedFaces(draft: Draft | null, assets: Record<string, string>, defaults: Record<string, string>, backgrounds: { front: string | null; back: string | null; plate: string | null }, layout: FactionCardLayout, logoUrl: string | null, cardImages: Record<number, HTMLCanvasElement>) {
   const [faces, setFaces] = useState<{ front: FactionCardResult | null; back: FactionCardResult | null; error: string }>({ front: null, back: null, error: '' })
   useEffect(() => {
     if (!draft) return
     let cancelled = false
     const frame = requestAnimationFrame(() => {
-      const make = (side: Side) => renderFactionCard({ side, data: draft.data, unitColor: draft.color, backgroundUrl: backgrounds[side], assets, defaults, layout, logoUrl, cardImages, scale: 0.5 })
+      const make = (side: Side) => renderFactionCard({ side, data: draft.data, unitColor: draft.color, ...pictures(backgrounds, side), assets, defaults, layout, logoUrl, cardImages, scale: 0.5 })
       Promise.all([make('front'), make('back')]).then(([front, back]) => { if (!cancelled) setFaces({ front, back, error: '' }) })
         .catch(e => { if (!cancelled) setFaces(f => ({ ...f, error: e instanceof Error ? e.message : 'Could not render the card.' })) })
     })
@@ -116,9 +120,9 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
   const dirty = !!draft && JSON.stringify(draft) !== saved
   const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
   const defaults = useMemo(() => byKey(defaultIcons.data), [defaultIcons.data])
-  const options = useMemo(() => images.data.filter(i => i.factionId === factionId), [images.data, factionId])
-  const backgrounds = useMemo(() => ({ front: backgroundUrl(draft?.front ?? '', 'front', assets, images.data), back: backgroundUrl(draft?.back ?? '', 'back', assets, images.data) }), [draft?.front, draft?.back, assets, images.data])
-  const frontInput = useMemo(() => ({ side: 'front' as const, data: draft?.data as FactionCardData, unitColor: draft?.color ?? '', backgroundUrl: backgrounds.front, assets, defaults, layout, logoUrl }), [draft, backgrounds, assets, defaults, layout, logoUrl])
+  const backgrounds = useMemo(() => ({ front: backgroundUrl(draft?.front ?? '', 'front', assets, images.data), back: backgroundUrl(draft?.back ?? '', 'back', assets, images.data), plate: plateUrl(draft?.data.plate ?? '', assets, images.data) }), [draft?.front, draft?.back, draft?.data.plate, assets, images.data])
+  const [arranging, setArranging] = useState(false), [layer, setLayer] = useState<LayerKey>('plate')
+  const frontInput = useMemo(() => ({ side: 'front' as const, data: draft?.data as FactionCardData, unitColor: draft?.color ?? '', backgroundUrl: backgrounds.front, plateUrl: backgrounds.plate, assets, defaults, layout, logoUrl }), [draft, backgrounds, assets, defaults, layout, logoUrl])
   const faces = useRenderedFaces(draft, assets, defaults, backgrounds, layout, logoUrl, cards.images)
   const [magnify, setMagnify] = useMagnifier()
 
@@ -136,7 +140,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
     if (!draft || !faction) return
     setDownloadError('')
     try {
-      const full = await renderFactionCard({ side, data: draft.data, unitColor: draft.color, backgroundUrl: backgrounds[side], assets, defaults, layout, logoUrl, cardImages: cards.images })
+      const full = await renderFactionCard({ side, data: draft.data, unitColor: draft.color, ...pictures(backgrounds, side), assets, defaults, layout, logoUrl, cardImages: cards.images })
       const url = URL.createObjectURL(await pngBlob(full.canvas))
       const link = document.createElement('a'); link.href = url; link.download = downloadName(faction.name, side)
       document.body.append(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -199,6 +203,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
                     style={{ left: `${r.x / CARD_SIZE.width * 100}%`, top: `${r.y / CARD_SIZE.height * 100}%`, width: `${r.w / CARD_SIZE.width * 100}%`, height: `${r.h / CARD_SIZE.height * 100}%` }} />
                 })}
+                {side === 'front' && arranging && <LayerArrange layers={draft.data.layers} layer={layer} onChange={layers => edit({ layers })} />}
                 {side === 'front' && (['city', 'factory'] as const).map(key => { const b = structurePriceBox(key, layout, draft.data)
                   return <button key={key} type="button" aria-label={`Edit ${key}`} title={`Edit the ${key} price`} onClick={() => setOpenSlot(key)}
                     className="absolute cursor-pointer rounded border border-transparent bg-transparent p-0 hover:border-accent hover:bg-accent/10"
@@ -217,12 +222,22 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
       </section>
 
       <div className="space-y-3">
-        <Section title="Generated front and back" label="Templates" open>
-          {(['front', 'back'] as const).filter(s => !only || s === only).map(s => <ImagePickerField key={s} label={`${s === 'front' ? 'Front' : 'Back'} image`} title={`Choose the ${s} image`} factionId={factionId} preferredType={s === 'front' ? 'faction card' : 'faction card back'}
-            selectedKey={s === 'front' ? draft.front : draft.back} onSelect={key => { save.reset(); setDraft(d => d && { ...d, [s]: key }) }}
-            upload={{ url: assets[`${s}-image`], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: `${s}-image`, file }) }} />)}
-          {!options.length && <p className="m-0 text-xs text-ink/60">No generated images for this faction yet. Generate the front with the “faction card” type and the back with “faction card back” in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">AI Lab</Link>, or upload your own.</p>}
-        </Section>
+        {only !== 'back' && <Section title="Front: background and plate" label="Front layers" open>
+          <ImagePickerField label="Background image" title="Choose the front background" factionId={factionId} preferredType="faction card background"
+            selectedKey={draft.front} onSelect={key => { save.reset(); setDraft(d => d && { ...d, front: key }) }}
+            upload={{ url: assets['front-image'], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: 'front-image', file }) }} />
+          <ImagePickerField label="Plate (2000 × 1800, the board with the panels)" title="Choose the front plate" factionId={factionId} preferredType="faction card"
+            selectedKey={draft.data.plate} onSelect={plate => edit({ plate })}
+            upload={{ url: assets[assetKeys.plate], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: assetKeys.plate, file }) }} />
+          <LayerControls layers={draft.data.layers} layer={layer} onLayer={setLayer} onChange={layers => edit({ layers })} arranging={arranging} onArranging={setArranging} />
+          <p className="m-0 text-xs text-ink/60">The background covers the card; the plate is drawn over it, then the unit table and texts. Generate the plate with the “faction card” type in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">AI Lab</Link>, or upload your own.</p>
+        </Section>}
+        {only !== 'front' && <Section title="Back image" label="Back image" open>
+          <ImagePickerField label="Back image" title="Choose the back image" factionId={factionId} preferredType="faction card back"
+            selectedKey={draft.back} onSelect={key => { save.reset(); setDraft(d => d && { ...d, back: key }) }}
+            upload={{ url: assets['back-image'], pending: upload.isPending, onPick: file => upload.mutate({ id: factionId!, key: 'back-image', file }) }} />
+          <p className="m-0 text-xs text-ink/60">The whole back ({CARD_SIZE.width} × {CARD_SIZE.height}) with transparent parts, drawn over the front’s background image (same place and zoom). Generate it with the “faction card back” type in <Link to={`/faction-lab?faction=${factionId}`} className="text-accent underline">AI Lab</Link>, or upload your own.</p>
+        </Section>}
 
         <Section title="Card colour" label="Card colour" open>
           <div className="flex flex-wrap items-end gap-3">

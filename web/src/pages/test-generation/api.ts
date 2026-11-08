@@ -35,7 +35,14 @@ export type Preview = {
   // How long one image typically takes with these settings, from past runs (0 when there is no history).
   est_draft_seconds?: number
   est_final_seconds?: number
+  // Per quality the lab's slider offers: the quality the model really gets (xhigh and max fall back to high on
+  // older models), its cost and its usual time (0 without history).
+  estimates?: Record<LabQuality, { quality: string; usd: number; seconds: number }>
 }
+
+// The qualities AI Lab offers, lowest first.
+export const LAB_QUALITIES = ['low', 'high', 'xhigh', 'max'] as const
+export type LabQuality = typeof LAB_QUALITIES[number]
 
 export function useGenerations() {
   return useQuery({
@@ -78,7 +85,8 @@ export function usePreview(factionId: number | null, cardTypeId: number | null, 
 export function startGeneration(body: {
   faction_id: number
   card_type_id: number
-  mode: 'draft' | 'final'
+  mode?: 'draft' | 'final'
+  quality?: string // overrides the mode's Settings quality; low and medium count as drafts
   prompt_override?: string
   model?: string
   front_image?: { kind: 'generation'; id: number }

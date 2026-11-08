@@ -43,7 +43,7 @@ beforeEach(() => {
   ctSaved = false
   usePreviewLayers.setState({ mask: false, maskOpacity: 0.5 })
   usePreviewLayers.setState({ overlay: false })
-  useFactionLab.setState({ factionId: null, cardTypeId: 1, mode: 'draft', model: '', drafts: {}, snapshots: {}, ctDrafts: {}, ctSnapshots: {} })
+  useFactionLab.setState({ factionId: null, cardTypeId: 1, mode: 'draft', quality: 'low', model: '', drafts: {}, snapshots: {}, ctDrafts: {}, ctSnapshots: {} })
   server.use(
     http.get('/api/factions', () => HttpResponse.json([faction])),
     http.get('/api/card-types', () => HttpResponse.json(cardTypes)),
@@ -87,7 +87,7 @@ test('editing fields re-assembles the prompt without saving; generate sends that
   await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
   await waitFor(() => expect(generated).toHaveLength(1))
-  expect(generated[0]).toMatchObject({ faction_id: 1, card_type_id: 1, mode: 'draft', prompt_override: '## Primary color\ncrimson\n\n## Faction style\ngothic' })
+  expect(generated[0]).toMatchObject({ faction_id: 1, card_type_id: 1, quality: 'low', prompt_override: '## Primary color\ncrimson\n\n## Faction style\ngothic' })
   expect(saved).toBeNull() // still not saved
   expect(useFactionLab.getState().snapshots[50]).toEqual({ primary_color: 'crimson', texture: 'ceramite', description: 'gothic' })
 })
@@ -393,12 +393,17 @@ test('"Use for faction" makes the shown image the faction default for its image 
   await waitFor(() => expect(saved).toEqual({ faction_id: 1, category: 'combat', side: 'front', image_key: 'test-41' }))
 })
 
-test('the expected time for the chosen mode comes from past runs, near the cost estimate and on a running generation', async () => {
-  server.use(http.get('/api/generate/preview', () => HttpResponse.json({ prompt: 'p', has_file: true, est_draft_usd: 0.015, est_final_usd: 0.048, est_draft_seconds: 12, est_final_seconds: 75 })))
-  gens = [{ ...gen, id: 42, mode: 'final', status: 'pending', prompt: 'p', image_path: '' }]
+test('the quality slider picks the run quality; its cost and usual time come from past runs, also on a running generation', async () => {
+  server.use(http.get('/api/generate/preview', () => HttpResponse.json({ prompt: 'p', has_file: true, est_draft_usd: 0.015, est_final_usd: 0.048, estimates: {
+    low: { quality: 'low', usd: 0.015, seconds: 12 }, high: { quality: 'high', usd: 0.048, seconds: 75 },
+    xhigh: { quality: 'high', usd: 0.048, seconds: 75 }, max: { quality: 'high', usd: 0.048, seconds: 75 },
+  } })))
+  gens = [{ ...gen, id: 42, mode: 'final', quality: 'high', status: 'pending', prompt: 'p', image_path: '' }]
   renderAt()
   expect(await screen.findByText(/usually ~12s · uses the fields/)).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: 'Final' }))
+  fireEvent.change(screen.getByRole('slider', { name: /Quality/ }), { target: { value: '3' } })
+  expect(useFactionLab.getState().quality).toBe('max')
   expect(await screen.findByText(/usually ~1m 15s · uses the fields/)).toBeInTheDocument()
+  expect(screen.getByText('Quality (sent as high on this model)')).toBeInTheDocument()
   expect(await screen.findByText(/elapsed · taking longer than the usual ~1m 15s/)).toBeInTheDocument() // the fixture run started long ago
 })

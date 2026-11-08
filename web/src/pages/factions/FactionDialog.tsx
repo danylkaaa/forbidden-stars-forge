@@ -10,8 +10,6 @@ import { createFaction, updateFaction, type FactionSave } from './api'
 import { SuggestInput } from '../../components/SuggestInput'
 import { DLC_VALUES, type DLC } from './dlc'
 import { useFactionDraft, useFactionsUi } from './store'
-import { CharacterPicker } from './CharacterPicker'
-import { useFactionCharacters } from './characters'
 
 // Suggestions only; any text is allowed.
 const TEXTURE_SUGGESTIONS = ['metal', 'ceramite armor', 'skin', 'chitin', 'bone', 'wood', 'stone', 'cloth', 'leather', 'crystal']
@@ -22,7 +20,6 @@ export function FactionDialog({ generateSlot, assistSlot }: { generateSlot?: Rea
   const dirty = isDraftDirty(draftState)
   const queryClient = useQueryClient()
   const { draft, persisted } = draftState
-  const { data: characters } = useFactionCharacters()
 
   const [saveResult, saveAction, saving] = useActionState(
     async (): Promise<{ error: string | null }> => {
@@ -121,10 +118,6 @@ export function FactionDialog({ generateSlot, assistSlot }: { generateSlot?: Rea
           <p className="mt-1 text-[11px] text-ink/45">Nothing is persisted until you click Save — including generated text.</p>
         </div>
 
-        {/* Saved straight away, apart from the form: a new faction gets its character once it exists. */}
-        {ui.dialogMode === 'edit' && ui.editingId !== null && (
-          <CharacterPicker key={ui.editingId} factionId={ui.editingId} character={characters?.find((c) => c.faction_id === ui.editingId)} />
-        )}
 
         {assistSlot}
 

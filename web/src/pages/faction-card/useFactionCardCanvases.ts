@@ -5,7 +5,7 @@ import { useFactions } from '../factions/api'
 import { useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
 import { useFactionCardLayout } from './layout'
 import { useCardImages } from './useCardImages'
-import { backgroundUrl, initialCardIds, normalizeData } from './model'
+import { backgroundUrl, initialCardIds, normalizeData, plateUrl } from './model'
 import { renderFactionCard } from './render'
 
 // The faction's logo (uploaded on Library → Factions), if it has one.
@@ -28,38 +28,43 @@ export function useFactionCardCanvases(factionId: number) {
   const shared = useMemo(() => byKey(defaults.data), [defaults.data])
   const front = backgroundUrl(record.data?.front_image_key ?? '', 'front', assets, images.data)
   const back = backgroundUrl(record.data?.back_image_key ?? '', 'back', assets, images.data)
+  const plate = data ? plateUrl(data.plate, assets, images.data) : null
   const cards = useCardImages(data ? initialCardIds(data) : [])
   const ready = !!data && !defaults.isPending && !images.isPending && !layoutQuery.isPending && !cards.pending
   const color = record.data?.unit_color ?? ''
   useEffect(() => {
     if (!ready || !data) return
     let cancelled = false
-    const make = (side: 'front' | 'back', backgroundUrl: string | null) => renderFactionCard({ side, data, unitColor: color, backgroundUrl, assets, defaults: shared, layout, logoUrl, cardImages: cards.images })
-    Promise.all([make('front', front), make('back', back)]).then(([f, b]) => { if (!cancelled) setState({ front: f.canvas, back: b.canvas, error: '' }) })
+    // Both sides share the front's background; over it the front's plate or the back image.
+    const make = (side: 'front' | 'back', over: string | null) => renderFactionCard({ side, data, unitColor: color, backgroundUrl: front, plateUrl: over, assets, defaults: shared, layout, logoUrl, cardImages: cards.images })
+    Promise.all([make('front', plate), make('back', back)]).then(([f, b]) => { if (!cancelled) setState({ front: f.canvas, back: b.canvas, error: '' }) })
       .catch(e => { if (!cancelled) setState({ front: null, back: null, error: e instanceof Error ? e.message : 'Could not render the faction card.' }) })
     return () => { cancelled = true }
-  }, [ready, data, color, assets, shared, front, back, layout, logoUrl, cards.images])
+  }, [ready, data, color, assets, shared, front, back, plate, layout, logoUrl, cards.images])
   return { ...state, probes: cards.probes, hasFront: !!front, hasBack: !!back, loading: record.isPending || !faction }
 }
 
-// One side of a faction's saved card drawn over another picture (a freshly generated background), at half size,
-// as an object URL; null while it renders or when `backgroundUrl` is null.
-export function useFactionCardOver(factionId: number, side: 'front' | 'back', backgroundUrl: string | null) {
+// One side of a faction's saved card drawn with a freshly generated picture, at half size, as an object URL; null
+// while it renders or when `imageUrl` is null. The picture is the front's plate or the back image, over the card's
+// saved background. `layersOnly` draws just the background and the picture; `bare` just the picture, on a
+// transparent card (to place another picture, like its template, the same way).
+export function useFactionCardOver(factionId: number, side: 'front' | 'back', imageUrl: string | null, layersOnly = false, bare = false) {
   const faction = useFactions().data?.find(f => f.id === factionId)
   const layoutQuery = useFactionCardLayout(), layout = layoutQuery.layout
   const logoUrl = useFactionLogoUrl(factionId)
-  const record = useFactionCard(factionId), defaults = useFactionCardDefaults()
+  const record = useFactionCard(factionId), defaults = useFactionCardDefaults(), images = useLibraryImages()
   const [state, setState] = useState<{ url: string | null; error: string }>({ url: null, error: '' })
   const data = useMemo(() => record.data && faction ? normalizeData(record.data.data, faction.name) : null, [record.data, faction])
   const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
   const shared = useMemo(() => byKey(defaults.data), [defaults.data])
   const cards = useCardImages(data ? initialCardIds(data) : [])
-  const ready = !!backgroundUrl && !!data && !defaults.isPending && !layoutQuery.isPending && !cards.pending
+  const front = backgroundUrl(record.data?.front_image_key ?? '', 'front', assets, images.data)
+  const ready = !!imageUrl && !!data && !defaults.isPending && !layoutQuery.isPending && !cards.pending && !images.isPending
   const color = record.data?.unit_color ?? ''
   useEffect(() => {
     if (!ready || !data) return
     let cancelled = false, url: string | null = null
-    renderFactionCard({ side, data, unitColor: color, backgroundUrl, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
+    renderFactionCard({ side, data, unitColor: color, backgroundUrl: front, plateUrl: imageUrl, layersOnly, bare, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
       .then(r => new Promise<Blob | null>(resolve => r.canvas.toBlob(resolve, 'image/png')))
       .then(blob => {
         if (cancelled || !blob) return
@@ -68,6 +73,6 @@ export function useFactionCardOver(factionId: number, side: 'front' | 'back', ba
       })
       .catch(e => { if (!cancelled) setState({ url: null, error: e instanceof Error ? e.message : 'Could not render the faction card.' }) })
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
-  }, [ready, side, data, color, backgroundUrl, assets, shared, layout, logoUrl, cards.images])
+  }, [ready, side, data, color, imageUrl, front, layersOnly, bare, assets, shared, layout, logoUrl, cards.images])
   return { url: ready ? state.url : null, error: state.error, pending: ready && !state.url && !state.error }
 }

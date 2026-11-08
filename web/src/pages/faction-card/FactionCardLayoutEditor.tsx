@@ -12,7 +12,7 @@ import { useFactions } from '../factions/api'
 import { useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
 import { ELEMENTS, TITLE_ALIGNED, elementBox, mergeLayout, saveFactionCardLayout, useFactionCardLayout, type ElementKey, type ElementLayout, type SavedLayout, type Side } from './layout'
 import { useCardImages } from './useCardImages'
-import { CARD_SIZE, FACTION_CARD_CUT_MM, backgroundUrl, initialCardIds, normalizeData, resolveTextStyles } from './model'
+import { CARD_SIZE, FACTION_CARD_CUT_MM, backgroundUrl, plateUrl, initialCardIds, normalizeData, resolveTextStyles } from './model'
 import { TextStyleFields } from './TextStyleFields'
 import { CardLens, MagnifierButton, useMagnifier } from './CardLens'
 import { Field, inputClass } from '../../components/Field'
@@ -45,7 +45,7 @@ export function FactionCardLayoutEditor() {
   const [result, setResult] = useState<FactionCardResult | null>(null)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ key: ElementKey; mode: 'move' | 'resize'; x: number; y: number; start: ElementLayout; box: { w: number; h: number } } | null>(null)
+  const drag = useRef<{ key: ElementKey; mode: 'move' | 'resize'; x: number; y: number; start: ElementLayout; titleX: number; box: { w: number; h: number } } | null>(null)
 
   // The saved layout arrives after the first render.
   const loaded = useRef(false)
@@ -64,16 +64,18 @@ export function FactionCardLayoutEditor() {
   const cards = useCardImages(data ? initialCardIds(data) : [])
   const assets = useMemo(() => byKey(record.data?.assets), [record.data?.assets])
   const shared = useMemo(() => byKey(defaults.data), [defaults.data])
-  const background = backgroundUrl((side === 'front' ? record.data?.front_image_key : record.data?.back_image_key) ?? '', side, assets, images.data)
+  // Both sides share the front's background; over it the front's plate or the back image.
+  const background = backgroundUrl(record.data?.front_image_key ?? '', 'front', assets, images.data)
+  const plate = side === 'front' ? (data ? plateUrl(data.plate, assets, images.data) : null) : backgroundUrl(record.data?.back_image_key ?? '', 'back', assets, images.data)
   useEffect(() => {
     if (!data || !record.data) return
     let cancelled = false
     // Drawn on the next frame at half size, so dragging a slider updates the
     // card straight away; only the newest request is kept.
-    const frame = requestAnimationFrame(() => renderFactionCard({ side, data, unitColor: record.data!.unit_color, backgroundUrl: background, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
+    const frame = requestAnimationFrame(() => renderFactionCard({ side, data, unitColor: record.data!.unit_color, backgroundUrl: background, plateUrl: plate, assets, defaults: shared, layout, logoUrl, cardImages: cards.images, scale: 0.5 })
       .then(r => { if (!cancelled) { setResult(r); setError('') } }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not render the card.') }))
     return () => { cancelled = true; cancelAnimationFrame(frame) }
-  }, [side, data, record.data, background, assets, shared, layout, logoUrl, cards.images])
+  }, [side, data, record.data, background, plate, assets, shared, layout, logoUrl, cards.images])
 
   const save = useMutation({
     mutationFn: () => saveFactionCardLayout(draft),
@@ -88,7 +90,7 @@ export function FactionCardLayoutEditor() {
     e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture?.(e.pointerId)
     setSelected(key); save.reset(); history.begin()
     const box = elementBox(key, layout)
-    drag.current = { key, mode, x: e.clientX, y: e.clientY, start: layout[key], box }
+    drag.current = { key, mode, x: e.clientX, y: e.clientY, start: layout[key], titleX: layout.title.x, box }
   }
   function onDrag(e: React.PointerEvent) {
     const d = drag.current, rect = root.current?.getBoundingClientRect()
@@ -96,14 +98,16 @@ export function FactionCardLayoutEditor() {
     const dx = (e.clientX - d.x) / rect.width * 100, dy = (e.clientY - d.y) / rect.height * 100
     const spec = ELEMENTS.find(s => s.key === d.key)!
     // A logo's horizontal position follows its heading, the subtitle, text and objective heading follow the title,
-    // and the starting forces are centred under their heading, so they only move up and down.
+    // and the starting forces are centred under their heading, so they only move up and down themselves. Dragging the
+    // front logo or one of those sideways moves the title, and so the whole group, across.
     const vertical = d.key === 'logo' || d.key === 'backLogo' || d.key === 'forces' || TITLE_ALIGNED.includes(d.key)
+    const group = d.mode === 'move' && (d.key === 'logo' || TITLE_ALIGNED.includes(d.key))
     // A centred box grows on both sides, so its corner follows the pointer when it widens by twice the drag.
     const grow = d.key === 'forces' ? 2 * dx : dx
     const change: Partial<ElementLayout> = d.mode === 'move' ? (vertical ? { y: round(d.start.y + dy) } : { x: round(d.start.x + dx), y: round(d.start.y + dy) })
       : spec.kind === 'group' || spec.kind === 'icon' ? { scale: round(Math.max(0.2, (d.start.scale ?? 1) * (d.box.w + dx) / d.box.w)) }
       : { ...(TITLE_ALIGNED.includes(d.key) ? {} : { w: round(Math.max(1, (d.start.w ?? d.box.w) + grow)) }), ...(d.start.h !== undefined || spec.kind === 'box' || spec.kind === 'image' ? { h: round(Math.max(1, (d.start.h ?? d.box.h) + dy)) } : {}) }
-    history.replace(v => ({ ...v, [d.key]: { ...v[d.key], ...change } }))
+    history.replace(v => ({ ...v, [d.key]: { ...v[d.key], ...change }, ...(group ? { title: { ...v.title, x: round(d.titleX + dx) } } : {}) }))
   }
   const endDrag = () => { drag.current = null }
   const [magnify, setMagnify] = useMagnifier()

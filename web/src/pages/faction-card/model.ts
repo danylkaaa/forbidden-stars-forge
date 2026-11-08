@@ -81,7 +81,18 @@ export type FactionCardData = {
   objectives: Objective[]
   text_styles: TextStyles
   portrait_crop: PortraitCrop
+  // The front's plate (the board with the panels, drawn over the background): a library image key, UPLOADED_IMAGE
+  // (the `front-plate` asset) or '' for none.
+  plate: string
+  // Where the front's background and plate sit on the card.
+  layers: FrontLayers
 }
+
+// A layer's centre (fractions of the card) and size: for the background a zoom over covering the card (1 = covers
+// it exactly); for the plate its height as a fraction of the card's height.
+export type LayerPlace = { x: number; y: number; scale: number }
+export type FrontLayers = { background: LayerPlace; plate: LayerPlace }
+export const DEFAULT_LAYERS: FrontLayers = { background: { x: 0.5, y: 0.5, scale: 1 }, plate: { x: 0.655, y: 0.5, scale: 0.97 } }
 
 const unit = (name: string, cost: number, dice: number, health: number, morale: number, tech: number | null, forge = 0): UnitStats => ({ name, cost, dice, health, morale, tech, forge })
 export function defaultData(factionName = ''): FactionCardData {
@@ -102,6 +113,7 @@ export function defaultData(factionName = ''): FactionCardData {
     ],
     objectives: Array.from({ length: 6 }, () => ({ name: '', text: '' })),
     text_styles: {}, portrait_crop: DEFAULT_PORTRAIT_CROP,
+    plate: '', layers: DEFAULT_LAYERS,
   }
 }
 
@@ -113,6 +125,8 @@ export function normalizeData(raw: unknown, factionName = ''): FactionCardData {
     ...base, ...r, units,
     models: r.models ?? {},
     portrait_crop: { ...DEFAULT_PORTRAIT_CROP, ...r.portrait_crop },
+    plate: typeof r.plate === 'string' ? r.plate : '',
+    layers: { background: { ...DEFAULT_LAYERS.background, ...r.layers?.background }, plate: { ...DEFAULT_LAYERS.plate, ...r.layers?.plate } },
     text_styles: r.text_styles && typeof r.text_styles === 'object' ? r.text_styles : {},
     theme: typeof r.theme === 'string' ? r.theme : '',
     panel_color: typeof r.panel_color === 'string' ? r.panel_color : '', frame_color: typeof r.frame_color === 'string' ? r.frame_color : '', light_color: typeof r.light_color === 'string' ? r.light_color : '',
@@ -124,7 +138,7 @@ export function normalizeData(raw: unknown, factionName = ''): FactionCardData {
 
 export const assetKeys = {
   model: (slot: SlotKey) => `stl-${slot}`, icon: (slot: SlotKey) => `icon-${slot}`,
-  objective: (n: number) => `objective-${n + 1}`, portrait: 'portrait',
+  objective: (n: number) => `objective-${n + 1}`, portrait: 'portrait', plate: 'front-plate',
 }
 // Shared icons for every faction (stored under faction 0). Until uploaded the
 // card draws a plain placeholder.
@@ -145,6 +159,11 @@ export const downloadName = (faction: string, side: 'front' | 'back') => `${fact
 // (stored as the `front-image` / `back-image` asset), anything else a generated
 // library image by key.
 export const UPLOADED_IMAGE = 'upload'
+// The picked plate: the uploaded `front-plate` asset or a generated library image.
+export function plateUrl(key: string, assets: Record<string, string>, library: { key: string; url: string }[]): string | null {
+  if (key === UPLOADED_IMAGE) return assets[assetKeys.plate] ?? null
+  return key ? library.find(i => i.key === key)?.url ?? null : null
+}
 export function backgroundUrl(key: string, side: 'front' | 'back', assets: Record<string, string>, library: { key: string; url: string }[]): string | null {
   if (key === UPLOADED_IMAGE) return assets[`${side}-image`] ?? null
   return library.find(i => i.key === key)?.url ?? null

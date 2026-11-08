@@ -1,5 +1,5 @@
 import { loadFonts, loadImage } from '../assemble/render'
-import { CARD_SIZE, MODEL_FIELD, UNIT_SLOTS, assetKeys, defaultData, resolveTextStyles, withDefaults, type FactionCardData, type ForcesIcon, type InitialRow, type Orientation, type SlotKey } from './model'
+import { CARD_SIZE, MODEL_FIELD, UNIT_SLOTS, assetKeys, defaultData, resolveTextStyles, withDefaults, type FactionCardData, type ForcesIcon, type LayerPlace, type InitialRow, type Orientation, type SlotKey } from './model'
 import { drawPlaceholder, type Box } from './placeholders'
 import { renderModelIcon } from './stl'
 import { BUNDLED_ICONS, DESIGN_ASSETS } from './bundled'
@@ -17,6 +17,11 @@ export type ModelIcon = (url: string, orientation: Partial<Orientation>, color: 
 export type FactionCardInput = {
   side: Side; data: FactionCardData; unitColor: string
   backgroundUrl: string | null
+  // The picture over the background: on the front the plate (data.layers places it and the background), on the
+  // back the back image, covering the card (it has transparent parts; both sides share the front's background).
+  plateUrl?: string | null
+  layersOnly?: boolean // only the background and the plate, nothing drawn over them
+  bare?: boolean // no background at all (transparent): to place another picture where the plate goes
   assets: Record<string, string>   // this faction's uploads by key
   defaults: Record<string, string> // icons shared by every faction
   logoUrl?: string | null // the faction's logo, drawn on both sides
@@ -40,6 +45,15 @@ function fit(ctx: CanvasRenderingContext2D, image: Drawable, b: Box, mode: 'cont
   ctx.save(); ctx.beginPath(); ctx.rect(b.x, b.y, b.w, b.h); ctx.clip()
   ctx.drawImage(image, b.x + (b.w - iw * k) / 2, b.y + (b.h - ih * k) / 2, iw * k, ih * k)
   ctx.restore()
+}
+
+// A front layer: centred at its place; 'cover' scales it to cover the card times its zoom, 'height' makes it
+// `scale` × the card's height tall. Its shape is kept; the canvas cuts what falls outside the card.
+function drawLayer(ctx: CanvasRenderingContext2D, image: Drawable, place: LayerPlace, w: number, h: number, mode: 'cover' | 'height') {
+  const iw = image instanceof HTMLImageElement ? image.naturalWidth : image.width, ih = image instanceof HTMLImageElement ? image.naturalHeight : image.height
+  if (!iw || !ih) return
+  const k = mode === 'cover' ? Math.max(w / iw, h / ih) * place.scale : place.scale * h / ih
+  ctx.drawImage(image, place.x * w - iw * k / 2, place.y * h - ih * k / 2, iw * k, ih * k)
 }
 
 // The front card's row for a unit slot (circle, price, name bar and stats), in output pixels.
@@ -71,8 +85,9 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
   const modelIcon = input.modelIcon ?? renderModelIcon
   const keys = side === 'front' ? ['city', 'factory', 'gear', 'forge', 'tech', 'bastion', 'dice', 'health', 'morale'] : ['gear', 'reinforce', 'forge-token', 'city', 'factory', 'bastion']
   const designKeys = ['torch', 'banner', 'light', 'texture', 'ring'] as const
-  const [background, logo, shared, unitIcons, objectiveImages, portrait, designImages] = await Promise.all([
+  const [background, plate, logo, shared, unitIcons, objectiveImages, portrait, designImages] = await Promise.all([
     optional(input.backgroundUrl ?? undefined),
+    optional(input.plateUrl ?? undefined),
     optional(input.logoUrl ?? undefined),
     Promise.all(keys.map(k => optional(defaults[k] ?? BUNDLED_ICONS[k]))),
     Promise.all(UNIT_SLOTS.map(async ({ key }): Promise<Drawable | null> => {
@@ -101,13 +116,20 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
   if (!ctx) throw new Error('Your browser could not create the card canvas.')
   ctx.scale(outScale, outScale)
   const warnings: string[] = []
-  if (background) fit(ctx, background, { x: 0, y: 0, w, h }, 'cover')
+  // The background is placed by the card's layers on both sides; over it the front's plate (placed too) or the
+  // back's picture, covering the card.
+  if (input.bare) { /* transparent */ } else if (background) drawLayer(ctx, background, data.layers.background, w, h, 'cover')
   else {
     // No generated image yet: a light parchment gradient keeps the dark text readable.
     const gradient = ctx.createLinearGradient(0, 0, w, h)
     gradient.addColorStop(0, '#f6ecd8'); gradient.addColorStop(1, '#dcc7a5')
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h)
   }
+  if (plate) {
+    if (side === 'front') drawLayer(ctx, plate, data.layers.plate, w, h, 'height')
+    else fit(ctx, plate, { x: 0, y: 0, w, h }, 'cover')
+  }
+  if (input.layersOnly) return { canvas, warnings }
   const sharedIcon = (key: string, b: Box) => {
     const img = icon[key]
     if (!img) return drawPlaceholder(ctx, key, b)

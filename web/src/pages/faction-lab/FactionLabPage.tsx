@@ -1,6 +1,6 @@
 import { SearchableSelect } from '../../components/SearchableSelect'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
 import { ClaudeTextAssist } from '../../components/ClaudeTextAssist'
@@ -24,15 +24,15 @@ import { buildCardTypeForm, previewLayers, startCardTypeAssist, updateCardType, 
 import { useFactionColors } from '../assemble/api'
 import { startGenerateDescription, updateFaction, useFactions, type Faction } from '../factions/api'
 import { useElapsedMs } from '../../lib/useElapsedMs'
-import { formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation } from '../test-generation/api'
+import { LAB_QUALITIES, formatCost, formatDuration, useGenerations, usePreview, useStartGeneration, type Generation, type LabQuality } from '../test-generation/api'
 import { usePreviewLayers } from '../../lib/previewLayers'
 import { useAssembledPrompt } from './api'
-import { isFactionCardType, useFactionCharacters, usesCharacter } from '../factions/characters'
-import { CharacterPlacementDialog } from '../factions/CharacterPlacementDialog'
 import { CARD_SIZE, FACTION_CARD_CUT_MM } from '../faction-card/model'
 import { useFactionCardOver } from '../faction-card/useFactionCardCanvases'
 
 const FACTION_CARD_SAFE_AREA = { px: CARD_SIZE, cutMm: FACTION_CARD_CUT_MM }
+// Both sides of the faction card: a landscape board with its own cut lines (its front picture is the plate).
+const isFactionCardType = (name: string) => name === 'faction card' || name === 'faction card back'
 import { joinPrompt, splitPrompt } from './promptSections'
 import { FrontImagePicker, type FrontImageOption } from './FrontImagePicker'
 import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
@@ -119,13 +119,7 @@ export default function FactionLabPage() {
 
   const inputs = useMemo(() => ({ fields, ct: ctFields }), [fields, ctFields])
   const debounced = useDebounced(inputs, 300)
-  // The faction card is generated with the faction's character picture, when it has one.
-  const { data: characters } = useFactionCharacters()
-  const showsCharacter = usesCharacter(cardType?.name)
-  const character = characters?.find((c) => c.faction_id === faction?.id)
-  const [placing, setPlacing] = useState(false)
-  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage,
-    showsCharacter && character ? character.faction_id : null, character?.url ?? '')
+  const assembled = useAssembledPrompt(lab.cardTypeId, faction?.name ?? '', debounced.fields, debounced.ct, !!frontImage)
   const { data: preview } = usePreview(lab.factionId, lab.cardTypeId, lab.model)
   // Parts of the prompt switched off; they are neither shown nor sent.
   const [off, setOff] = useState<ReadonlySet<string>>(new Set())
@@ -154,9 +148,12 @@ export default function FactionLabPage() {
   const promptReady = assembled.data !== undefined && !assembled.isFetching &&
     debounced.fields !== null && fields !== null && sameFields(debounced.fields, fields) &&
     (debounced.ct === null) === (ctFields === null) && (!ctFields || sameCt(debounced.ct!, ctFields))
-  const estimate = preview ? (lab.mode === 'draft' ? preview.est_draft_usd : preview.est_final_usd) : null
-  const expectedSeconds = (mode: string) => (mode === 'draft' ? preview?.est_draft_seconds : preview?.est_final_seconds) || 0
-  const expectedMs = expectedSeconds(lab.mode) * 1000
+  const chosen = preview?.estimates?.[lab.quality]
+  const estimate = chosen ? chosen.usd : null
+  // A run's usual time: the slider step whose quality it was made at, else its mode's.
+  const expectedSeconds = (quality: string, mode: string) =>
+    Object.values(preview?.estimates ?? {}).find((e) => e.quality === quality)?.seconds || (mode === 'draft' ? preview?.est_draft_seconds : preview?.est_final_seconds) || 0
+  const expectedMs = (chosen?.seconds ?? 0) * 1000
 
   const openPart = (key: string) => {
     const target = PART_FIELDS[key]
@@ -177,7 +174,7 @@ export default function FactionLabPage() {
     setError(null)
     try {
       const g = await start({
-        faction_id: faction.id, card_type_id: cardType.id, mode: lab.mode,
+        faction_id: faction.id, card_type_id: cardType.id, quality: lab.quality,
         prompt_override: sentPrompt, ...(lab.model ? { model: lab.model } : {}),
         ...(frontImage ? { front_image: frontImage.ref } : {}),
       })
@@ -275,17 +272,7 @@ export default function FactionLabPage() {
                 </SearchableSelect>
               )}
             </Field>
-            <div>
-              <span className="mb-1 block text-xs text-ink/70">Mode</span>
-              <div className="flex overflow-hidden rounded-md border border-divider" role="group" aria-label="Mode">
-                {(['draft', 'final'] as const).map((m, i) => (
-                  <button key={m} type="button" onClick={() => lab.set({ mode: m })}
-                    className={`flex-1 cursor-pointer border-0 bg-transparent px-2 py-1.5 text-[13px] ${i > 0 ? 'border-l border-divider' : ''} ${lab.mode === m ? 'text-accent shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'text-ink'}`}>
-                    {m === 'draft' ? 'Draft' : 'Final'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <QualitySlider value={lab.quality} onChange={(quality) => lab.set({ quality })} sent={chosen?.quality} />
             <ModelOverrideSelect value={lab.model} onChange={(model) => lab.set({ model })} />
           </div>
 
@@ -295,20 +282,6 @@ export default function FactionLabPage() {
               loading={gensLoading} error={!!gensError} />
           )}
 
-          {showsCharacter && faction && (
-            // Uploaded once per faction, on the Factions page; shown here so it is clear what is sent.
-            <div className="flex items-center gap-3 rounded-md border border-divider bg-bg p-2 text-xs">
-              {character ? <img src={character.url} alt="Faction character" className="h-16 w-12 shrink-0 rounded border border-divider object-contain" /> : null}
-              <div className="min-w-0 flex-1">
-                <p className="m-0 text-ink">{!character ? 'No faction character' : cardType?.name === 'faction card' ? 'Faction character, pasted on the template' : 'Faction character, sent as a reference (no template)'}</p>
-                <div className="flex flex-wrap gap-x-3">
-                  {character && cardType?.name === 'faction card' && <button type="button" onClick={() => setPlacing(true)} className="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent">Position on template</button>}
-                  <Link to="/factions" className="text-accent">{character ? 'Change it on the Factions page' : 'Upload one on the Factions page'}</Link>
-                </div>
-              </div>
-            </div>
-          )}
-          {placing && faction && character && <CharacterPlacementDialog factionId={faction.id} character={character} onClose={() => setPlacing(false)} />}
 
           <div role="tablist" aria-label="What to edit" className="flex gap-1 border-b border-ink/10">
             {([['faction', 'Faction', dirty], ['card-type', 'Image type', ctDirty]] as const).map(([key, label, isDirty]) => (
@@ -493,7 +466,7 @@ export default function FactionLabPage() {
               key={`${current.id}-${cardType.id}`}
               gen={current}
               cardType={cardType}
-              expectedMs={expectedSeconds(current.mode) * 1000}
+              expectedMs={expectedSeconds(current.quality, current.mode) * 1000}
               cardTypeName={cardType.name}
               alt={`${faction.name} × ${cardType.name} #${current.id}`}
               {...previewLayers(cardType)}
@@ -545,10 +518,16 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   const combatSide = cardTypeName === 'combat' ? 'front' : cardTypeName === 'card back' ? 'back' : undefined
   const backCategory = cardTypeName === 'card back' ? 'combat' : undefined
   // The faction card is a landscape board, not a playing card: its cut and safe lines are its own.
-  const factionCard = isFactionCardType(cardTypeName)
-  const safeArea = factionCard ? FACTION_CARD_SAFE_AREA : undefined
-  // With the overlay on, the faction card is checked as the finished card: the faction's saved base drawn over the picture.
-  const board = useFactionCardOver(gen.faction_id, cardTypeName === 'faction card back' ? 'back' : 'front', factionCard && overlayOn ? cardImageUrl : null)
+  const factionCard = isFactionCardType(cardTypeName), side = cardTypeName === 'faction card back' ? 'back' as const : 'front' as const
+  // A faction card picture (the front's plate, or the back with its transparent parts) is always shown on the
+  // faction's card, over its saved background; with the overlay on, the rest of the saved card is drawn over it.
+  const board = useFactionCardOver(gen.faction_id, side, factionCard ? cardImageUrl : null, !overlayOn)
+  // The mask (the image type's template) is placed the same way, on a transparent card.
+  const maskOn = usePreviewLayers((l) => l.mask)
+  const placedMask = useFactionCardOver(gen.faction_id, side, factionCard && maskOn ? maskSrc : null, true, true)
+  const shownMask = placedMask.url
+  // The picture alone is not the card yet: no cut lines until it is shown on the card.
+  const safeArea = !factionCard ? undefined : !board.url ? null : FACTION_CARD_SAFE_AREA
   // Event fronts are checked as the finished event card, like combat fronts.
   const cardCategory = cardTypeName === 'events' ? 'schema' as const : combatSide === 'front' ? 'combat' as const : undefined
   const asCard = !!cardCategory && overlayOn
@@ -559,8 +538,8 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       {imageUrl && <div className="flex flex-wrap items-center gap-2">
         {(cardCategory || backCategory || elementKind || factionCard) && <OverlayToggle />}
-        {factionCard && overlayOn && board.pending && <span role="status" className="inline-flex items-center gap-2 text-xs text-ink/70"><GeneratingSpinner seed={gen.id} size="sm" />Drawing the faction card…</span>}
-        {factionCard && overlayOn && board.error && <span role="alert" className="text-xs text-danger">{board.error}</span>}
+        {factionCard && board.pending && <span role="status" className="inline-flex items-center gap-2 text-xs text-ink/70"><GeneratingSpinner seed={gen.id} size="sm" />Drawing the faction card…</span>}
+        {factionCard && board.error && <span role="alert" className="text-xs text-danger">{board.error}</span>}
         <EditImageButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
         <HideAreasButton src={imageUrl} alt={alt} target={{ kind: 'generation', id: gen.id }} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} />
         {cardType && <UseForFactionButton factionId={gen.faction_id} cardType={cardType} generationId={gen.id} />}
@@ -571,9 +550,9 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
       {placing && elementKind ? <ElementPlacement key={gen.id} kind={elementKind} factionId={gen.faction_id} generationId={gen.id} /> : cardImageUrl && asCard ? <QuickCardPreview picker={false} imageUrl={cardImageUrl} factionId={gen.faction_id} cardId={previewCardId} onCardChange={setPreviewCardId} category={cardCategory} /> :
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {imageUrl ? (
-          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} safeArea={safeArea} boardOverlay={factionCard ? board : undefined} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
+          <ZoomableImage src={imageUrl} alt={alt} maskSrc={maskSrc} cardPreviewFactionId={cardCategory ? gen.faction_id : undefined} cardPreviewCategory={cardCategory} combatPreviewSide={combatSide} previewFactionId={gen.faction_id} backPreviewCategory={backCategory} safeArea={safeArea} boardOverlay={factionCard ? { ...board, always: true, mask: board.url ? shownMask : null } : undefined} downloadName={gen.name} favorite={{ target: { kind: 'generation', id: gen.id }, value: gen.favorite }}
             editTarget={{ kind: 'generation', id: gen.id }} compareSrc={parentImageUrl(gen)} onEdited={onEdited} className="block h-full w-full">
-            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={board.url ?? imageUrl} alt={alt} maskSrc={board.url ? null : maskSrc} fit="contain" safeArea={safeArea} />}
+            {backCategory ? <BackFlatPreview inline category={backCategory} factionId={gen.faction_id} src={imageUrl} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={board.url ?? imageUrl} alt={alt} maskSrc={board.url ? shownMask : maskSrc} fit="contain" safeArea={safeArea} />}
           </ZoomableImage>
         ) : (
           <div className={`flex aspect-[3/4] h-full max-h-full max-w-full flex-col items-center justify-center gap-2 rounded p-3 text-center text-sm ${pending ? 'bg-accent-900/60 text-accent' : 'bg-neutral-800 text-danger'}`}>
@@ -606,4 +585,19 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
       </div>
     </div>
   )
+}
+
+// The run's quality, low to max. Low runs count as drafts, the rest as finals. On a model without xhigh and max,
+// those steps are sent as high (`sent` says what this step really is).
+function QualitySlider({ value, onChange, sent }: { value: LabQuality; onChange: (q: LabQuality) => void; sent?: string }) {
+  const index = Math.max(0, LAB_QUALITIES.indexOf(value))
+  return <div>
+    <label htmlFor="lab-quality" className="mb-1 block text-xs text-ink/70">Quality{sent && sent !== value ? ` (sent as ${sent} on this model)` : ''}</label>
+    <input id="lab-quality" type="range" min={0} max={LAB_QUALITIES.length - 1} step={1} value={index} aria-valuetext={value}
+      onChange={(e) => onChange(LAB_QUALITIES[Number(e.target.value)])} className="w-full accent-[var(--color-accent)]" />
+    <div className="flex justify-between text-[11px]" aria-hidden="true">
+      {LAB_QUALITIES.map((q) => <button key={q} type="button" tabIndex={-1} onClick={() => onChange(q)}
+        className={`cursor-pointer border-0 bg-transparent p-0 ${q === value ? 'font-medium text-accent' : 'text-ink/55'}`}>{q}</button>)}
+    </div>
+  </div>
 }

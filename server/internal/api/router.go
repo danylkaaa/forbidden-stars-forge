@@ -29,7 +29,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			cardTypesStore := store.NewCardTypesStore(db)
 			cardsStore := store.NewCardsStore(db)
 			usageStore := store.NewUsageStore(db)
-			charactersStore := store.NewCharactersStore(db)
 
 			settings := &SettingsHandler{Store: settingsStore}
 			r.Get("/settings", settings.Get)
@@ -58,13 +57,6 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 			r.Get("/factions/{id}/logo", logos.Get)
 			r.Put("/factions/{id}/logo", logos.Upload)
 			r.Delete("/factions/{id}/logo", logos.Delete)
-			characters := &CharactersHandler{Store: charactersStore, Factions: factionsStore, Settings: settingsStore, DataDir: dataDir}
-			r.Get("/faction-characters", characters.List)
-			r.Get("/factions/{id}/character", characters.Get)
-			r.Put("/factions/{id}/character", characters.Upload)
-			r.Post("/factions/{id}/character/sync", characters.Sync)
-			r.Put("/factions/{id}/character/placement", characters.SavePlacement)
-			r.Delete("/factions/{id}/character", characters.Delete)
 			r.Get("/factions/{id}/revisions", factions.Revisions)
 			r.Post("/factions/{id}/revisions/{revID}/restore", factions.Restore)
 
@@ -141,14 +133,13 @@ func NewRouter(db *sql.DB, staticFS fs.FS, dataDir string) http.Handler {
 
 			masksStore := store.NewImageMasksStore(db)
 			gens := &GenerationsHandler{
-				Gens:       store.NewGenerationsStore(db),
-				Factions:   factionsStore,
-				CardTypes:  cardTypesStore,
-				Settings:   settingsStore,
-				Usage:      usageStore,
-				Masks:      masksStore,
-				Characters: charactersStore,
-				DataDir:    dataDir,
+				Gens:      store.NewGenerationsStore(db),
+				Factions:  factionsStore,
+				CardTypes: cardTypesStore,
+				Settings:  settingsStore,
+				Usage:     usageStore,
+				Masks:     masksStore,
+				DataDir:   dataDir,
 			}
 			masks := &MasksHandler{Masks: masksStore, Gens: gens.Gens}
 			r.Get("/image-masks", masks.List)

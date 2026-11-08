@@ -277,36 +277,3 @@ func WithFrontReference(p string) string {
 	}
 	return p + "\n\n" + frontReference
 }
-
-const characterReference = `## Character reference
-The last input image is this faction's character. Use it only as a visual
-reference: feature this character on the card, keeping their face, armour,
-wargear, colours and silhouette recognisable, painted in the card's style.
-Do not copy that picture's background, framing or lighting.`
-
-// WithCharacterReference adds the note on the faction's character picture; it also accepts a previewed
-// prompt that already has it.
-func WithCharacterReference(p string) string {
-	p = strings.TrimSpace(p)
-	if strings.Contains(p, characterReference) {
-		return p
-	}
-	return p + "\n\n" + characterReference
-}
-
-const characterOnTemplate = `## Character on the template
-The faction's character is already painted onto the template. Keep this
-character where they are, at the same size and in the same pose, and keep
-their face, armour, wargear, colours and silhouette recognisable. Repaint them
-in the card's finished style and blend them into the scene around them. Do not
-move, crop, mirror or duplicate them.`
-
-// WithCharacterOnTemplate adds the note on the character pasted onto the template; it also accepts a previewed
-// prompt that already has it.
-func WithCharacterOnTemplate(p string) string {
-	p = strings.TrimSpace(p)
-	if strings.Contains(p, characterOnTemplate) {
-		return p
-	}
-	return p + "\n\n" + characterOnTemplate
-}

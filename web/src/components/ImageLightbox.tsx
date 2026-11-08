@@ -16,8 +16,9 @@ import { BackFlatPreview } from '../pages/assemble/BackLogoPreview'
 import { EditIcon, MaskIcon } from './icons'
 import { ConfirmDialog } from './ConfirmDialog'
 
-// boardOverlay: the finished card drawn over the image (the faction card), shown while the overlay is on.
-type CombatPreviewProps = { boardOverlay?: { url: string | null; pending: boolean }; safeArea?: import('./safeAreaStore').SafeAreaGeometry; backPreviewCategory?: import('../pages/cards/model').Category; cardPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
+// boardOverlay: the image drawn on the card (the faction card), shown while the overlay is on, or `always` (the
+// plate, shown where it sits); `mask` is the mask placed the same way.
+type CombatPreviewProps = { boardOverlay?: { url: string | null; pending: boolean; always?: boolean; mask?: string | null }; safeArea?: import('./safeAreaStore').SafeAreaGeometry | null; backPreviewCategory?: import('../pages/cards/model').Category; cardPreviewCategory?: import('../pages/cards/model').Category; combatPreviewSide?: 'front' | 'back'; previewFactionId?: number }
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -72,7 +73,7 @@ export function ImageLightbox({
   const [showOriginal, setShowOriginal] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const overlayOn = usePreviewLayers((l) => l.overlay)
-  const board = boardOverlay && overlayOn && !showOriginal ? boardOverlay.url : null
+  const board = boardOverlay && (overlayOn || boardOverlay.always) && !showOriginal ? boardOverlay.url : null
   const shownSrc = board ?? (showOriginal && compareSrc ? compareSrc : src)
   const [editDirty, setEditDirty] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<(() => void) | null>(null)
@@ -186,7 +187,7 @@ export function ImageLightbox({
         </div>
       ) : (
         <div onClick={(e) => e.stopPropagation()}>
-          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={board ? null : maskSrc} fit="natural" safeArea={safeArea}
+          {(backPreviewCategory || combatPreviewSide === 'back') && previewFactionId !== undefined ? <BackFlatPreview category={backPreviewCategory} factionId={previewFactionId} src={shownSrc} alt={alt} maskSrc={maskSrc} /> : <LayeredImage src={shownSrc} alt={alt} maskSrc={board ? boardOverlay?.mask ?? null : maskSrc} fit="natural" safeArea={safeArea}
             imgClassName="max-h-[90vh] max-w-full rounded-md bg-[repeating-conic-gradient(var(--color-accent-700)_0%_25%,var(--color-accent-900)_0%_50%)] bg-[length:20px_20px] object-contain shadow-[0_16px_40px_rgba(0,0,0,0.65)]" />}
         </div>
       )}
