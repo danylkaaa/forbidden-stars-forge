@@ -227,3 +227,4 @@ export const ExpandIcon = ({ className }: IconProps) => <Glyph className={classN
 export const SparkleIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M8 2.5L9.4 6.6 13.5 8 9.4 9.4 8 13.5 6.6 9.4 2.5 8l4.1-1.4zM14 12.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5L12 14.5l1.5-.5z" /></Glyph>
 export const CheckIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M3.5 9.5l4 4 7-8" /></Glyph>
 export const CloseIcon = ({ className }: IconProps) => <Glyph className={className}><path d="M4 4l10 10M14 4L4 14" /></Glyph>
+export const SidebarIcon = ({ className }: IconProps) => <Glyph className={className}><rect x="2.5" y="3.5" width="13" height="11" rx="1" /><path d="M7 3.5v11" /></Glyph>

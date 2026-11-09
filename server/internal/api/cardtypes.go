@@ -95,6 +95,7 @@ type cardTypeFields struct {
 	AspectRatio *float64    // nil when the form does not carry it; 0 clears it
 	// RenderingStyle is the prompt's art style line; nil when the form does not carry it, "" = the default.
 	RenderingStyle *string
+	WithCharacter  *bool // nil when the form does not carry it
 }
 
 var imageSizeRe = regexp.MustCompile(`^\d{2,5}x\d{2,5}$`)
@@ -160,6 +161,10 @@ func parseCardTypeForm(w http.ResponseWriter, r *http.Request) (cardTypeFields, 
 	if _, ok := r.MultipartForm.Value["rendering_style"]; ok {
 		style := strings.TrimSpace(r.FormValue("rendering_style"))
 		f.RenderingStyle = &style
+	}
+	if _, ok := r.MultipartForm.Value["with_character"]; ok {
+		on := r.FormValue("with_character") == "true"
+		f.WithCharacter = &on
 	}
 	_, hasW := r.MultipartForm.Value["card_width_mm"]
 	_, hasH := r.MultipartForm.Value["card_height_mm"]
@@ -229,6 +234,12 @@ func (h *CardTypesHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if fields.WithCharacter != nil {
+		if ct, err = h.Store.SetWithCharacter(ct.ID, *fields.WithCharacter); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
 	if fields.CardSizeMM != nil {
 		if ct, err = h.Store.SetCardSize(ct.ID, fields.CardSizeMM[0], fields.CardSizeMM[1]); err != nil {
 			h.cardTypeErr(w, err)
@@ -290,6 +301,12 @@ func (h *CardTypesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if fields.RenderingStyle != nil {
 		if ct, err = h.Store.SetRenderingStyle(ct.ID, *fields.RenderingStyle); err != nil {
+			h.cardTypeErr(w, err)
+			return
+		}
+	}
+	if fields.WithCharacter != nil {
+		if ct, err = h.Store.SetWithCharacter(ct.ID, *fields.WithCharacter); err != nil {
 			h.cardTypeErr(w, err)
 			return
 		}

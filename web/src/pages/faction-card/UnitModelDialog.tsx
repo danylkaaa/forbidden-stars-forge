@@ -3,7 +3,7 @@ import { Dialog } from '../../components/Dialog'
 import { Field, inputClass, selectClass } from '../../components/Field'
 import { StepperInput } from '../../components/StepperInput'
 import { CardRowPreview } from './CardRowPreview'
-import type { ModelStyle, Orientation, SlotKey, UnitStats } from './model'
+import type { Highlights, ModelStyle, Orientation, SlotKey, UnitStats } from './model'
 import type { FactionCardInput } from './render'
 import { UnitModelEditor } from './UnitModelEditor'
 
@@ -13,9 +13,9 @@ const STAT_FIELDS = [['cost', 'Price'], ['forge', 'Forge'], ['dice', 'Dice'], ['
 // The popup for a unit: its name and numbers, its model (upload, pose,
 // colour-override PNG) and how it looks on the card. Opened from the unit's
 // thumbnail or by clicking its icon on the card preview.
-export function UnitModelDialog({ factionId, slot, label, unit, onUnitChange, style, stlUrl, iconUrl, orientation, color, cardInput, onChange, onClose }: {
+export function UnitModelDialog({ factionId, slot, label, unit, onUnitChange, style, stlUrl, iconUrl, orientation, color, highlight, highlights, cardInput, onChange, onClose }: {
   cardInput: FactionCardInput; factionId: number; slot: SlotKey; label: string; unit: UnitStats; onUnitChange: (patch: Partial<UnitStats>) => void; style: ModelStyle
-  stlUrl?: string; iconUrl?: string; orientation: Partial<Orientation> | undefined; color: string
+  stlUrl?: string; iconUrl?: string; orientation: Partial<Orientation> | undefined; color: string; highlight: string; highlights: Highlights
   onChange: (o: Orientation) => void; onClose: () => void
 }) {
   return <Dialog title={`${label} model`} width="min(760px,100%)" onBackdropClick={onClose} titleExtra={<Button onClick={onClose}>Close</Button>}>
@@ -29,7 +29,7 @@ export function UnitModelDialog({ factionId, slot, label, unit, onUnitChange, st
     </div>
     {slot === 'bastion'
       ? <p className="m-0 text-xs text-ink/55">The bastion always uses the shared structure icon (Library → Faction card → Shared icons).</p>
-      : <UnitModelEditor factionId={factionId} slot={slot} label={label} stlUrl={stlUrl} iconUrl={iconUrl} orientation={orientation} color={color} style={style} onChange={onChange} />}
+      : <UnitModelEditor factionId={factionId} slot={slot} label={label} stlUrl={stlUrl} iconUrl={iconUrl} orientation={orientation} color={color} highlight={highlight} highlights={highlights} style={style} onChange={onChange} />}
     <CardRowPreview input={cardInput} slot={slot} />
   </Dialog>
 }

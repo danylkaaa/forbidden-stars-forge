@@ -15,6 +15,7 @@ export type CardType = {
   card_width_mm?: number // finished (cut) card size, used for print layout and cutting lines
   card_height_mm?: number
   rendering_style?: string // the prompt's art style line (Rendering); empty = photorealistic
+  with_character?: boolean // painted around the faction's character, which stays unchanged
   aspect_ratio?: number // for an element beyond 3:1: the shape its images are cropped to (width / height); 0 follows image_size
   created_at: string
   updated_at: string
@@ -32,7 +33,7 @@ export function useCardTypes() {
 }
 
 export function buildCardTypeForm(
-  fields: { name: string; description: string; constraints: string; rendering_style?: string; image_size?: string; card_width_mm?: string; card_height_mm?: string; aspect_ratio?: string },
+  fields: { name: string; description: string; constraints: string; rendering_style?: string; with_character?: boolean; image_size?: string; card_width_mm?: string; card_height_mm?: string; aspect_ratio?: string },
   template: File | null,
 ): FormData {
   const form = new FormData()
@@ -40,6 +41,7 @@ export function buildCardTypeForm(
   form.set('description', fields.description)
   form.set('constraints', fields.constraints)
   if (fields.rendering_style !== undefined) form.set('rendering_style', fields.rendering_style)
+  if (fields.with_character !== undefined) form.set('with_character', String(fields.with_character))
   if (fields.image_size !== undefined) form.set('image_size', fields.image_size)
   if (fields.aspect_ratio !== undefined) form.set('aspect_ratio', fields.aspect_ratio)
   if (fields.card_width_mm !== undefined) form.set('card_width_mm', fields.card_width_mm)

@@ -118,6 +118,22 @@ In **AI Lab**, on the **Faction** tab: primary colour, texture and
 description; **Save to faction** keeps them. **Edit with Claude** rewrites a text with the `claude`
 command-line tool, if you have it installed.
 
+### How do I make a background around a faction's character?
+
+1. **Image Types** (AI Image Generation mode) → create a type, set its AI image size and tick **Paint around
+   the faction's character**.
+2. **AI Lab** → pick the faction and that type, click **+** under **Faction
+   character** and upload it (a cut-out PNG or a whole picture). You can
+   also upload it in **Factions** → edit the faction.
+3. Drag the character into place (scroll to resize) and press **Generate**.
+4. **Use for faction** on the result makes it the front background of the
+   faction card.
+
+OpenAI is asked to keep the uploaded picture (the character and the
+background behind it) as it is and only extend it outward into the empty
+area. Its picture is the result; nothing is pasted over it, so the original
+part can still change a little.
+
 ## Faction card
 
 ### What size is the faction card?

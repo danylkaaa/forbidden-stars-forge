@@ -26,13 +26,22 @@ export type UnitStats = { name: string; dice: number; health: number; morale: nu
 // `relief` boosts fine surface relief that ordinary lighting leaves flat.
 // The drop shadow and outline are fractions of the icon size; the light is a
 // directional light (angles in degrees) plus ambient light.
-export type Orientation = { rx: number; ry: number; rz: number; scale: number; x: number; y: number; shadow: number; shadowBlur: number; shadowX: number; shadowY: number; outline: number; innerShadow: number; innerShadowSize: number; contrast: number; lightAzimuth: number; lightElevation: number; lightPower: number; lightAmbient: number; detail: number; relief: number }
-export const DEFAULT_ORIENTATION: Orientation = { rx: -90, ry: 0, rz: 0, scale: 1, x: 0, y: 0, shadow: 0.45, shadowBlur: 0.04, shadowX: 0.01, shadowY: 0.03, outline: 0.012, innerShadow: 0, innerShadowSize: 0.03, contrast: 1, lightAzimuth: -35, lightElevation: 50, lightPower: 2.8, lightAmbient: 0.18, detail: 0.6, relief: 0.8 }
+// Highlights do not depend on the light: `edge` lightens raised edges and `wash` darkens creases (`edgeWidth` in
+// pixels of a 256px icon), `cavity` darkens recesses and lightens raised parts (`cavityRadius`: their size as a
+// fraction of the icon), `rim` lightens surfaces turned away from the viewer.
+export type Orientation = { rx: number; ry: number; rz: number; scale: number; x: number; y: number; shadow: number; shadowBlur: number; shadowX: number; shadowY: number; outline: number; innerShadow: number; innerShadowSize: number; contrast: number; lightAzimuth: number; lightElevation: number; lightPower: number; lightAmbient: number; detail: number; relief: number; edge: number; edgeWidth: number; wash: number; cavity: number; cavityRadius: number; rim: number }
+export const DEFAULT_ORIENTATION: Orientation = { rx: -90, ry: 0, rz: 0, scale: 1, x: 0, y: 0, shadow: 0.45, shadowBlur: 0.04, shadowX: 0.01, shadowY: 0.03, outline: 0.012, innerShadow: 0, innerShadowSize: 0.03, contrast: 1, lightAzimuth: -35, lightElevation: 50, lightPower: 2.8, lightAmbient: 0.18, detail: 0.6, relief: 0.8, edge: 0, edgeWidth: 1, wash: 0, cavity: 0, cavityRadius: 0.02, rim: 0 }
 // Drop shadow, inner shadow (darkening along the inside of the edge), contrast
 // and outline are set once for the whole faction card (every unit
 // icon shares them); they override whatever a unit's own pose holds.
 export type ModelStyle = Pick<Orientation, 'shadow' | 'shadowBlur' | 'shadowX' | 'shadowY' | 'outline' | 'innerShadow' | 'innerShadowSize' | 'contrast'>
 export const DEFAULT_MODEL_STYLE: ModelStyle = { shadow: DEFAULT_ORIENTATION.shadow, shadowBlur: DEFAULT_ORIENTATION.shadowBlur, shadowX: DEFAULT_ORIENTATION.shadowX, shadowY: DEFAULT_ORIENTATION.shadowY, outline: DEFAULT_ORIENTATION.outline, innerShadow: DEFAULT_ORIENTATION.innerShadow, innerShadowSize: DEFAULT_ORIENTATION.innerShadowSize, contrast: DEFAULT_ORIENTATION.contrast }
+// Detail highlights are set once per faction so its units look alike; they override a unit's own pose.
+export const HIGHLIGHT_KEYS = ['relief', 'edge', 'edgeWidth', 'wash', 'cavity', 'cavityRadius', 'rim'] as const
+export type Highlights = Pick<Orientation, typeof HIGHLIGHT_KEYS[number]>
+export const pickHighlights = (o: Orientation): Highlights => Object.fromEntries(HIGHLIGHT_KEYS.map(k => [k, o[k]])) as Highlights
+export const withoutHighlights = (o: Orientation): Partial<Orientation> => Object.fromEntries(Object.entries(o).filter(([k]) => !(HIGHLIGHT_KEYS as readonly string[]).includes(k)))
+export const DEFAULT_HIGHLIGHTS = pickHighlights(DEFAULT_ORIENTATION)
 // Poses saved before the shadow existed get the default shadow.
 export const withDefaults = (o: Partial<Orientation> | undefined): Orientation => ({ ...DEFAULT_ORIENTATION, ...o })
 // A row of the back's initial forces: a unit slot, a structure, reinforcements, materiel or a library card.
@@ -74,6 +83,8 @@ export type FactionCardData = {
   theme: string
   // Optional overrides of two derived colours (#rrggbb, empty = derived from the theme): the light panels' colour and the objective picture frames' solid border.
   panel_color: string; frame_color: string; light_color: string // light_color turns the light bars' hue
+  highlight_color: string // the models' edge highlights (#rrggbb); empty = a lighter unit colour
+  highlights: Highlights
   city_cost: number; factory_cost: number
   units: Record<SlotKey, UnitStats>
   models: Partial<Record<SlotKey, Partial<Orientation>>>
@@ -98,7 +109,7 @@ const unit = (name: string, cost: number, dice: number, health: number, morale: 
 export function defaultData(factionName = ''): FactionCardData {
   return {
     title: factionName.toUpperCase(), subtitle: '', text: '',
-    back_text: '', signature: '', signature_title: '', theme: '', panel_color: '', frame_color: '', light_color: '',
+    back_text: '', signature: '', signature_title: '', theme: '', panel_color: '', frame_color: '', light_color: '', highlight_color: '', highlights: DEFAULT_HIGHLIGHTS,
     city_cost: 3, factory_cost: 2,
     units: {
       bastion: unit('Bastion', 2, 2, 3, 2, null), infantry: unit('Infantry', 2, 2, 2, 1, 0), ships: unit('Light ships', 2, 2, 2, 2, 0),
@@ -130,6 +141,8 @@ export function normalizeData(raw: unknown, factionName = ''): FactionCardData {
     text_styles: r.text_styles && typeof r.text_styles === 'object' ? r.text_styles : {},
     theme: typeof r.theme === 'string' ? r.theme : '',
     panel_color: typeof r.panel_color === 'string' ? r.panel_color : '', frame_color: typeof r.frame_color === 'string' ? r.frame_color : '', light_color: typeof r.light_color === 'string' ? r.light_color : '',
+    highlight_color: typeof r.highlight_color === 'string' ? r.highlight_color : '',
+    highlights: { ...DEFAULT_HIGHLIGHTS, ...r.highlights },
     // Cache tokens were removed from the initial forces.
     initial: Array.isArray(r.initial) ? r.initial.filter(row => (row.icon as string) !== 'cache') : base.initial,
     objectives: base.objectives.map((o, i) => ({ ...o, ...r.objectives?.[i] })),

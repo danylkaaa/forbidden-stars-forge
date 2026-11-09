@@ -45,6 +45,12 @@ export function OpenAIFilePanel({ persisted }: { persisted: CardType | null }) {
     }
   }
 
+  if (persisted.with_character) return (
+    <div className="rounded-md border border-ink/10 bg-bg p-3">
+      <div className="mb-0.5 text-xs text-ink/70">Template</div>
+      <p className="m-0 text-sm text-ink/80">Not used: pictures of this type are painted around the faction's character.</p>
+    </div>
+  )
   // No template on purpose: the pictures are made from the prompt text alone.
   if (persisted.no_template) return (
     <div className="rounded-md border border-ink/10 bg-bg p-3">

@@ -16,6 +16,7 @@ import { CARD_SIZE, FACTION_CARD_CUT_MM, backgroundUrl, plateUrl, initialCardIds
 import { TextStyleFields } from './TextStyleFields'
 import { CardLens, MagnifierButton, useMagnifier } from './CardLens'
 import { Field, inputClass } from '../../components/Field'
+import { UnsavedGuard } from '../cards/UnsavedGuard'
 import { ModelStyleControls } from './ModelStyleControls'
 import { renderFactionCard, type FactionCardResult } from './render'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
@@ -78,10 +79,10 @@ export function FactionCardLayoutEditor() {
   }, [side, data, record.data, background, plate, assets, shared, layout, logoUrl, cards.images])
 
   const save = useMutation({
-    mutationFn: () => saveFactionCardLayout(draft),
+    mutationFn: (layout: Draft) => saveFactionCardLayout(layout),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['faction-card-layout'] }),
   })
-  const dirty = JSON.stringify(draft) !== JSON.stringify(stored.saved ?? {})
+  const dirty = loaded.current && JSON.stringify(draft) !== JSON.stringify(stored.saved ?? {})
   const sideElements = ELEMENTS.filter(e => e.side === side)
   if (!sideElements.some(e => e.key === selected)) setSelected(sideElements[0].key)
 
@@ -103,10 +104,10 @@ export function FactionCardLayoutEditor() {
     const vertical = d.key === 'logo' || d.key === 'backLogo' || d.key === 'forces' || TITLE_ALIGNED.includes(d.key)
     const group = d.mode === 'move' && (d.key === 'logo' || TITLE_ALIGNED.includes(d.key))
     // A centred box grows on both sides, so its corner follows the pointer when it widens by twice the drag.
-    const grow = d.key === 'forces' ? 2 * dx : dx
+    const grow = d.key === 'forces' || d.key === 'objectiveHeader' ? 2 * dx : dx
     const change: Partial<ElementLayout> = d.mode === 'move' ? (vertical ? { y: round(d.start.y + dy) } : { x: round(d.start.x + dx), y: round(d.start.y + dy) })
       : spec.kind === 'group' || spec.kind === 'icon' ? { scale: round(Math.max(0.2, (d.start.scale ?? 1) * (d.box.w + dx) / d.box.w)) }
-      : { ...(TITLE_ALIGNED.includes(d.key) ? {} : { w: round(Math.max(1, (d.start.w ?? d.box.w) + grow)) }), ...(d.start.h !== undefined || spec.kind === 'box' || spec.kind === 'image' ? { h: round(Math.max(1, (d.start.h ?? d.box.h) + dy)) } : {}) }
+      : { ...(TITLE_ALIGNED.includes(d.key) && d.key !== 'objectiveHeader' ? {} : { w: round(Math.max(1, (d.start.w ?? d.box.w) + grow)) }), ...(d.start.h !== undefined || spec.kind === 'box' || spec.kind === 'image' ? { h: round(Math.max(1, (d.start.h ?? d.box.h) + dy)) } : {}) }
     history.replace(v => ({ ...v, [d.key]: { ...v[d.key], ...change }, ...(group ? { title: { ...v.title, x: round(d.titleX + dx) } } : {}) }))
   }
   const endDrag = () => { drag.current = null }
@@ -116,6 +117,7 @@ export function FactionCardLayoutEditor() {
   if (!factions.data?.length) return <p className="text-sm text-ink/60">Create a faction to preview the faction card.</p>
   return <div ref={container} className="flex flex-wrap gap-4 border-t border-divider pt-4">
     {cards.probes}
+    <UnsavedGuard dirty={dirty} discard={() => history.set(stored.saved ?? {})} />
     <div className="w-full shrink-0 lg:w-[calc(66.667%-0.5rem)]">
       <div className="mb-2 flex flex-wrap items-center gap-2">
       <div role="tablist" aria-label="Card side" className="inline-flex overflow-hidden rounded-md border border-divider text-sm">
@@ -123,6 +125,10 @@ export function FactionCardLayoutEditor() {
           className={`cursor-pointer border-0 px-4 py-1.5 capitalize ${side === value ? 'bg-accent/15 text-accent' : 'bg-transparent text-ink/60 hover:text-ink'}`}>{value}</button>)}
       </div>
       <MagnifierButton on={magnify} onToggle={() => setMagnify(v => !v)} disabled={!result} />
+      <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate(draft)}>{save.isPending ? 'Saving…' : 'Save layout'}</Button>
+      <Button disabled={!dirty || save.isPending} onClick={() => { save.reset(); history.set(stored.saved ?? {}) }}>Discard</Button>
+      {dirty && !save.isPending && <span role="status" className="text-sm text-accent">Unsaved changes</span>}
+      {save.isSuccess && !dirty && <span role="status" className="text-sm text-success">Layout saved.</span>}
       </div>
       <CardLens on={magnify} source={result?.canvas ?? null}><div ref={root} className="relative select-none bg-black/30">
         {result ? <CardCanvas result={result} aria-label={`Faction card ${side} position preview`} className="block h-auto w-full" />
@@ -160,14 +166,11 @@ export function FactionCardLayoutEditor() {
         </div>
       </details>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save layout'}</Button>
         <Button disabled={!history.canUndo} onClick={history.undo}>Undo</Button>
         <Button disabled={!history.canRedo} onClick={history.redo}>Redo</Button>
-        <Button disabled={!dirty || save.isPending} onClick={() => { save.reset(); history.set(stored.saved ?? {}) }}>Discard</Button>
         <Button disabled={save.isPending} onClick={() => { save.reset(); history.set({}) }}>Reset to reference layout</Button>
       </div>
       {save.isError && <p role="alert" className="m-0 text-sm text-danger">{save.error.message}</p>}
-      {save.isSuccess && !dirty && <p role="status" className="m-0 text-sm text-success">Layout saved.</p>}
       <p className="m-0 text-xs text-ink/50">Positions apply to every faction's card.</p>
     </div>
   </div>

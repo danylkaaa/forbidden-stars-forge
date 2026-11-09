@@ -14,6 +14,8 @@ export type CtFields = { description: string; constraints: string; rendering_sty
 
 export const sameCt = (a: CtFields, b: CtFields) => a.description === b.description && a.constraints === b.constraints && (a.rendering_style ?? '') === (b.rendering_style ?? '')
 
+export type LabPanel = 'setup' | 'prompt' | 'result'
+
 type LabState = {
   factionId: number | null
   cardTypeId: number | null

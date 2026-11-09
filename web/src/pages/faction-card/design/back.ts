@@ -6,7 +6,7 @@ import type { FactionCardLayout } from '../layout'
 import { measureParagraph, paintParagraph } from '../text'
 import type { Box } from '../placeholders'
 import { forcesGeometry, letterBox, objectiveCells, portraitBox, OBJECTIVE } from './geometry'
-import { band, boxShadow, connector, cornerSquares, fitImage, recolor, screenGradient, screenPanel, withShadows, CARD_SHADOW, type Ctx, type DesignAssets, type Drawable } from './paint'
+import { band, boxShadow, connector, cornerSquares, fitImage, recolor, screenFill, screenPanel, withShadows, CARD_SHADOW, type Ctx, type DesignAssets, type Drawable } from './paint'
 import { centerInk, centerNormal, fitFont } from './text'
 import type { CardTheme } from './theme'
 
@@ -76,7 +76,7 @@ export function drawPortrait(ctx: Ctx, layout: FactionCardLayout, T: CardTheme, 
   inBlock(ctx, b, BACK_U, (w, h) => {
     const box = { x: 0, y: 0, w, h }
     boxShadow(ctx, box, CARD_SHADOW)
-    screenGradient(ctx, box, T)
+    screenFill(ctx, box, T)
     if (picture) fitImage(ctx, picture, box, 'cover', crop)
     band(ctx, box, -2, 0, T.outline); band(ctx, box, 4, 6, T.outline)
     cornerSquares(ctx, box, T)
@@ -110,7 +110,7 @@ export function drawObjectives(ctx: Ctx, p: ObjectivesInput): { warnings: string
       const box = { x: 0, y: 0, w: o.frameW, h: o.bodyH + 2 * o.tip }
       withShadows(ctx, [{ dx: 0, dy: 5, blur: 6, color: 'rgba(0,0,0,.6)' }], () => {
         ctx.save(); ctx.beginPath(); polygon(ctx, OUTER); ctx.clip()
-        screenGradient(ctx, box, T)
+        screenFill(ctx, box, T)
         const pic = p.pictures[i]
         if (pic) fitImage(ctx, pic, box, 'cover')
         // the frame's border is one solid colour

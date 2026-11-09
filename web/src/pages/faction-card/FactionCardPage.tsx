@@ -20,8 +20,9 @@ import { useFactionCardLayout, type FactionCardLayout } from './layout'
 import { useFactionLogoUrl } from './useFactionCardCanvases'
 import { useCardImages } from './useCardImages'
 import { deleteAsset, saveFactionCard, uploadAsset, useFactionCard, useFactionCardDefaults, type AssetRef } from './api'
-import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, plateUrl, downloadName, initialCardIds, normalizeData, resolveTextStyles, DEFAULT_PORTRAIT_CROP, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
+import { CARD_SIZE, DEFAULT_ICONS, FACTION_CARD_CUT_MM, UNIT_SLOTS, assetKeys, backgroundUrl, plateUrl, downloadName, initialCardIds, normalizeData, pickHighlights, resolveTextStyles, withoutHighlights, DEFAULT_PORTRAIT_CROP, type FactionCardData, type ForcesIcon, type InitialRow, type SlotKey, type UnitStats } from './model'
 import { pngBlob, renderFactionCard, structurePriceBox, unitRowBox, type FactionCardResult, type Side } from './render'
+import { lighter } from './stl'
 import { BUNDLED_ICONS } from './bundled'
 import { THEME_PRESETS, themeColor } from './design/theme'
 import { StructureDialog, UnitModelDialog } from './UnitModelDialog'
@@ -179,7 +180,7 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
     {cards.probes}
     {draft && openSlot && openSlot !== 'city' && openSlot !== 'factory' && <UnitModelDialog factionId={factionId!} slot={openSlot} label={draft.data.units[openSlot].name || openSlot} unit={draft.data.units[openSlot]} onUnitChange={patch => setUnit(openSlot, patch)} style={layout.modelStyle}
       stlUrl={assets[assetKeys.model(openSlot)]} iconUrl={assets[assetKeys.icon(openSlot)]}
-      orientation={draft.data.models[openSlot]} color={draft.color} cardInput={frontInput} onChange={o => edit({ models: { ...draft.data.models, [openSlot]: o } })} onClose={() => setOpenSlot(null)} />}
+      orientation={draft.data.models[openSlot]} color={draft.color} highlight={draft.data.highlight_color} highlights={draft.data.highlights} cardInput={frontInput} onChange={o => edit({ models: { ...draft.data.models, [openSlot]: withoutHighlights(o) }, highlights: pickHighlights(o) })} onClose={() => setOpenSlot(null)} />}
     {draft && (openSlot === 'city' || openSlot === 'factory') && <StructureDialog label={openSlot === 'city' ? 'City' : 'Factory'} cost={openSlot === 'city' ? draft.data.city_cost : draft.data.factory_cost}
       onCost={n => edit(openSlot === 'city' ? { city_cost: n } : { factory_cost: n })} onClose={() => setOpenSlot(null)} />}
     {draft && <div className="grid items-start gap-5 xl:grid-cols-[minmax(320px,2.2fr)_minmax(380px,1fr)]">
@@ -280,6 +281,8 @@ export default function FactionCardPage({ only }: { only?: Side } = {}) {
         {only !== 'back' && <Section title="Units" label="Units">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Faction unit colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.color} onChange={color => { save.reset(); setDraft(d => d && { ...d, color }) }} />}</Field>
+            <Field label="Highlight colour">{id => <ColorInput id={id} className="h-9 w-16 cursor-pointer rounded border border-divider bg-bg" value={draft.data.highlight_color || lighter(draft.color)} onChange={highlight_color => edit({ highlight_color })} />}</Field>
+            <Button disabled={!draft.data.highlight_color} onClick={() => edit({ highlight_color: '' })}>Use a lighter unit colour</Button>
           </div>
           <p className="m-0 text-xs text-ink/55">Every model is painted in this colour. To change a unit's name, numbers or model, click it on the front preview; click the city or the factory to change its price. Model shadow and outline are shared by all factions: set them on <Link to="/card-templates" className="text-accent underline">Card Types → Faction card</Link>.</p>
         </Section>}

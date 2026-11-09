@@ -25,8 +25,10 @@ type CardType struct {
 	AspectRatio float64 `json:"aspect_ratio"`
 	// RenderingStyle is the art style line of the prompt's Rendering section; empty = the default (photorealistic).
 	RenderingStyle string `json:"rendering_style"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	// WithCharacter: images are painted around the faction's character, which is kept unchanged.
+	WithCharacter bool   `json:"with_character"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 type CardTypesStore struct {
@@ -37,11 +39,11 @@ func NewCardTypesStore(db *sql.DB) *CardTypesStore {
 	return &CardTypesStore{db: db}
 }
 
-const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm, aspect_ratio, rendering_style"
+const cardTypeCols = "id, name, description, constraints, COALESCE(template_path,''), COALESCE(openai_file_id,''), COALESCE(overlay_path,''), created_at, updated_at, no_template, image_size, card_width_mm, card_height_mm, aspect_ratio, rendering_style, with_character"
 
 func scanCardType(row interface{ Scan(...any) error }) (CardType, error) {
 	var ct CardType
-	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM, &ct.AspectRatio, &ct.RenderingStyle)
+	err := row.Scan(&ct.ID, &ct.Name, &ct.Description, &ct.Constraints, &ct.TemplatePath, &ct.OpenAIFileID, &ct.OverlayPath, &ct.CreatedAt, &ct.UpdatedAt, &ct.NoTemplate, &ct.ImageSize, &ct.CardWidthMM, &ct.CardHeightMM, &ct.AspectRatio, &ct.RenderingStyle, &ct.WithCharacter)
 	if err == sql.ErrNoRows {
 		return ct, ErrNotFound
 	}
@@ -123,6 +125,18 @@ func (s *CardTypesStore) Update(id int64, name, description, constraints string,
 // SetImageSize sets (or with "" clears) the type's AI image size.
 func (s *CardTypesStore) SetImageSize(id int64, size string) (CardType, error) {
 	res, err := s.db.Exec(`UPDATE card_types SET image_size = ?, updated_at = datetime('now') WHERE id = ?`, size, id)
+	if err != nil {
+		return CardType{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return CardType{}, ErrNotFound
+	}
+	return s.Get(id)
+}
+
+// SetWithCharacter turns painting around the faction's character on or off.
+func (s *CardTypesStore) SetWithCharacter(id int64, on bool) (CardType, error) {
+	res, err := s.db.Exec(`UPDATE card_types SET with_character = ?, updated_at = datetime('now') WHERE id = ?`, on, id)
 	if err != nil {
 		return CardType{}, err
 	}

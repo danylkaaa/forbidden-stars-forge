@@ -11,6 +11,8 @@ import { ElementPlacement } from './ElementPlacement'
 import { maskedImageUrl, useImageMasks } from '../../lib/imageMasks'
 import { EditImageButton, HideAreasButton, ZoomableImage } from '../../components/ImageLightbox'
 import { ModelOverrideSelect } from '../../components/ModelOverrideSelect'
+import { CharacterPlacer } from './CharacterPlacer'
+import { Group, Panel, Separator, useDefaultLayout, usePanelRef, type PanelSize } from 'react-resizable-panels'
 import { LayerControls, LayeredImage, OverlayToggle } from '../../components/PreviewLayers'
 import { GeneratingSpinner } from '../../components/GeneratingSpinner'
 import { FavoriteButton } from '../../components/FavoriteButton'
@@ -35,7 +37,7 @@ const FACTION_CARD_SAFE_AREA = { px: CARD_SIZE, cutMm: FACTION_CARD_CUT_MM }
 const isFactionCardType = (name: string) => name === 'faction card' || name === 'faction card back'
 import { joinPrompt, splitPrompt } from './promptSections'
 import { FrontImagePicker, type FrontImageOption } from './FrontImagePicker'
-import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields } from './store'
+import { sameCt, sameFields, useFactionLab, type CtFields, type LabFields, type LabPanel } from './store'
 
 // The prompt parts that come from an editable field: the tab it is on and the field.
 const PART_FIELDS: Record<string, { tab: 'faction' | 'card-type'; field: string }> = {
@@ -242,6 +244,12 @@ export default function FactionLabPage() {
   const history = results.filter((g) => g.status !== 'failed')
 
   const panel = 'flex min-h-0 flex-col gap-3 rounded-md bg-surface p-4 shadow-[0_0_0_1px_var(--color-neutral-800)]'
+  const panels = { setup: usePanelRef(), prompt: usePanelRef(), result: usePanelRef() }
+  const [folded, setFolded] = useState({ setup: false, prompt: false, result: false })
+  // A group not laid out yet (0 px wide) reports every panel collapsed; only a measured one counts.
+  const syncFold = (key: LabPanel, size: PanelSize) => setFolded((f) => { const v = size.inPixels > 0 && !!panels[key].current?.isCollapsed(); return f[key] === v ? f : { ...f, [key]: v } })
+  const fold = (key: LabPanel, value: boolean) => (value ? panels[key].current?.collapse() : panels[key].current?.expand())
+  const savedLayout = useDefaultLayout({ id: 'faction-lab-panels' })
 
   return (
     <div className="flex h-full min-h-[600px] flex-col gap-4">
@@ -250,9 +258,13 @@ export default function FactionLabPage() {
         <p className="m-0 text-[13px] text-ink/55">Nothing is saved until you click Save to faction</p>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(300px,0.85fr)] gap-4">
+      {/* Drag the gaps to resize the panels; « folds one to a strip. Sizes are remembered in this browser. */}
+      <Group id="faction-lab-panels" className="min-h-0 flex-1" defaultLayout={savedLayout.defaultLayout} onLayoutChanged={savedLayout.onLayoutChanged}>
         {/* Left: what to try */}
-        <section className={`${panel} overflow-y-auto`}>
+        <Panel id="setup" panelRef={panels.setup} collapsible collapsedSize="2.5rem" minSize="280px" defaultSize="24%" onResize={(size) => syncFold('setup', size)} className="flex">
+        {folded.setup ? <FoldedPanel title="Setup" onOpen={() => fold('setup', false)} /> :
+        <section className={`${panel} relative w-full overflow-y-auto`}>
+          <FoldButton title="Setup" onClick={() => fold('setup', true)} className="absolute top-1.5 right-1.5" />
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="Faction">
               {(id) => (
@@ -268,13 +280,15 @@ export default function FactionLabPage() {
                 <SearchableSelect id={id} className={selectClass} value={lab.cardTypeId ?? ''}
                   onChange={(e) => { lab.set({ cardTypeId: e.target.value ? Number(e.target.value) : null }); setSelectedId(null) }}>
                   <option value="">Select…</option>
-                  {cardTypes?.filter((c) => c.name !== 'upgrade').map((c) => <option key={c.id} value={c.id}>{c.openai_file_id || c.no_template ? c.name : `${c.name} (no file)`}</option>)}
+                  {cardTypes?.filter((c) => c.name !== 'upgrade').map((c) => <option key={c.id} value={c.id}>{c.openai_file_id || c.no_template || c.with_character ? c.name : `${c.name} (no file)`}</option>)}
                 </SearchableSelect>
               )}
             </Field>
             <QualitySlider value={lab.quality} onChange={(quality) => lab.set({ quality })} sent={chosen?.quality} />
             <ModelOverrideSelect value={lab.model} onChange={(model) => lab.set({ model })} />
           </div>
+
+          {cardType?.with_character && lab.factionId !== null && <CharacterPlacer factionId={lab.factionId} imageSize={cardType.image_size ?? ''} />}
 
           {isBack && (
             <FrontImagePicker key={`${lab.factionId}-${lab.cardTypeId}`} options={frontOptions} selectedKey={frontImage?.key ?? ''}
@@ -401,13 +415,19 @@ export default function FactionLabPage() {
               </div>
             </>
           )}
-        </section>
+        </section>}
+
+        </Panel>
+        <ResizeHandle />
 
         {/* Middle: exactly what will be sent */}
-        <section className={panel}>
-          <div className="flex items-center justify-between">
+        <Panel id="prompt" panelRef={panels.prompt} collapsible collapsedSize="2.5rem" minSize="240px" defaultSize="42%" onResize={(size) => syncFold('prompt', size)} className="flex">
+        {folded.prompt ? <FoldedPanel title="Assembled prompt" onOpen={() => fold('prompt', false)} /> :
+        <section className={`${panel} w-full`}>
+          <div className="flex items-center justify-between gap-2">
             <h2 className="m-0 text-[15px] font-medium">Assembled prompt</h2>
-            {!promptReady && lab.cardTypeId !== null && fields && <span className="text-[11px] text-ink/45">updating…</span>}
+            {!promptReady && lab.cardTypeId !== null && fields && <span className="ml-auto text-[11px] text-ink/45">updating…</span>}
+            <FoldButton title="Assembled prompt" onClick={() => fold('prompt', true)} />
           </div>
           {parts.length > 0 && (
             <fieldset aria-label="Prompt parts to send" className="m-0 flex flex-wrap gap-x-3 gap-y-1 border-0 p-0">
@@ -439,24 +459,32 @@ export default function FactionLabPage() {
                 </div>
               ))}
           </div>
-          {cardType && !cardType.openai_file_id && !cardType.no_template && (
+          {cardType && !cardType.openai_file_id && !cardType.no_template && !cardType.with_character && (
             <p className="m-0 text-[13px] text-warn">This image type has no OpenAI file uploaded yet.</p>
           )}
           {error && <p role="alert" className="m-0 text-sm text-danger">{error}</p>}
           <div className="flex items-center gap-3">
             <Button variant="primary" type="button" onClick={onGenerate}
-              disabled={!promptReady || !sentPrompt.trim() || !(cardType?.openai_file_id || cardType?.no_template) || busy !== null}>
+              disabled={!promptReady || !sentPrompt.trim() || !(cardType?.openai_file_id || cardType?.no_template || cardType?.with_character) || busy !== null}>
               {busy === 'generate' ? 'Starting…' : 'Generate'}
             </Button>
             <span className="text-xs text-ink/45">
               {estimate !== null && `est. ${formatCost(estimate)} · `}{expectedMs > 0 && `usually ~${formatDuration(expectedMs)} · `}uses the fields as they are now
             </span>
           </div>
-        </section>
+        </section>}
+
+        </Panel>
+        <ResizeHandle />
 
         {/* Right: the result */}
-        <section className={panel}>
-          <h2 className="m-0 text-[15px] font-medium">Result</h2>
+        <Panel id="result" panelRef={panels.result} collapsible collapsedSize="2.5rem" minSize="260px" defaultSize="34%" onResize={(size) => syncFold('result', size)} className="flex">
+        {folded.result ? <FoldedPanel title="Result" onOpen={() => fold('result', false)} /> :
+        <section className={`${panel} w-full`}>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="m-0 text-[15px] font-medium">Result</h2>
+            <FoldButton title="Result" onClick={() => fold('result', true)} />
+          </div>
           {!faction || !cardType ? (
             <p className="m-0 text-sm text-ink/50">Pick a faction and image type.</p>
           ) : !current ? (
@@ -493,8 +521,9 @@ export default function FactionLabPage() {
               </div>
             </div>
           )}
-        </section>
-      </div>
+        </section>}
+        </Panel>
+      </Group>
     </div>
   )
 }
@@ -526,8 +555,9 @@ function ResultView({ gen, cardType, expectedMs, cardTypeName, alt, maskSrc, lab
   const maskOn = usePreviewLayers((l) => l.mask)
   const placedMask = useFactionCardOver(gen.faction_id, side, factionCard && maskOn ? maskSrc : null, true, true)
   const shownMask = placedMask.url
-  // The picture alone is not the card yet: no cut lines until it is shown on the card.
-  const safeArea = !factionCard ? undefined : !board.url ? null : FACTION_CARD_SAFE_AREA
+  // The picture alone is not the card yet: no cut lines until it is shown on the card. A "with character" picture is
+  // the faction card's whole background, so it has the faction card's lines.
+  const safeArea = cardType?.with_character ? FACTION_CARD_SAFE_AREA : !factionCard ? undefined : !board.url ? null : FACTION_CARD_SAFE_AREA
   // Event fronts are checked as the finished event card, like combat fronts.
   const cardCategory = cardTypeName === 'events' ? 'schema' as const : combatSide === 'front' ? 'combat' as const : undefined
   const asCard = !!cardCategory && overlayOn
@@ -600,4 +630,26 @@ function QualitySlider({ value, onChange, sent }: { value: LabQuality; onChange:
         className={`cursor-pointer border-0 bg-transparent p-0 ${q === value ? 'font-medium text-accent' : 'text-ink/55'}`}>{q}</button>)}
     </div>
   </div>
+}
+
+// Folds a lab panel to a thin strip.
+function FoldButton({ title, onClick, className = '' }: { title: string; onClick: () => void; className?: string }) {
+  return <button type="button" onClick={onClick} aria-label={`Hide ${title}`} title={`Hide ${title}`}
+    className={`cursor-pointer rounded border-0 bg-transparent px-1.5 text-base leading-none text-ink/45 hover:text-accent-300 ${className}`}>«</button>
+}
+
+// A folded lab panel: its name written down the strip; clicking anywhere opens it again.
+function FoldedPanel({ title, onOpen }: { title: string; onOpen: () => void }) {
+  return <button type="button" onClick={onOpen} aria-label={`Show ${title}`} title={`Show ${title}`}
+    className="flex min-h-0 w-full cursor-pointer flex-col items-center gap-2 rounded-md border-0 bg-surface py-3 text-ink/60 shadow-[0_0_0_1px_var(--color-neutral-800)] hover:text-accent-300">
+    <span aria-hidden="true" className="text-base leading-none">»</span>
+    <span className="text-[13px] font-medium tracking-wider [writing-mode:vertical-rl]">{title}</span>
+  </button>
+}
+
+// The gap between two lab panels; drag it to resize them.
+function ResizeHandle() {
+  return <Separator className="group flex w-4 items-stretch justify-center outline-none">
+    <div className="my-2 w-px rounded bg-divider transition-colors group-hover:bg-accent/70 group-data-[separator=active]:bg-accent group-focus-visible:bg-accent" />
+  </Separator>
 }

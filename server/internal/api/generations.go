@@ -29,16 +29,18 @@ type GenerationsHandler struct {
 	Settings  *store.SettingsStore
 	Usage     *store.UsageStore
 	Masks     *store.ImageMasksStore
-	DataDir   string
+	// Characters are the factions' character pictures, painted around by "with character" types.
+	Characters *store.CharactersStore
+	DataDir    string
 }
 
 type generateRequest struct {
-	FactionID      int64        `json:"faction_id"`
-	CardTypeID     int64        `json:"card_type_id"`
-	Mode           string       `json:"mode"`
+	FactionID  int64  `json:"faction_id"`
+	CardTypeID int64  `json:"card_type_id"`
+	Mode       string `json:"mode"`
 	// Quality chosen for this run (low, medium, high, xhigh, max); empty = the mode's Settings quality. A low or
 	// medium run counts as a draft, the rest as finals.
-	Quality string `json:"quality"`
+	Quality        string       `json:"quality"`
 	PromptOverride string       `json:"prompt_override"`
 	Model          string       `json:"model"` // empty = Settings default
 	FrontImage     *imageSource `json:"front_image"`
@@ -83,8 +85,8 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// A type with no template is generated from its prompt alone.
-	if ct.OpenAIFileID == "" && !ct.NoTemplate {
+	// A type with no template is generated from its prompt alone; a "with character" type from the character.
+	if ct.OpenAIFileID == "" && !ct.NoTemplate && !ct.WithCharacter {
 		writeError(w, http.StatusConflict, "card type has no OpenAI file — upload it first")
 		return
 	}
@@ -92,6 +94,16 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	p := req.PromptOverride
 	if p == "" {
 		p = promptFor(ct, factionStyle(f))
+	}
+	var character []byte
+	if ct.WithCharacter {
+		var status int
+		var err error
+		if character, status, err = characterCanvas(h.Characters, h.DataDir, f.ID, ct.ImageSize); err != nil {
+			writeError(w, status, err.Error())
+			return
+		}
+		p = prompt.WithCharacterFill(p)
 	}
 	var frontURL string
 	if req.FrontImage != nil {
@@ -139,7 +151,14 @@ func (h *GenerationsHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.start(g.ID, openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct)}, cropTo(ct))
+	edit := openai.ImageEditRequest{Model: model, FileID: ct.OpenAIFileID, ReferenceImageURL: frontURL, Prompt: p, Quality: quality, Size: ct.ImageSize, Background: backgroundFor(ct)}
+	post := cropTo(ct)
+	if character != nil {
+		// The canvas is also the mask: its empty part is painted. OpenAI's result is used as it is.
+		canvas := "data:image/png;base64," + base64.StdEncoding.EncodeToString(character)
+		edit.FileID, edit.ImageURL, edit.MaskURL, edit.Background = "", canvas, canvas, "opaque"
+	}
+	h.start(g.ID, edit, post)
 	writeJSON(w, http.StatusCreated, g)
 }
 
@@ -422,9 +441,12 @@ func (h *GenerationsHandler) Assemble(w http.ResponseWriter, r *http.Request) {
 	if req.HasFrontImage && strings.HasSuffix(ct.Name, " back") {
 		p = prompt.WithFrontReference(p)
 	}
+	if ct.WithCharacter {
+		p = prompt.WithCharacterFill(p)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"prompt":   p,
-		"has_file": ct.OpenAIFileID != "" || ct.NoTemplate,
+		"has_file": ct.OpenAIFileID != "" || ct.NoTemplate || ct.WithCharacter,
 	})
 }
 
@@ -477,8 +499,12 @@ func backMatchesFront(back, front string) bool {
 	return front == strings.TrimSuffix(back, " back")
 }
 
-// promptFor is the image prompt of a card type: it edits the template, or, with no template, paints from the text.
+// promptFor is the image prompt of a card type: it extends the faction's character picture, edits the template, or,
+// with no template, paints from the text.
 func promptFor(ct store.CardType, f prompt.FactionStyle) string {
+	if ct.WithCharacter {
+		return prompt.ImageAround(ct.Description, ct.Constraints, f, ct.RenderingStyle)
+	}
 	if ct.NoTemplate {
 		return prompt.ImageNew(ct.Description, ct.Constraints, f, ct.RenderingStyle)
 	}

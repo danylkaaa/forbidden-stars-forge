@@ -13,7 +13,7 @@ import { deriveTheme, themeColor } from './design/theme'
 
 export type Side = 'front' | 'back'
 type Drawable = HTMLImageElement | HTMLCanvasElement
-export type ModelIcon = (url: string, orientation: Partial<Orientation>, color: string) => Promise<Drawable>
+export type ModelIcon = (url: string, orientation: Partial<Orientation>, color: string, highlight?: string) => Promise<Drawable>
 export type FactionCardInput = {
   side: Side; data: FactionCardData; unitColor: string
   backgroundUrl: string | null
@@ -77,6 +77,7 @@ export function structurePriceBox(which: 'city' | 'factory', layout: FactionCard
 const wideField = (o: Orientation): Orientation => ({
   ...o, scale: o.scale / MODEL_FIELD, x: o.x / MODEL_FIELD, y: o.y / MODEL_FIELD,
   shadowBlur: o.shadowBlur / MODEL_FIELD, shadowX: o.shadowX / MODEL_FIELD, shadowY: o.shadowY / MODEL_FIELD, outline: o.outline / MODEL_FIELD, innerShadowSize: o.innerShadowSize / MODEL_FIELD,
+  edgeWidth: o.edgeWidth / MODEL_FIELD, cavityRadius: o.cavityRadius / MODEL_FIELD,
 })
 
 export async function renderFactionCard(input: FactionCardInput): Promise<FactionCardResult> {
@@ -95,7 +96,7 @@ export async function renderFactionCard(input: FactionCardInput): Promise<Factio
       if (key === 'bastion') return null
       const override = assets[assetKeys.icon(key)], model = assets[assetKeys.model(key)]
       if (override) return optional(override)
-      if (model) return modelIcon(model, wideField(withDefaults({ ...data.models[key], ...layout.modelStyle })), unitColor).catch(() => null)
+      if (model) return modelIcon(model, wideField(withDefaults({ ...data.models[key], ...data.highlights, ...layout.modelStyle })), unitColor, data.highlight_color).catch(() => null)
       return null
     })),
     Promise.all(data.objectives.map((_, i) => side === 'back' ? optional(assets[assetKeys.objective(i)]) : null)),

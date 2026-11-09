@@ -124,8 +124,11 @@ export function logoRect(side: Side, l: FactionCardLayout): { x: number; y: numb
 
 // The front's subtitle, text and objective heading share the title's width and centre; only their height and position down the card are their own.
 export const TITLE_ALIGNED: readonly ElementKey[] = ['subtitle', 'text', 'objectiveHeader']
+// The objective heading keeps its own width, centred under the title, so it can fit the window below it.
 export function aligned(key: ElementKey, l: FactionCardLayout): ElementLayout {
-  return TITLE_ALIGNED.includes(key) ? { ...l[key], x: l.title.x, w: l.title.w } : l[key]
+  const title = l.title, tw = title.w ?? 20
+  if (key === 'objectiveHeader') { const w = l[key].w ?? tw; return { ...l[key], x: title.x + (tw - w) / 2, w } }
+  return TITLE_ALIGNED.includes(key) ? { ...l[key], x: title.x, w: tw } : l[key]
 }
 
 // The area an element occupies, in % of the card, for the editor's drag boxes.

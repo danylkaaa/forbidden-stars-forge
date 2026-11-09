@@ -1,4 +1,4 @@
-import { AmbientLight, BufferGeometry, DirectionalLight, HemisphereLight, Mesh, MeshNormalMaterial, MeshStandardMaterial, OrthographicCamera, Scene, WebGLRenderer } from 'three'
+import { AmbientLight, BufferGeometry, DirectionalLight, FloatType, HemisphereLight, Mesh, MeshNormalMaterial, MeshStandardMaterial, OrthographicCamera, RGBAFormat, Scene, ShaderMaterial, WebGLRenderTarget, WebGLRenderer } from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { withDefaults, type Orientation } from './model'
@@ -31,12 +31,12 @@ function sharedRenderer() {
 // The 3D part: lit model with relief and detail lines. It does not depend on
 // the shared shadow / outline / contrast settings, so it is cached apart and
 // changing those settings only redoes the cheap 2D finishing below.
-async function renderModelBase(url: string, o: Orientation, color: string, size: number): Promise<HTMLCanvasElement> {
+async function renderModelBase(url: string, o: Orientation, color: string, highlight: string, size: number): Promise<HTMLCanvasElement> {
   const geometry = await loadGeometry(url)
   const radius = geometry.boundingSphere?.radius || 1
   const scene = new Scene()
   const material = new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.08 })
-  const mesh = new Mesh<BufferGeometry, MeshStandardMaterial | MeshNormalMaterial>(geometry, material)
+  const mesh = new Mesh<BufferGeometry, MeshStandardMaterial | MeshNormalMaterial | ShaderMaterial>(geometry, material)
   const rad = (deg: number) => deg * Math.PI / 180
   mesh.rotation.set(rad(o.rx), rad(o.ry), rad(o.rz), 'XYZ')
   // A strong low-ambient key light from the chosen direction brings out the
@@ -102,8 +102,68 @@ async function renderModelBase(url: string, o: Orientation, color: string, size:
     litCtx.globalCompositeOperation = 'source-over'
     normalMaterial.dispose()
   }
+  if (o.edge > 0 || o.wash > 0 || o.cavity > 0 || o.rim > 0) {
+    mesh.material = normalDepth
+    paintHighlights(gl, scene, camera, o, half * 2 / size, litCtx, size, highlight || lighter(color))
+  }
   material.dispose()
   return lit
+}
+
+export const lighter = (color: string) => '#' + [1, 3, 5].map(n => parseInt(color.slice(n, n + 2), 16) || 0).map(c => Math.round(c + (255 - c) * 0.4).toString(16).padStart(2, '0')).join('')
+
+// View-space normal in rgb and distance from the camera in alpha; alpha 0 is background.
+const normalDepth = new ShaderMaterial({
+  vertexShader: 'varying vec3 vN; varying float vD; void main() { vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position, 1.0); vD = -mv.z; gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'varying vec3 vN; varying float vD; void main() { gl_FragColor = vec4(normalize(vN), vD); }',
+})
+
+// Box blur run twice each way: close to a gaussian, linear in the radius.
+function blur(src: Float32Array, n: number, r: number) {
+  const a = new Float32Array(n * n), b = new Float32Array(n * n)
+  const pass = (from: Float32Array, to: Float32Array, horizontal: boolean) => {
+    for (let line = 0; line < n; line++) {
+      const at = (k: number) => { k = Math.min(n - 1, Math.max(0, k)); return from[horizontal ? line * n + k : k * n + line] }
+      let sum = 0
+      for (let k = -r; k <= r; k++) sum += at(k)
+      for (let k = 0; k < n; k++) { to[horizontal ? line * n + k : k * n + line] = sum / (2 * r + 1); sum += at(k + r + 1) - at(k - r) }
+    }
+  }
+  pass(src, a, true); pass(a, b, false); pass(b, a, true); pass(a, b, false)
+  return b
+}
+
+// Highlights that do not depend on the light, from a float normal + depth pass: raised edges (the normal turns
+// convex) get the highlight colour, creases darken; a pixel nearer or farther than its neighbourhood average is
+// raised or recessed; surfaces turned away from the viewer get a rim of light.
+function paintHighlights(gl: WebGLRenderer, scene: Scene, camera: OrthographicCamera, o: Orientation, perPx: number, ctx: CanvasRenderingContext2D, n: number, highlight: string) {
+  const target = new WebGLRenderTarget(n, n, { type: FloatType, format: RGBAFormat })
+  gl.setRenderTarget(target); gl.clear(); gl.render(scene, camera); gl.setRenderTarget(null)
+  const raw = new Float32Array(n * n * 4)
+  gl.readRenderTargetPixels(target, 0, 0, n, n, raw)
+  target.dispose()
+  const nx = new Float32Array(n * n), ny = new Float32Array(n * n), nz = new Float32Array(n * n), depth = new Float32Array(n * n), mask = new Float32Array(n * n)
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = y * n + x, j = ((n - 1 - y) * n + x) * 4 // GL rows go bottom-up
+    if (raw[j + 3] <= 0) continue
+    nx[i] = raw[j]; ny[i] = raw[j + 1]; nz[i] = raw[j + 2]; depth[i] = raw[j + 3]; mask[i] = 1
+  }
+  const r = Math.max(1, Math.round(o.cavityRadius * n)), s = Math.max(1, Math.round(o.edgeWidth * n / 256))
+  const avgDepth = o.cavity > 0 ? blur(depth, n, r) : depth, avgMask = o.cavity > 0 ? blur(mask, n, r) : mask
+  const step = 8 * s * perPx, tint = [1, 3, 5].map(k => parseInt(highlight.slice(k, k + 2), 16) || 0)
+  const img = ctx.getImageData(0, 0, n, n), px = img.data
+  for (let y = s; y < n - s; y++) for (let x = s; x < n - s; x++) {
+    const i = y * n + x
+    if (!mask[i] || px[i * 4 + 3] === 0) continue
+    const u = o.cavity > 0 ? (avgDepth[i] / avgMask[i] - depth[i]) / (r * perPx) : 0
+    const L = i - s, R = i + s, U = i - s * n, D = i + s * n
+    // Steps in depth are one part in front of another, not a bend.
+    const c = mask[L] && mask[R] && mask[U] && mask[D] && Math.abs(depth[R] - depth[L]) < step && Math.abs(depth[D] - depth[U]) < step ? (nx[R] - nx[L]) + (ny[U] - ny[D]) : 0
+    const light = Math.min(1, o.edge * Math.max(0, c) * 0.6 + o.cavity * Math.max(0, u) * 0.5 + o.rim * (1 - Math.max(0, nz[i])) ** 3)
+    const dark = Math.min(0.9, o.wash * Math.max(0, -c) * 0.6 + o.cavity * Math.max(0, -u))
+    for (let k = 0; k < 3; k++) { const p = px[i * 4 + k] * (1 - dark); px[i * 4 + k] = p + (tint[k] - p) * light }
+  }
+  ctx.putImageData(img, 0, 0)
 }
 
 function finishModelIcon(lit: HTMLCanvasElement, o: Orientation, size: number): HTMLCanvasElement {
@@ -150,18 +210,18 @@ function finishModelIcon(lit: HTMLCanvasElement, o: Orientation, size: number): 
   return out
 }
 
-const BASE_KEYS = ['rx', 'ry', 'rz', 'scale', 'x', 'y', 'lightAzimuth', 'lightElevation', 'lightPower', 'lightAmbient', 'detail', 'relief'] as const
+const BASE_KEYS = ['rx', 'ry', 'rz', 'scale', 'x', 'y', 'lightAzimuth', 'lightElevation', 'lightPower', 'lightAmbient', 'detail', 'relief', 'edge', 'edgeWidth', 'wash', 'cavity', 'cavityRadius', 'rim'] as const
 const bases = new Map<string, Promise<HTMLCanvasElement>>()
 // A miniature rendered on a transparent square: front-lit, orthographic.
 // `scale` 1 fits the model's bounding sphere inside the square, so turning
 // the model never changes its size.
-export async function renderModelIcon(url: string, pose: Partial<Orientation>, color: string, size = 512): Promise<HTMLCanvasElement> {
+export async function renderModelIcon(url: string, pose: Partial<Orientation>, color: string, highlight = '', size = 512): Promise<HTMLCanvasElement> {
   const o = withDefaults(pose)
-  const baseKey = JSON.stringify([url, BASE_KEYS.map(k => o[k]), color, size])
+  const baseKey = JSON.stringify([url, BASE_KEYS.map(k => o[k]), color, highlight, size])
   let base = bases.get(baseKey)
   if (!base) {
     if (bases.size >= 60) bases.delete(bases.keys().next().value!)
-    base = renderModelBase(url, o, color, size); bases.set(baseKey, base)
+    base = renderModelBase(url, o, color, highlight, size); bases.set(baseKey, base)
     base.catch(() => bases.delete(baseKey))
   }
   const cacheKey = JSON.stringify([baseKey, o.shadow, o.shadowBlur, o.shadowX, o.shadowY, o.outline, o.innerShadow, o.innerShadowSize, o.contrast])

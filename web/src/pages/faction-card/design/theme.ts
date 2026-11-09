@@ -8,8 +8,8 @@ export const THEME_PRESETS = [
 
 export type CardTheme = {
   base: string       // card and circle fill
-  mid: string        // peak of the screen / banner gradient
-  pale: string       // near-white ends of that gradient, tinted with the hue
+  mid: string        // the panel colour; screens are an even mix of it and pale
+  pale: string       // near-white, tinted with the hue
   outline: string    // own border and outer border
   frame: string      // solid border of the objective picture frames
   corner: string; cornerGlow: string; cornerEdge: string
@@ -42,7 +42,7 @@ export type ThemeOverrides = { panel?: string; frame?: string; light?: string }
 export function deriveTheme(hex: string, over: ThemeOverrides = {}): CardTheme {
   const [h, s] = hexToHsl(isHex(hex) ? hex : DEFAULT_THEME_COLOR), H = Math.round(h)
   const hsl = (sat: number, light: number, alpha = 1) => `hsla(${H}, ${clamp(sat)}%, ${light}%, ${alpha})`
-  // A chosen panel colour is the light panels' peak colour; their near-white ends take its hue.
+  // A chosen panel colour is mixed into the light panels; their near-white tint takes its hue.
   const [ph, ps] = isHex(over.panel) ? hexToHsl(over.panel) : [h, s]
   const panelEnds = `hsla(${Math.round(ph)}, ${clamp(ps * .55 + 22)}%, 96%, 1)`
   return {

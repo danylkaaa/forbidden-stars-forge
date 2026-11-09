@@ -180,6 +180,8 @@ const imageEditIntro = "Edit the provided card template image into finished card
 
 const imageNewIntro = "Create finished card art from the description below. There is no template image."
 
+const imageAroundIntro = "Extend the provided picture outward to fill the whole canvas."
+
 // DefaultRenderingStyle is the first line of the Rendering section when an image type sets no style of its own.
 const DefaultRenderingStyle = "Photorealistic style."
 
@@ -206,6 +208,11 @@ func ImageEdit(cardTypeDescription, constraints string, f FactionStyle, style st
 // ImageNew is the prompt for a card type with no template image: the model paints the picture from the text alone.
 func ImageNew(cardTypeDescription, constraints string, f FactionStyle, style string) string {
 	return build(imageNewIntro, cardTypeDescription, constraints, f, style)
+}
+
+// ImageAround is the prompt for a "with character" type: the faction's character picture is kept and extended outward.
+func ImageAround(cardTypeDescription, constraints string, f FactionStyle, style string) string {
+	return build(imageAroundIntro, cardTypeDescription, constraints, f, style)
 }
 
 func build(intro, cardTypeDescription, constraints string, f FactionStyle, style string) string {
@@ -276,4 +283,23 @@ func WithFrontReference(p string) string {
 		return p
 	}
 	return p + "\n\n" + frontReference
+}
+
+const characterFill = `## Character
+The input image is the faction's character picture (the character and the
+background painted behind it) placed on an empty canvas. That picture is
+final: do not redraw, retouch, restyle, move or resize any part of it, neither
+the character nor the background behind it. Paint only the empty (masked)
+area: extend the picture outward, continuing its background, lighting,
+perspective and colours across its edges so that no seam or outline of the
+original picture shows. Fill the whole canvas edge to edge: no border, frame,
+panel, vignette edge, text, letters, numbers, logos or watermark.`
+
+// WithCharacterFill also accepts a previewed prompt that already has this section.
+func WithCharacterFill(p string) string {
+	p = strings.TrimSpace(p)
+	if strings.HasSuffix(p, characterFill) {
+		return p
+	}
+	return p + "\n\n" + characterFill
 }

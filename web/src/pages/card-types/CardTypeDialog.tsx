@@ -39,7 +39,7 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
       const sizeProblem = sizeError(d.image_size ?? '')
       if (sizeProblem) return { error: `AI image size: ${sizeProblem}` }
       const form = buildCardTypeForm(
-        { name: d.name.trim(), description: d.description, constraints: d.constraints, rendering_style: d.rendering_style ?? '', image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm, aspect_ratio: d.aspect_ratio ?? '' },
+        { name: d.name.trim(), description: d.description, constraints: d.constraints, rendering_style: d.rendering_style ?? '', with_character: d.with_character === 'true', image_size: d.image_size ?? '', card_width_mm: d.card_width_mm, card_height_mm: d.card_height_mm, aspect_ratio: d.aspect_ratio ?? '' },
         stagedFile,
       )
       let saved: CardType
@@ -142,6 +142,10 @@ export function CardTypeDialog({ cardTypes }: { cardTypes: CardType[] }) {
           {(id) => <input id={id} type="text" value={draft.rendering_style ?? ''} placeholder="Photorealistic style."
             onChange={(e) => draftState.setField('rendering_style', e.target.value)} className={inputClass} />}
         </Field>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={draft.with_character === 'true'} onChange={(e) => draftState.setField('with_character', String(e.target.checked))} />
+          <span>Paint around the faction's character<span className="block text-xs text-ink/55">AI Lab places the faction's character (Factions → edit) on an empty canvas of the AI image size; OpenAI fills the rest and the character is kept unchanged. No template needed.</span></span>
+        </label>
         {!isElementCardType(draft.name) && <div>
           <div className="mb-1 text-xs text-ink/70">Card size (cut), mm</div>
           <div className="grid grid-cols-2 gap-3.5">

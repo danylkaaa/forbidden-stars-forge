@@ -76,3 +76,9 @@ export function useFactionCardOver(factionId: number, side: 'front' | 'back', im
   }, [ready, side, data, color, imageUrl, front, layersOnly, bare, assets, shared, layout, logoUrl, cards.images])
   return { url: ready ? state.url : null, error: state.error, pending: ready && !state.url && !state.error }
 }
+
+// The faction's saved front plate, null when it has none.
+export function useSavedPlateUrl(factionId: number) {
+  const record = useFactionCard(factionId), images = useLibraryImages()
+  return plateUrl(record.data?.data.plate ?? '', byKey(record.data?.assets), images.data ?? [])
+}

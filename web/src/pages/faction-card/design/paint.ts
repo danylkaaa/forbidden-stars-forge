@@ -186,10 +186,34 @@ export function inkSplatters(ctx: Ctx, b: Box, seed: string, offset: [number, nu
 }
 
 /* ---------- panels ---------- */
-export function screenGradient(ctx: Ctx, b: Box, T: CardTheme) {
-  const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h)
-  g.addColorStop(0, T.pale); g.addColorStop(.78, T.mid); g.addColorStop(1, T.pale)
-  ctx.save(); ctx.fillStyle = g; ctx.fillRect(b.x, b.y, b.w, b.h); ctx.restore()
+// Analog screen texture, 256 units square: faint smooth scan lines every 8 units and fine random noise, dark or light per pixel.
+function screenTile(): HTMLCanvasElement | null {
+  const hit = paperTiles.get('screen')
+  if (hit) return hit
+  const n = 256, tile = document.createElement('canvas'); tile.width = tile.height = n
+  const tctx = tile.getContext('2d')
+  if (!tctx) return null
+  const img = tctx.createImageData(n, n), rnd = mulberry32(11)
+  for (let y = 0; y < n; y++) {
+    const line = Math.pow(.5 + .5 * Math.cos(2 * Math.PI * y / 8), 2) * .07
+    for (let x = 0; x < n; x++) {
+      const v = line + (rnd() - .5) * .14, i = (y * n + x) * 4, c = v > 0 ? 0 : 255
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = c; img.data[i + 3] = Math.round(Math.abs(v) * 255)
+    }
+  }
+  tctx.putImageData(img, 0, 0)
+  paperTiles.set('screen', tile)
+  return tile
+}
+// One even colour, half the pale tint and half the panel colour (so a dark panel colour still leaves the text
+// readable), under an analog screen texture.
+export function screenFill(ctx: Ctx, b: Box, T: CardTheme) {
+  ctx.save()
+  ctx.fillStyle = T.pale; ctx.fillRect(b.x, b.y, b.w, b.h)
+  ctx.globalAlpha = .5; ctx.fillStyle = T.mid; ctx.fillRect(b.x, b.y, b.w, b.h)
+  ctx.restore()
+  const tile = screenTile()
+  if (tile) tiled(ctx, b, tile, 256, 256, b.x, b.y)
 }
 // Four 12-unit squares on the corners of the box grown by 6, translucent with a faint glow.
 export function cornerSquares(ctx: Ctx, b: Box, T: CardTheme) {
@@ -219,18 +243,18 @@ export function parchmentCard(ctx: Ctx, b: Box, T: CardTheme, A: DesignAssets) {
   paperGrain(ctx, b)
   cornerSquares(ctx, b, T)
 }
-/** The light panel used for stats screens, letters and name bars: gradient, ink splatters, double border, corner squares. */
+/** The light panel used for stats screens, letters and name bars: even screen fill, ink splatters, double border, corner squares. */
 export function screenPanel(ctx: Ctx, b: Box, T: CardTheme, seed: string, o: { ownBorder?: boolean; shadow?: boolean } = {}) {
   if (o.shadow !== false) boxShadow(ctx, b, CARD_SHADOW)
-  screenGradient(ctx, b, T)
+  screenFill(ctx, b, T)
   inkSplatters(ctx, b, seed)
   if (o.ownBorder !== false) band(ctx, b, -2, 0, T.outline)
   band(ctx, b, 4, 6, T.outline)
   cornerSquares(ctx, b, T)
 }
-/** A title bar or forge slot: gradient, splatters, a 5-unit outline with barely visible side squares. */
+/** A title bar or forge slot: even screen fill, splatters, a 5-unit outline with barely visible side squares. */
 export function tabPanel(ctx: Ctx, b: Box, T: CardTheme, seed: string, slot = false) {
-  screenGradient(ctx, b, T)
+  screenFill(ctx, b, T)
   inkSplatters(ctx, b, seed, [-173, -61])
   band(ctx, b, 0, 5, T.outline)
   ctx.save(); ctx.globalAlpha = .1; ctx.fillStyle = '#fff'
